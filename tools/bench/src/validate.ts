@@ -1,13 +1,10 @@
-import { spawn } from 'node:child_process'
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { AccountRegistry, PgCtePoster, pgAccountLoader, type BalanceMode } from '@carwash/ledger'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { describeEnvironment, median, percentile, writeResults } from './env.ts'
 import { mulberry32, runOpenLoop } from './loadgen.ts'
+import { runPgbench } from './pgbench.ts'
 import { seedCaptureAccounts, type CaptureAccounts } from './seed.ts'
 import { pgbenchScript } from './validate-script.ts'
 
@@ -40,66 +37,36 @@ interface Sample {
   failures: number
 }
 
-async function runPgbench(db: TestDatabase, accounts: CaptureAccounts, mode: BalanceMode, connections: number, rate: number) {
-  const script = join(tmpdir(), `capture-${mode}.sql`)
-  writeFileSync(script, pgbenchScript(mode))
-  const url = new URL(db.url('ledger_app'))
-  const prefix = join(tmpdir(), `pgb-${process.pid}-${Date.now()}`)
-  const merchants = accounts.merchants.map(Number)
-  const args = [
-    '-n', '-M', 'extended', '-f', script,
-    '-R', String(rate), '-c', String(connections), '-j', String(Math.min(4, connections)),
-    '-T', String(Math.round((warmupMs + durationMs) / 1000)),
-    '--log', `--log-prefix=${prefix}`,
-    '-D', `receivable=${accounts.hot[0].id}`, '-D', `fees=${accounts.hot[1].id}`,
-    '-D', `mlo=${Math.min(...merchants)}`, '-D', `mhi=${Math.max(...merchants)}`,
-    url.pathname.slice(1),
-  ]
-  const env = {
-    ...process.env,
-    PGHOST: url.hostname,
-    PGPORT: url.port || '5432',
-    PGUSER: decodeURIComponent(url.username),
-    PGPASSWORD: decodeURIComponent(url.password),
-  }
-  const output = await new Promise<string>((resolve, reject) => {
-    const child = spawn('pgbench', args, { env })
-    let text = ''
-    child.stdout.on('data', (d) => (text += d))
-    child.stderr.on('data', (d) => (text += d))
-    child.on('error', reject)
-    child.on('close', (code) => (code === 0 ? resolve(text) : reject(new Error(`pgbench exited ${code}: ${text}`))))
-  })
+interface ToolResult {
+  achievedPerSecond: number
+  p50Ms: number
+  p99Ms: number
+  failures: number
+  lagP99Ms?: number
+  cpu?: number
+}
 
-  const base = prefix.split('/').at(-1)!
-  const files = readdirSync(tmpdir()).filter((f) => f.startsWith(base))
-  const rows: { epochUs: number; latencyUs: number }[] = []
-  let failures = 0
-  for (const file of files) {
-    for (const line of readFileSync(join(tmpdir(), file), 'utf8').split('\n')) {
-      const parts = line.trim().split(/\s+/)
-      if (parts.length < 7) continue
-      if (parts[2] === 'skipped' || parts[2] === 'failed') {
-        failures++
-        continue
-      }
-      rows.push({
-        epochUs: Number(parts[4]) * 1e6 + Number(parts[5]),
-        latencyUs: Number(parts[2]) + Number(parts[6]),
-      })
-    }
-    rmSync(join(tmpdir(), file))
-  }
-  rmSync(script)
-  const start = Math.min(...rows.map((r) => r.epochUs - r.latencyUs))
-  const measured = rows.filter((r) => r.epochUs - r.latencyUs >= start + warmupMs * 1000).map((r) => r.latencyUs / 1000)
-  measured.sort((a, b) => a - b)
+async function pgbench(db: TestDatabase, accounts: CaptureAccounts, mode: BalanceMode, connections: number, rate: number) {
+  const merchants = accounts.merchants.map(Number)
+  const result = await runPgbench({
+    url: db.url('ledger_app'),
+    script: pgbenchScript(mode),
+    rate,
+    connections,
+    warmupMs,
+    durationMs,
+    defines: {
+      receivable: String(accounts.hot[0].id),
+      fees: String(accounts.hot[1].id),
+      mlo: String(Math.min(...merchants)),
+      mhi: String(Math.max(...merchants)),
+    },
+  })
   return {
-    achievedPerSecond: measured.length / (durationMs / 1000),
-    p50Ms: percentile(measured, 50),
-    p99Ms: percentile(measured, 99),
-    failures,
-    output,
+    achievedPerSecond: result.latenciesMs.length / (durationMs / 1000),
+    p50Ms: percentile(result.latenciesMs, 50),
+    p99Ms: percentile(result.latenciesMs, 99),
+    failures: result.failures,
   }
 }
 
@@ -156,16 +123,16 @@ async function main(): Promise<void> {
             const db = await createTestDatabase()
             try {
               const accounts = await seedCaptureAccounts(db.pool('ledger_app', 1), mode, 1, merchantCount)
-              const result =
+              const result: ToolResult =
                 tool === 'pgbench'
-                  ? await runPgbench(db, accounts, mode, connections, rate)
+                  ? await pgbench(db, accounts, mode, connections, rate)
                   : await runLoadgen(db, accounts, connections, rate, repeat)
               samples.push({ repeat, tool, mode, connections, rate, ...result } as Sample)
               console.log(
                 `${repeat} ${mode.padEnd(8)} c=${connections} rate ${rate} ${tool.padEnd(8)} ` +
                   `got ${result.achievedPerSecond.toFixed(0)} p50 ${result.p50Ms.toFixed(2)} p99 ${result.p99Ms.toFixed(2)} ms ` +
                   `failures ${result.failures}` +
-                  ('lagP99Ms' in result ? ` lag99 ${result.lagP99Ms.toFixed(2)} cpu ${result.cpu.toFixed(0)}%` : ''),
+                  (result.lagP99Ms === undefined ? '' : ` lag99 ${result.lagP99Ms.toFixed(2)} cpu ${result.cpu!.toFixed(0)}%`),
               )
             } finally {
               await db.drop()

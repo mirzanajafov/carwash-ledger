@@ -11,6 +11,7 @@ export async function seedCaptureAccounts(
   mode: BalanceMode,
   shards: number,
   merchantCount: number,
+  merchantMode: BalanceMode = 'locked',
 ): Promise<CaptureAccounts> {
   const hot = await app.query<{ id: string; code: string }>(
     `INSERT INTO accounts (code, type, currency, balance_mode, shards)
@@ -20,9 +21,9 @@ export async function seedCaptureAccounts(
   )
   const merchants = await app.query<{ id: string }>(
     `INSERT INTO accounts (code, type, currency, balance_mode)
-     SELECT 'merchant_' || n, 'liability', 'EUR', 'locked' FROM generate_series(1, $1::int) AS n
+     SELECT 'merchant_' || n, 'liability', 'EUR', $2::balance_mode FROM generate_series(1, $1::int) AS n
      RETURNING id::text`,
-    [merchantCount],
+    [merchantCount, merchantMode],
   )
   await app.query(
     `INSERT INTO balances (account_id, shard)

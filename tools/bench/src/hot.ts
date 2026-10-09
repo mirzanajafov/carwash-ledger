@@ -23,6 +23,8 @@ interface ModeSpec {
   mode: BalanceMode
   shards: number
   synchronousCommit: boolean
+  merchantMode: BalanceMode
+  snapshots: boolean
 }
 
 interface Cell {
@@ -57,16 +59,16 @@ const { values } = parseArgs({
 })
 
 function parseMode(name: string): ModeSpec {
-  if (name === 'locked-async') return { name, mode: 'locked', shards: 1, synchronousCommit: false }
+  const base = { name, shards: 1, synchronousCommit: true, merchantMode: 'locked' as BalanceMode, snapshots: false }
+  if (name === 'locked-async') return { ...base, mode: 'locked', synchronousCommit: false }
+  if (name === 'entries-only') return { ...base, mode: 'derived', merchantMode: 'derived' }
   const sharded = /^sharded-(\d+)$/.exec(name)
-  if (sharded) return { name, mode: 'sharded', shards: Number(sharded[1]), synchronousCommit: true }
-  if (['locked', 'serializable', 'derived'].includes(name)) {
-    return { name, mode: name as BalanceMode, shards: 1, synchronousCommit: true }
-  }
+  if (sharded) return { ...base, mode: 'sharded', shards: Number(sharded[1]) }
+  if (name === 'derived') return { ...base, mode: 'derived', snapshots: snapshotEvery > 0 }
+  if (name === 'locked' || name === 'serializable') return { ...base, mode: name }
   throw new Error(`unknown mode ${name}`)
 }
 
-const modes = values.modes.split(',').map(parseMode)
 const connectionCounts = values.connections.split(',').map(Number)
 const rates = values.rates.split(',').map(Number)
 const durationMs = Number(values.duration) * 1000
@@ -77,6 +79,7 @@ const zipf = Number(values.zipf)
 const snapshotEvery = Number(values['snapshot-ms'])
 const p99Limit = Number(values['p99-limit'])
 const baseSeed = Number(values.seed)
+const modes = values.modes.split(',').map(parseMode)
 
 function merchantPicker(seed: number): () => number {
   const random = mulberry32(seed)
@@ -112,7 +115,7 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     if (!spec.synchronousCommit) await admin.query(`ALTER DATABASE "${db.name}" SET synchronous_commit = off`)
     const app = db.pool('ledger_app', connections)
     const side = db.pool('ledger_app', 2)
-    const { hot, merchants } = await seedCaptureAccounts(side, spec.mode, spec.shards, merchantCount)
+    const { hot, merchants } = await seedCaptureAccounts(side, spec.mode, spec.shards, merchantCount, spec.merchantMode)
     const registry = new AccountRegistry(pgAccountLoader(side))
     await registry.resolve([...hot.map((a) => a.id), ...merchants])
     const poster = new PgCtePoster(app, registry)
@@ -136,7 +139,7 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
       }
     })()
     const snapshotter = (async () => {
-      if (spec.mode !== 'derived') return
+      if (!spec.snapshots) return
       while (running) {
         await sleep(snapshotEvery)
         const started = performance.now()
