@@ -30,6 +30,7 @@ interface ModeSpec {
 
 interface Cell {
   repeat: number
+  startedAt: string
   mode: string
   connections: number
   rate: number
@@ -110,6 +111,7 @@ async function databaseStats(admin: pg.Pool, name: string): Promise<{ deadlocks:
 }
 
 async function runCell(spec: ModeSpec, connections: number, rate: number, repeat: number): Promise<Cell> {
+  const startedAt = new Date().toISOString()
   const db = await createTestDatabase()
   try {
     const admin = db.pool('admin', 1)
@@ -185,9 +187,10 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     reads.sort((a, b) => a - b)
     snapshots.sort((a, b) => a - b)
     const saturated =
-      load.achievedPerSecond < rate * 0.95 || load.dropped > 0 || load.errors > 0 || load.latencyMs.p99 > 1000
+      load.achievedPerSecond * (durationMs / 1000) < load.measured * 0.95 || load.dropped > 0 || load.errors > 0 || load.latencyMs.p99 > 1000
     return {
       repeat,
+      startedAt,
       mode: spec.name,
       connections,
       rate,
