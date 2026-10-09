@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+docs
+**/*.md
+tools/bench/results
+packages/db/src/generated

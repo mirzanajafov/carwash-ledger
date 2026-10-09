@@ -1,0 +1,21 @@
+services:
+  postgres:
+    cpuset: "2,3"
+    mem_limit: 1g
+
+  bench:
+    build:
+      context: .
+      dockerfile: tools/bench/Dockerfile
+    profiles: ["bench"]
+    cpuset: "8-11"
+    mem_limit: 2g
+    environment:
+      LEDGER_ADMIN_URL: postgresql://carwash:carwash@postgres:5432/postgres
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      PG_CGROUP: ${PG_CGROUP:-unknown}
+    volumes:
+      - ./tools/bench/results:/app/tools/bench/results
+    depends_on:
+      postgres:
+        condition: service_healthy

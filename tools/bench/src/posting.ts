@@ -1,7 +1,3 @@
-import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { cpus, totalmem } from 'node:os'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
@@ -18,6 +14,7 @@ import {
 } from '@carwash/ledger'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
+import { describeEnvironment, median, percentile, writeResults } from './env.ts'
 
 const VARIANTS = ['prisma-api', 'prisma-sql', 'prisma-cte', 'pg-cte'] as const
 type Variant = (typeof VARIANTS)[number]
@@ -70,15 +67,6 @@ for (const mode of values.modes.split(',') as BalanceMode[]) {
   for (const concurrency of values.concurrency.split(',').map(Number)) {
     for (const variant of values.variants.split(',') as Variant[]) cells.push({ variant, mode, concurrency })
   }
-}
-
-function percentile(sorted: readonly number[], p: number): number {
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!
-}
-
-function median(xs: readonly number[]): number {
-  const sorted = [...xs].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)]!
 }
 
 async function seedAccounts(app: pg.Pool, mode: BalanceMode): Promise<{ receivable: bigint; fees: bigint; merchants: bigint[] }> {
@@ -211,30 +199,7 @@ async function runCell(cell: Cell, repeat: number): Promise<Run> {
 async function environment(): Promise<Record<string, unknown>> {
   const db = await createTestDatabase()
   try {
-    const admin = db.pool('admin', 1)
-    const settings = await admin.query<{ name: string; setting: string }>(
-      `SELECT name, setting FROM pg_settings
-       WHERE name IN ('server_version', 'shared_buffers', 'synchronous_commit', 'fsync', 'wal_sync_method', 'max_connections')`,
-    )
-    let container: unknown = 'unknown'
-    try {
-      const read = (file: string) =>
-        execFileSync('docker', ['exec', 'carwash-postgres', 'cat', `/sys/fs/cgroup/${file}`], { encoding: 'utf8' }).trim()
-      container = { cpuMax: read('cpu.max'), cpuset: read('cpuset.cpus.effective'), memoryMax: read('memory.max') }
-    } catch {}
-    let commit = 'unknown'
-    try {
-      commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim()
-    } catch {}
-    return {
-      commit,
-      node: process.version,
-      cpu: cpus()[0]?.model,
-      cpus: cpus().length,
-      memoryGb: Math.round(totalmem() / 1e9),
-      container,
-      postgres: Object.fromEntries(settings.rows.map((r) => [r.name, r.setting])),
-    }
+    return await describeEnvironment(db.pool('admin', 1))
   } finally {
     await db.drop()
   }
@@ -273,14 +238,9 @@ async function main(): Promise<void> {
     }
   })
 
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
-  const dir = join(values.out, stamp)
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(
-    join(dir, 'results.json'),
-    JSON.stringify({ env, options: { journals, warmup, merchants, repeats }, summary, runs }, null, 2) + '\n',
-  )
-  console.log(`\nwrote ${dir}/results.json`)
+  const file = writeResults(values.out, { env, options: { journals, warmup, merchants, repeats }, summary, runs })
+  console.log(`
+wrote ${file}`)
   console.table(
     summary.map((s) => ({
       mode: s.mode,

@@ -1,0 +1,49 @@
+{
+  "env": {
+    "commit": "976fec4",
+    "node": "v24.21.0",
+    "platform": "linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1270P",
+    "cpus": 16,
+    "memoryGb": 10,
+    "postgresCgroup": "cpu.max=max 100000 cpuset=2-3 memory.max=1073741824",
+    "postgres": {
+      "fsync": "on",
+      "max_connections": "200",
+      "server_version": "18.6",
+      "shared_buffers": "32768",
+      "synchronous_commit": "on",
+      "wal_sync_method": "fdatasync"
+    }
+  },
+  "options": {
+    "modes": [
+      "locked-async"
+    ],
+    "connectionCounts": [
+      8,
+      32,
+      128
+    ],
+    "rates": [
+      50,
+      100,
+      150,
+      200,
+      300,
+      400,
+      800,
+      1200,
+      1600,
+      2400,
+      3200
+    ],
+    "durationMs": 15000,
+    "warmupMs": 3000,
+    "repeats": 3,
+    "merchantCount": 1000,
+    "zipf": 0,
+    "snapshotEvery": 1000,
+    "p99Limit": 50
+  }
+}

@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "posting": "node --conditions=source src/posting.ts"
+    "posting": "node --conditions=source src/posting.ts",
+    "hot": "node --conditions=source src/hot.ts",
+    "validate": "node --conditions=source src/validate.ts",
+    "floor": "node --conditions=source src/floor.ts"
   },
   "dependencies": {
     "@carwash/db": "workspace:*",
