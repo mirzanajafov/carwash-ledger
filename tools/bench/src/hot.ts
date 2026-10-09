@@ -46,7 +46,7 @@ const { values } = parseArgs({
   options: {
     modes: { type: 'string', default: 'locked,serializable,derived,sharded-4,sharded-16,sharded-64' },
     connections: { type: 'string', default: '8,32,128' },
-    rates: { type: 'string', default: '50,100,200,400,800,1200,1600,2400,3200' },
+    rates: { type: 'string', default: '50,100,150,200,300,400,800,1200,1600,2400,3200' },
     duration: { type: 'string', default: '15' },
     warmup: { type: 'string', default: '3' },
     repeats: { type: 'string', default: '3' },
@@ -223,6 +223,9 @@ function summarize(cells: readonly Cell[]) {
       connections: Number(connections),
       sustained: highest((c) => c.load.latencyMs.p99 <= p99Limit),
       ceiling: highest(() => true),
+      capacity: repeatsSeen.map((repeat) =>
+        Math.round(Math.max(...group.filter((c) => c.repeat === repeat).map((c) => c.load.achievedPerSecond))),
+      ),
     }
   })
 }
@@ -279,6 +282,7 @@ async function main(): Promise<void> {
       connections: s.connections,
       [`p99 under ${p99Limit} ms`]: `${median(s.sustained)} (${s.sustained.join(' ')})`,
       'not saturated': `${median(s.ceiling)} (${s.ceiling.join(' ')})`,
+      'max achieved': `${median(s.capacity)} (${s.capacity.join(' ')})`,
     })),
   )
 }
