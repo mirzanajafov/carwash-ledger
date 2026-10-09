@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: carwash-postgres
+    environment:
+      POSTGRES_USER: carwash
+      POSTGRES_PASSWORD: carwash
+      POSTGRES_DB: postgres
+      LEDGER_OWNER_PASSWORD: ledger_owner
+      LEDGER_APP_PASSWORD: ledger_app
+      LEDGER_AUDIT_PASSWORD: ledger_audit
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+    ports:
+      - "127.0.0.1:5449:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "carwash", "-d", "ledger"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:
