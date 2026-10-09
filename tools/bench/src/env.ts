@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { cpus, totalmem } from 'node:os'
 import { join } from 'node:path'
 import type pg from 'pg'
@@ -39,13 +39,28 @@ export async function describeEnvironment(admin: pg.Pool): Promise<Record<string
   }
 }
 
-export function writeResults(dir: string, data: unknown): string {
+function toJson(data: unknown, indent?: number): string {
+  return JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), indent)
+}
+
+export function createResultsDir(dir: string): string {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
   const target = join(dir, stamp)
   mkdirSync(target, { recursive: true })
-  const file = join(target, 'results.json')
-  writeFileSync(file, JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2) + '\n')
+  return target
+}
+
+export function appendJsonLine(file: string, data: unknown): void {
+  appendFileSync(file, toJson(data) + '\n')
+}
+
+export function writeJson(file: string, data: unknown): string {
+  writeFileSync(file, toJson(data, 2) + '\n')
   return file
+}
+
+export function writeResults(dir: string, data: unknown): string {
+  return writeJson(join(createResultsDir(dir), 'results.json'), data)
 }
 
 export function percentile(sorted: ArrayLike<number>, p: number): number {

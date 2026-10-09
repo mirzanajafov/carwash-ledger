@@ -17,6 +17,11 @@ export PG_CGROUP="$(docker exec carwash-postgres sh -c 'echo "cpu.max=$(cat /sys
 echo "postgres: $PG_CGROUP"
 before="$(throttled)"
 compose build bench
+if [ "${BENCH_DETACH:-0}" = "1" ]; then
+  compose run -d --rm --name carwash-bench bench "$@"
+  echo "postgres throttled periods before the run: $before"
+  exit 0
+fi
 compose run --rm bench "$@"
 after="$(throttled)"
 echo "postgres throttled periods during the run: $((after - before))"

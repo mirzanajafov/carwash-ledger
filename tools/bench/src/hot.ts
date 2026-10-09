@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +15,7 @@ import {
 } from '@carwash/ledger'
 import { createTestDatabase, prepareTemplate } from '@carwash/testkit'
 import type pg from 'pg'
-import { describeEnvironment, median, percentile, writeResults } from './env.ts'
+import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
 import { mulberry32, runOpenLoop, type LoadResult } from './loadgen.ts'
 import { seedCaptureAccounts } from './seed.ts'
 
@@ -211,13 +212,18 @@ function summarize(cells: readonly Cell[]) {
   }
   return [...groups.entries()].map(([key, group]) => {
     const [mode, connections] = key.split('|')
-    const sustained = [...new Set(group.map((c) => c.repeat))].map((repeat) => {
-      const ok = group.filter(
-        (c) => c.repeat === repeat && !c.saturated && c.load.latencyMs.p99 <= p99Limit && c.load.gaveUp === 0,
-      )
-      return ok.length > 0 ? Math.max(...ok.map((c) => c.rate)) : 0
-    })
-    return { mode, connections: Number(connections), sustained }
+    const repeatsSeen = [...new Set(group.map((c) => c.repeat))]
+    const highest = (accept: (c: Cell) => boolean) =>
+      repeatsSeen.map((repeat) => {
+        const ok = group.filter((c) => c.repeat === repeat && !c.saturated && c.load.gaveUp === 0 && accept(c))
+        return ok.length > 0 ? Math.max(...ok.map((c) => c.rate)) : 0
+      })
+    return {
+      mode,
+      connections: Number(connections),
+      sustained: highest((c) => c.load.latencyMs.p99 <= p99Limit),
+      ceiling: highest(() => true),
+    }
   })
 }
 
@@ -226,6 +232,21 @@ async function main(): Promise<void> {
   const probe = await createTestDatabase()
   const env = await describeEnvironment(probe.pool('admin', 1))
   await probe.drop()
+  const options = {
+    modes: modes.map((m) => m.name),
+    connectionCounts,
+    rates,
+    durationMs,
+    warmupMs,
+    repeats,
+    merchantCount,
+    zipf,
+    snapshotEvery,
+    p99Limit,
+  }
+  const dir = createResultsDir(values.out)
+  writeJson(join(dir, 'run.json'), { env, options })
+  console.log(`writing to ${dir}`)
 
   const cells: Cell[] = []
   const pairs = modes.flatMap((spec) => connectionCounts.map((connections) => ({ spec, connections })))
@@ -235,6 +256,7 @@ async function main(): Promise<void> {
       for (const rate of rates) {
         const cell = await runCell(spec, connections, rate, repeat)
         cells.push(cell)
+        appendJsonLine(join(dir, 'cells.jsonl'), cell)
         const l = cell.load
         console.log(
           `${repeat} ${spec.name.padEnd(12)} c=${String(connections).padEnd(4)} offered ${String(rate).padStart(5)} ` +
@@ -249,19 +271,14 @@ async function main(): Promise<void> {
   }
 
   const summary = summarize(cells)
-  const file = writeResults(values.out, {
-    env,
-    options: { modes: modes.map((m) => m.name), connectionCounts, rates, durationMs, warmupMs, repeats, merchantCount, zipf, snapshotEvery, p99Limit },
-    summary,
-    cells,
-  })
+  const file = writeJson(join(dir, 'results.json'), { env, options, summary, cells })
   console.log(`\nwrote ${file}`)
   console.table(
     summary.map((s) => ({
       mode: s.mode,
       connections: s.connections,
-      'sustained journals/s (median)': median(s.sustained),
-      runs: s.sustained.join(' '),
+      [`p99 under ${p99Limit} ms`]: `${median(s.sustained)} (${s.sustained.join(' ')})`,
+      'not saturated': `${median(s.ceiling)} (${s.ceiling.join(' ')})`,
     })),
   )
 }
