@@ -38,7 +38,8 @@ interface Cell {
   attemptsPerJournal: number
   deadlocks: number
   rollbacks: number
-  readMs: { p50: number; p99: number; count: number }
+  readMs: { p50: number; p99: number; count: number; p99Every5s: number[] }
+  longTransaction: boolean
   snapshotMs: { p50: number; max: number; count: number }
   saturated: boolean
 }
@@ -54,6 +55,7 @@ const { values } = parseArgs({
     merchants: { type: 'string', default: '1000' },
     zipf: { type: 'string', default: '0' },
     'snapshot-ms': { type: 'string', default: '1000' },
+    'long-tx': { type: 'boolean', default: false },
     'p99-limit': { type: 'string', default: '50' },
     seed: { type: 'string', default: '1' },
     out: { type: 'string', default: fileURLToPath(new URL('../results/e1', import.meta.url)) },
@@ -79,6 +81,7 @@ const repeats = Number(values.repeats)
 const merchantCount = Number(values.merchants)
 const zipf = Number(values.zipf)
 const snapshotEvery = Number(values['snapshot-ms'])
+const longTransaction = values['long-tx']
 const p99Limit = Number(values['p99-limit'])
 const baseSeed = Number(values.seed)
 const modes = values.modes.split(',').map(parseMode)
@@ -129,14 +132,23 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     let posted = 0
     let running = true
     const reads: number[] = []
+    const readLog: { at: number; ms: number }[] = []
     const snapshots: number[] = []
+    const cellStart = performance.now()
+    const holder = longTransaction ? await db.pool('ledger_app', 1).connect() : undefined
+    if (holder) {
+      await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
+      await holder.query('SELECT pg_current_xact_id()')
+    }
 
     const reader = (async () => {
       while (running) {
         for (const account of hot) {
           const started = performance.now()
           await readBalance(side, account)
-          reads.push(performance.now() - started)
+          const ms = performance.now() - started
+          reads.push(ms)
+          readLog.push({ at: started - cellStart, ms })
         }
         await sleep(50)
       }
@@ -182,9 +194,18 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     })
     running = false
     await Promise.all([reader, snapshotter])
+    if (holder) {
+      await holder.query('ROLLBACK')
+      holder.release()
+    }
     const after = await databaseStats(admin, db.name)
 
     reads.sort((a, b) => a - b)
+    const p99Every5s: number[] = []
+    for (let from = 0; readLog.some((r) => r.at >= from); from += 5000) {
+      const bucket = readLog.filter((r) => r.at >= from && r.at < from + 5000).map((r) => r.ms)
+      p99Every5s.push(percentile(bucket.sort((a, b) => a - b), 99))
+    }
     snapshots.sort((a, b) => a - b)
     const saturated =
       load.achievedPerSecond * (durationMs / 1000) < load.measured * 0.95 || load.dropped > 0 || load.errors > 0 || load.latencyMs.p99 > 1000
@@ -198,7 +219,8 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
       attemptsPerJournal: posted > 0 ? attempts / posted : 0,
       deadlocks: after.deadlocks - before.deadlocks,
       rollbacks: after.rollbacks - before.rollbacks,
-      readMs: { p50: percentile(reads, 50), p99: percentile(reads, 99), count: reads.length },
+      readMs: { p50: percentile(reads, 50), p99: percentile(reads, 99), count: reads.length, p99Every5s },
+      longTransaction,
       snapshotMs: { p50: percentile(snapshots, 50), max: snapshots.at(-1) ?? Number.NaN, count: snapshots.length },
       saturated,
     }
@@ -269,7 +291,7 @@ async function main(): Promise<void> {
             `got ${l.achievedPerSecond.toFixed(0).padStart(5)} p50 ${l.latencyMs.p50.toFixed(1).padStart(7)} ` +
             `p99 ${l.latencyMs.p99.toFixed(1).padStart(8)} ms attempts ${cell.attemptsPerJournal.toFixed(2)} ` +
             `gave-up ${l.gaveUp} dropped ${l.dropped} lag99 ${l.lagMs.p99.toFixed(1)} cpu ${l.generatorCpuPercent.toFixed(0)}% ` +
-            `read99 ${cell.readMs.p99.toFixed(1)}${cell.saturated ? ' SATURATED' : ''}`,
+            `read99 ${cell.readMs.p99.toFixed(1)} last5s ${(cell.readMs.p99Every5s.at(-1) ?? Number.NaN).toFixed(1)}${cell.saturated ? ' SATURATED' : ''}`,
         )
         if (cell.saturated) break
       }
