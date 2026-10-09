@@ -216,6 +216,12 @@ async function environment(): Promise<Record<string, unknown>> {
       `SELECT name, setting FROM pg_settings
        WHERE name IN ('server_version', 'shared_buffers', 'synchronous_commit', 'fsync', 'wal_sync_method', 'max_connections')`,
     )
+    let container: unknown = 'unknown'
+    try {
+      const read = (file: string) =>
+        execFileSync('docker', ['exec', 'carwash-postgres', 'cat', `/sys/fs/cgroup/${file}`], { encoding: 'utf8' }).trim()
+      container = { cpuMax: read('cpu.max'), cpuset: read('cpuset.cpus.effective'), memoryMax: read('memory.max') }
+    } catch {}
     let commit = 'unknown'
     try {
       commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim()
@@ -226,6 +232,7 @@ async function environment(): Promise<Record<string, unknown>> {
       cpu: cpus()[0]?.model,
       cpus: cpus().length,
       memoryGb: Math.round(totalmem() / 1e9),
+      container,
       postgres: Object.fromEntries(settings.rows.map((r) => [r.name, r.setting])),
     }
   } finally {
