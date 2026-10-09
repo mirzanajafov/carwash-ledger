@@ -9,7 +9,13 @@ services:
       LEDGER_OWNER_PASSWORD: ledger_owner
       LEDGER_APP_PASSWORD: ledger_app
       LEDGER_AUDIT_PASSWORD: ledger_audit
-    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+    command:
+      [
+        "postgres",
+        "-c", "max_connections=200",
+        "-c", "shared_buffers=256MB",
+        "-c", "shared_preload_libraries=pg_stat_statements",
+      ]
     ports:
       - "127.0.0.1:5449:5432"
     volumes:

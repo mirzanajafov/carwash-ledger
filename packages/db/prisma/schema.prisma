@@ -1,0 +1,91 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccountType {
+  asset
+  liability
+  equity
+  revenue
+  expense
+
+  @@map("account_type")
+}
+
+enum BalanceMode {
+  locked
+  serializable
+  derived
+  sharded
+
+  @@map("balance_mode")
+}
+
+model Account {
+  id          BigInt           @id @default(autoincrement())
+  code        String           @unique
+  type        AccountType
+  currency    String           @db.Char(3)
+  balanceMode BalanceMode      @map("balance_mode")
+  shards      Int              @default(1)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  entries     Entry[]
+  balances    Balance[]
+  snapshot    BalanceSnapshot?
+
+  @@map("accounts")
+}
+
+model Journal {
+  id          BigInt                @id @default(autoincrement())
+  externalRef String                @unique @map("external_ref")
+  reversesId  BigInt?               @unique @map("reverses_id")
+  createdAt   DateTime              @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz(6)
+  createdXid  Unsupported("xid8")   @default(dbgenerated("pg_current_xact_id()")) @map("created_xid")
+  reverses    Journal?              @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy  Journal?              @relation("Reversal")
+  entries     Entry[]
+
+  @@map("journals")
+}
+
+model Entry {
+  id         BigInt              @id @default(autoincrement())
+  journalId  BigInt              @map("journal_id")
+  accountId  BigInt              @map("account_id")
+  amount     BigInt
+  createdXid Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()")) @map("created_xid")
+  journal    Journal             @relation(fields: [journalId], references: [id])
+  account    Account             @relation(fields: [accountId], references: [id])
+
+  @@index([journalId])
+  @@index([accountId, createdXid])
+  @@map("entries")
+}
+
+model Balance {
+  accountId BigInt  @map("account_id")
+  shard     Int     @default(0)
+  amount    BigInt  @default(0)
+  version   BigInt  @default(0)
+  account   Account @relation(fields: [accountId], references: [id])
+
+  @@id([accountId, shard])
+  @@map("balances")
+}
+
+model BalanceSnapshot {
+  accountId BigInt              @id @map("account_id")
+  amount    BigInt
+  horizon   Unsupported("xid8")
+  takenAt   DateTime            @default(now()) @map("taken_at") @db.Timestamptz(6)
+  account   Account             @relation(fields: [accountId], references: [id])
+
+  @@map("balance_snapshots")
+}
