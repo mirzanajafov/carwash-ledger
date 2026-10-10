@@ -45,7 +45,7 @@ async function post(message: Extract<ToWorker, { type: 'post' }>): Promise<Outco
       entries: message.entries.map((e) => ({ accountId: BigInt(e.accountId), amount: BigInt(e.amount) })),
       reversesId: message.reversesId === undefined ? undefined : BigInt(message.reversesId),
     })
-    return { kind: 'posted', journalId: posted.id.toString() }
+    return { kind: 'posted', journalId: posted.id.toString(), attempts: posted.attempts }
   } catch (error) {
     if (error instanceof DuplicateJournalError || error instanceof AlreadyReversedError) return existing(message.ref)
     if (error instanceof InvalidJournalError || error instanceof LedgerRuleError || error instanceof UnknownAccountError) {

@@ -21,6 +21,7 @@ export type Recorded = 'acknowledged' | 'retry' | 'rejected' | 'ignored'
 
 export interface ClientStats {
   posted: number
+  conflictRetries: number
   duplicates: number
   retryable: number
   rejected: number
@@ -28,7 +29,7 @@ export interface ClientStats {
 
 export class ClientLedger {
   readonly ops = new Map<string, Op>()
-  readonly stats: ClientStats = { posted: 0, duplicates: 0, retryable: 0, rejected: 0 }
+  readonly stats: ClientStats = { posted: 0, conflictRetries: 0, duplicates: 0, retryable: 0, rejected: 0 }
   readonly #random: Random
   readonly #waiting = new Set<Op>()
 
@@ -63,8 +64,12 @@ export class ClientLedger {
     switch (outcome.kind) {
       case 'posted':
       case 'duplicate': {
-        if (outcome.kind === 'posted') this.stats.posted++
-        else this.stats.duplicates++
+        if (outcome.kind === 'posted') {
+          this.stats.posted++
+          this.stats.conflictRetries += outcome.attempts - 1
+        } else {
+          this.stats.duplicates++
+        }
         if (op.journalId !== undefined && op.journalId !== outcome.journalId) {
           op.conflicts.push(`${op.ref} was acknowledged as journal ${op.journalId} and then as ${outcome.journalId}`)
         }

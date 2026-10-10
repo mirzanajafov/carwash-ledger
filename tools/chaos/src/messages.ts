@@ -4,7 +4,7 @@ export interface EntrySpec {
 }
 
 export type Outcome =
-  | { kind: 'posted'; journalId: string }
+  | { kind: 'posted'; journalId: string; attempts: number }
   | { kind: 'duplicate'; journalId: string }
   | { kind: 'retryable'; error: string }
   | { kind: 'rejected'; error: string }

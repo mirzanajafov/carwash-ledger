@@ -11,7 +11,7 @@ const reversal = capture.map((e) => ({ accountId: e.accountId, amount: (-BigInt(
 
 function acknowledged(client: ClientLedger, op: Op, journalId: string): void {
   client.dispatched(op)
-  client.record(op.ref, { kind: 'posted', journalId }, 0)
+  client.record(op.ref, { kind: 'posted', journalId, attempts: 1 }, 0)
 }
 
 function scenario() {
