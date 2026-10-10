@@ -130,6 +130,37 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
+  tools/chaos:
+    dependencies:
+      '@carwash/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@carwash/invariants':
+        specifier: workspace:*
+        version: link:../../packages/invariants
+      '@carwash/ledger':
+        specifier: workspace:*
+        version: link:../../packages/ledger
+      '@carwash/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
 packages:
 
   '@electric-sql/pglite-socket@0.1.3':

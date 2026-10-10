@@ -1,5 +1,7 @@
 import type pg from 'pg'
 import type { AccountRegistry } from '../accounts.ts'
+import { failpoint } from '../failpoints.ts'
+import { checkout } from '../pool.ts'
 import { deltaParams, entryParams, lockParams, type JournalPlan } from '../plan.ts'
 import type { RetryOptions } from '../retry.ts'
 import { LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'
@@ -23,11 +25,15 @@ export class PgCtePoster implements Poster {
   }
 
   async #attempt(plan: JournalPlan): Promise<bigint> {
-    const client = await this.#pool.connect()
+    const lease = await checkout(this.#pool)
+    const { client } = lease
     let broken = false
     try {
       await client.query(beginStatement(plan))
-      if (plan.locks.length > 0) await client.query(LOCK_BALANCES, lockParams(plan))
+      if (plan.locks.length > 0) {
+        await client.query(LOCK_BALANCES, lockParams(plan))
+        failpoint('post.after_lock')
+      }
       const result = await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
         plan.externalRef,
         plan.reversesId?.toString() ?? null,
@@ -36,7 +42,9 @@ export class PgCtePoster implements Poster {
       ])
       const row = result.rows[0]!
       expectApplied(Number(row.balances), plan)
+      failpoint('post.before_commit')
       await client.query('COMMIT')
+      failpoint('post.after_commit')
       return BigInt(row.id)
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {
@@ -44,7 +52,7 @@ export class PgCtePoster implements Poster {
       })
       throw error
     } finally {
-      client.release(broken)
+      lease.release(broken)
     }
   }
 }

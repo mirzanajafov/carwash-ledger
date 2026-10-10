@@ -1,0 +1,19 @@
+name: carwash-chaos
+
+services:
+  chaos:
+    build:
+      context: ../..
+      dockerfile: tools/chaos/Dockerfile
+      args:
+        MUTANT: ${MUTANT:-}
+    image: carwash-chaos:${MUTANT:-base}
+    init: true
+    cpus: 4
+    mem_limit: 1536m
+    shm_size: 256m
+    environment:
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      MUTANT: ${MUTANT:-}
+    volumes:
+      - ./results:/app/tools/chaos/results
