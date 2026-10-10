@@ -7,7 +7,7 @@ COPY packages/ledger/package.json packages/ledger/
 COPY packages/invariants/package.json packages/invariants/
 COPY packages/testkit/package.json packages/testkit/
 COPY tools/bench/package.json tools/bench/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter @carwash/bench...
 COPY packages packages
 COPY tools/bench tools/bench
 RUN pnpm --filter @carwash/db generate
