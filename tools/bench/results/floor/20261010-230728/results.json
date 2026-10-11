@@ -1,0 +1,53 @@
+{
+  "env": {
+    "commit": "992cb47",
+    "node": "v24.21.0",
+    "platform": "linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1270P",
+    "cpus": 16,
+    "memoryGb": 10,
+    "postgresCgroup": "cpu.max=max 100000 cpuset=2-3 memory.max=1073741824",
+    "postgres": {
+      "fsync": "on",
+      "max_connections": "200",
+      "server_version": "18.6",
+      "shared_buffers": "32768",
+      "synchronous_commit": "on",
+      "wal_sync_method": "fdatasync"
+    }
+  },
+  "options": {
+    "rate": "100",
+    "connections": "8",
+    "duration": "30",
+    "repeats": "1",
+    "warmup": "3",
+    "out": "/app/tools/bench/results/floor"
+  },
+  "runs": [
+    {
+      "repeat": 1,
+      "script": "select",
+      "count": 3053,
+      "failures": 0,
+      "p50": 1.118,
+      "p90": 1.58,
+      "p99": 6.207,
+      "p999": 22.345,
+      "max": 28.611,
+      "over50ms": 0
+    },
+    {
+      "repeat": 1,
+      "script": "commit",
+      "count": 2978,
+      "failures": 0,
+      "p50": 5.684,
+      "p90": 7.808,
+      "p99": 11.007,
+      "p999": 21.878,
+      "max": 26.381,
+      "over50ms": 0
+    }
+  ]
+}

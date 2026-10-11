@@ -1,0 +1,243 @@
+{
+  "env": {
+    "commit": "992cb47",
+    "node": "v24.21.0",
+    "platform": "linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1270P",
+    "cpus": 16,
+    "memoryGb": 10,
+    "postgresCgroup": "cpu.max=max 100000 cpuset=2-3 memory.max=1073741824",
+    "postgres": {
+      "fsync": "on",
+      "max_connections": "200",
+      "server_version": "18.6",
+      "shared_buffers": "32768",
+      "synchronous_commit": "on",
+      "wal_sync_method": "fdatasync"
+    }
+  },
+  "options": {
+    "modes": [
+      "derived"
+    ],
+    "connectionCounts": [
+      32
+    ],
+    "rates": [
+      400
+    ],
+    "durationMs": 60000,
+    "warmupMs": 3000,
+    "repeats": 3,
+    "merchantCount": 1000,
+    "zipf": 0,
+    "snapshotEvery": 0,
+    "p99Limit": 50
+  },
+  "summary": [
+    {
+      "mode": "derived",
+      "connections": 32,
+      "sustained": [
+        400,
+        400,
+        400
+      ],
+      "ceiling": [
+        400,
+        400,
+        400
+      ],
+      "capacity": [
+        398,
+        401,
+        402
+      ]
+    }
+  ],
+  "cells": [
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T23:21:50.791Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 23856,
+        "completed": 23856,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 397.56666666666666,
+        "latencyMs": {
+          "p50": 5.935056669983169,
+          "p90": 9.278107978978369,
+          "p99": 16.302446444875386,
+          "p999": 32.52995424450637,
+          "max": 84.98416496195568
+        },
+        "lagMs": {
+          "p50": 0.0011222268076380715,
+          "p90": 0.012538157559902174,
+          "p99": 0.12973577533830394,
+          "p999": 0.44823836680006934,
+          "max": 2.0665993779402925
+        },
+        "generatorCpuPercent": 52.351283620782176
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 2.0115850000001956,
+        "p99": 8.863643999997294,
+        "count": 2318,
+        "p99Every5s": [
+          10.596212999999807,
+          5.4162300000007235,
+          5.270723999999973,
+          4.980803999998898,
+          7.702448000000004,
+          6.161993999998231,
+          5.8998110000029556,
+          9.889466000000539,
+          8.429528000000573,
+          13.945263000001432,
+          10.008490000000165,
+          11.743334999999206,
+          10.604544999994687
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T23:22:54.134Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 24035,
+        "completed": 24035,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 400.53333333333336,
+        "latencyMs": {
+          "p50": 5.722150364374102,
+          "p90": 8.91003290916342,
+          "p99": 16.139448371442086,
+          "p999": 37.05695770219609,
+          "max": 72.22201276882697
+        },
+        "lagMs": {
+          "p50": 0.0010940875363303348,
+          "p90": 0.012296291106395074,
+          "p99": 0.12916123430477455,
+          "p999": 0.36551701382995816,
+          "max": 1.6007821785533451
+        },
+        "generatorCpuPercent": 52.136074566733804
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 2.064499000000069,
+        "p99": 8.172111000007135,
+        "count": 2316,
+        "p99Every5s": [
+          9.756399000005331,
+          6.743310000005295,
+          3.970785999990767,
+          7.672514999998384,
+          6.0280300000013085,
+          9.144132999994326,
+          6.870351999998093,
+          5.589423999990686,
+          10.746425999997882,
+          10.10258099999919,
+          12.752057000005152,
+          11.88857999999891,
+          8.172111000007135
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T23:23:57.473Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 24101,
+        "completed": 24101,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 401.6666666666667,
+        "latencyMs": {
+          "p50": 5.916921779200493,
+          "p90": 9.19179151510616,
+          "p99": 15.23796738026067,
+          "p999": 26.901818195708984,
+          "max": 71.68344772352793
+        },
+        "lagMs": {
+          "p50": 0.0010485426701052347,
+          "p90": 0.011455697105702711,
+          "p99": 0.11899168585659936,
+          "p999": 0.343123365610154,
+          "max": 1.8099619722779607
+        },
+        "generatorCpuPercent": 52.21633254803566
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 2.0668510000105016,
+        "p99": 8.60511599999154,
+        "count": 2316,
+        "p99Every5s": [
+          5.295530000003055,
+          4.707330000004731,
+          6.733655999996699,
+          9.383043999987422,
+          4.823923000018112,
+          8.136152999999467,
+          8.396853000012925,
+          6.281374999991385,
+          7.441154000000097,
+          10.82839700000477,
+          10.293880000011995,
+          10.62223000000813,
+          9.26173800000106
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    }
+  ]
+}
