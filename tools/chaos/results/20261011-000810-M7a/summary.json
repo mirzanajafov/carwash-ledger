@@ -1,0 +1,29 @@
+{
+  "mutant": "M7a",
+  "runs": 3,
+  "journeys": 32723,
+  "attempts": 80213,
+  "conflictRetries": 0,
+  "randomKills": 52,
+  "crashes": 0,
+  "failpointKills": {
+    "post.after_lock": 26,
+    "post.after_commit": 19,
+    "post.before_commit": 29
+  },
+  "postgresKills": 8,
+  "postgresRecoveryMsMedian": 2032,
+  "toxics": {
+    "latency": 11,
+    "timeout": 4,
+    "reset_peer": 8,
+    "limit_data": 5,
+    "down": 11
+  },
+  "settleMsMedian": 8716,
+  "settleMsMax": 9441,
+  "runsWithViolations": 0,
+  "violationsByInvariant": {},
+  "firstViolatingRun": null,
+  "harnessErrors": 0
+}
