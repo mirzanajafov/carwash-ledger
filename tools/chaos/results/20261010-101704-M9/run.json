@@ -1,0 +1,27 @@
+{
+  "commit": "1b6a319",
+  "mutant": "M9",
+  "node": "v24.21.0",
+  "options": {
+    "runs": 5,
+    "seed": 1,
+    "durationMs": 30000,
+    "rate": 150,
+    "posters": 4,
+    "pool": 8,
+    "merchants": 20,
+    "reversalShare": 0.2,
+    "duplicateShare": 0.05,
+    "killEveryMs": 3000,
+    "postgresEveryMs": 20000,
+    "toxicEveryMs": 4000,
+    "failpointProbability": 0.001,
+    "snapshotMs": 100,
+    "checkEveryMs": 5000,
+    "settleMs": 120000,
+    "receivable": "sharded",
+    "fees": "derived",
+    "shards": 16,
+    "untilViolation": true
+  }
+}

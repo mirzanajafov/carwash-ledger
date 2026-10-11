@@ -1,0 +1,14 @@
+diff --git a/packages/ledger/src/sql.ts b/packages/ledger/src/sql.ts
+index c362c00..b9c689c 100644
+--- a/packages/ledger/src/sql.ts
++++ b/packages/ledger/src/sql.ts
+@@ -3,8 +3,7 @@ SELECT b.account_id
+ FROM balances b
+ JOIN unnest($1::bigint[], $2::int[]) AS t(account_id, shard)
+   ON b.account_id = t.account_id AND b.shard = t.shard
+-ORDER BY b.account_id, b.shard
+-FOR UPDATE OF b`
++ORDER BY b.account_id, b.shard`
+ 
+ export const INSERT_JOURNAL = `
+ INSERT INTO journals (external_ref, reverses_id)

@@ -5,4 +5,5 @@
 docs
 **/*.md
 tools/bench/results
+tools/chaos/results
 packages/db/src/generated

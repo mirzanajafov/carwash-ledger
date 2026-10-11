@@ -1,6 +1,8 @@
 import type pg from 'pg'
 import { DERIVED_BALANCE, SELECT_JOURNAL_ENTRIES, STORED_BALANCE, TAKE_SNAPSHOTS } from './sql.ts'
 import { InvalidJournalError } from './errors.ts'
+import { failpoint } from './failpoints.ts'
+import { checkout } from './pool.ts'
 import type { Account, JournalInput, Queryable } from './types.ts'
 
 export const SNAPSHOT_LOCK_KEY = 7_240_001
@@ -17,7 +19,9 @@ export interface SnapshotRun {
 }
 
 export async function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null> {
-  const client = await pool.connect()
+  const lease = await checkout(pool)
+  const { client } = lease
+  let broken = false
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
     const lock = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [
@@ -32,13 +36,16 @@ export async function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null> 
     )
     const value = horizon.rows[0]!.horizon
     const written = await client.query(TAKE_SNAPSHOTS, [value])
+    failpoint('snapshot.before_commit')
     await client.query('COMMIT')
     return { horizon: value, accounts: written.rowCount ?? 0 }
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined)
+    await client.query('ROLLBACK').catch(() => {
+      broken = true
+    })
     throw error
   } finally {
-    client.release()
+    lease.release(broken)
   }
 }
 

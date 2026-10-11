@@ -1,5 +1,6 @@
 import type pg from 'pg'
 import { UnknownAccountError } from './errors.ts'
+import { checkout } from './pool.ts'
 import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS } from './sql.ts'
 import type { Account, AccountType, BalanceMode, Queryable } from './types.ts'
 
@@ -62,7 +63,8 @@ export interface NewAccount {
 
 export async function createAccount(pool: pg.Pool, spec: NewAccount): Promise<Account> {
   const shards = spec.balanceMode === 'sharded' ? (spec.shards ?? 16) : 1
-  const client = await pool.connect()
+  const lease = await checkout(pool)
+  const { client } = lease
   try {
     await client.query('BEGIN')
     const inserted = await client.query<{ id: string }>(INSERT_ACCOUNT, [
@@ -80,6 +82,6 @@ export async function createAccount(pool: pg.Pool, spec: NewAccount): Promise<Ac
     await client.query('ROLLBACK').catch(() => undefined)
     throw error
   } finally {
-    client.release()
+    lease.release()
   }
 }
