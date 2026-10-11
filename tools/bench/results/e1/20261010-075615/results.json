@@ -1,0 +1,2924 @@
+{
+  "env": {
+    "commit": "cef0e20",
+    "node": "v24.21.0",
+    "platform": "linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1270P",
+    "cpus": 16,
+    "memoryGb": 10,
+    "postgresCgroup": "cpu.max=max 100000 cpuset=2-3 memory.max=1073741824",
+    "postgres": {
+      "fsync": "on",
+      "max_connections": "200",
+      "server_version": "18.6",
+      "shared_buffers": "32768",
+      "synchronous_commit": "on",
+      "wal_sync_method": "fdatasync"
+    }
+  },
+  "options": {
+    "modes": [
+      "locked",
+      "derived",
+      "sharded-16"
+    ],
+    "connectionCounts": [
+      32
+    ],
+    "rates": [
+      50,
+      100,
+      150,
+      200,
+      300,
+      400,
+      800,
+      1200,
+      1600,
+      2400,
+      3200
+    ],
+    "durationMs": 15000,
+    "warmupMs": 3000,
+    "repeats": 3,
+    "merchantCount": 1000,
+    "zipf": 1.1,
+    "snapshotEvery": 1000,
+    "p99Limit": 50
+  },
+  "summary": [
+    {
+      "mode": "locked",
+      "connections": 32,
+      "sustained": [
+        100,
+        50,
+        100
+      ],
+      "ceiling": [
+        150,
+        100,
+        100
+      ],
+      "capacity": [
+        163,
+        141,
+        153
+      ]
+    },
+    {
+      "mode": "derived",
+      "connections": 32,
+      "sustained": [
+        400,
+        200,
+        400
+      ],
+      "ceiling": [
+        800,
+        400,
+        800
+      ],
+      "capacity": [
+        802,
+        658,
+        779
+      ]
+    },
+    {
+      "mode": "sharded-16",
+      "connections": 32,
+      "sustained": [
+        400,
+        400,
+        300
+      ],
+      "ceiling": [
+        400,
+        400,
+        400
+      ],
+      "capacity": [
+        713,
+        708,
+        690
+      ]
+    }
+  ],
+  "cells": [
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:56:15.725Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 768,
+        "completed": 768,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 51.2,
+        "latencyMs": {
+          "p50": 10.351893804278916,
+          "p90": 17.977273199912815,
+          "p99": 32.64022125468273,
+          "p999": 50.7439164749012,
+          "max": 50.7439164749012
+        },
+        "lagMs": {
+          "p50": 0.003828158407486626,
+          "p90": 0.06985037889535306,
+          "p99": 0.7154425534654365,
+          "p999": 1.7049651315428491,
+          "max": 1.7049651315428491
+        },
+        "generatorCpuPercent": 17.6143315410466
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.103168000000096,
+        "p99": 2.699149000000034,
+        "count": 684,
+        "p99Every5s": [
+          3.052483999999822,
+          2.5404689999995753,
+          2.6005629999999655,
+          2.956380999999965
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:56:33.976Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1490,
+        "completed": 1490,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 99.26666666666667,
+        "latencyMs": {
+          "p50": 11.035441245627226,
+          "p90": 24.379359390544778,
+          "p99": 49.434984569612425,
+          "p999": 69.64521030797914,
+          "max": 76.74140143827935
+        },
+        "lagMs": {
+          "p50": 0.0024886290666472632,
+          "p90": 0.06331082084034279,
+          "p99": 0.7547391619427799,
+          "p999": 1.3916509643622703,
+          "max": 2.810951159810429
+        },
+        "generatorCpuPercent": 25.9326303839453
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9175869999999122,
+        "p99": 2.5262220000004163,
+        "count": 694,
+        "p99Every5s": [
+          2.691045999999915,
+          2.3944420000007085,
+          2.831879999997909,
+          3.180250999997952
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:56:52.325Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2236,
+        "completed": 2236,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 149.06666666666666,
+        "latencyMs": {
+          "p50": 154.8113044830534,
+          "p90": 506.5608235173386,
+          "p99": 983.2595129364563,
+          "p999": 1435.7195391731839,
+          "max": 1676.8588275385982
+        },
+        "lagMs": {
+          "p50": 0.0020644166734200553,
+          "p90": 0.04872053860071901,
+          "p99": 0.41530162750405,
+          "p999": 1.0656988370501495,
+          "max": 1.7028166113650514
+        },
+        "generatorCpuPercent": 31.608979338466458
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.8136300000041956,
+        "p99": 2.738680000002205,
+        "count": 696,
+        "p99Every5s": [
+          3.628529999994498,
+          2.3626399999993737,
+          2.738680000002205,
+          1.9242949999970733
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:57:10.644Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 3007,
+        "completed": 3007,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 163.46666666666667,
+        "latencyMs": {
+          "p50": 2411.465843932441,
+          "p90": 3056.3335262610126,
+          "p99": 3611.384286435008,
+          "p999": 4043.2975579722442,
+          "max": 4198.794388035218
+        },
+        "lagMs": {
+          "p50": 0.001956412024810561,
+          "p90": 0.050461818798339664,
+          "p99": 0.8542381430706882,
+          "p999": 1.7871470271911676,
+          "max": 3.5554287126906274
+        },
+        "generatorCpuPercent": 37.3084761308129
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.7625240000052145,
+        "p99": 3.014697000005981,
+        "count": 830,
+        "p99Every5s": [
+          2.8412050000042655,
+          3.5437779999992927,
+          2.273174999994808,
+          2.627097999997204,
+          3.525215000001481
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:57:32.528Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 768,
+        "completed": 768,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 51.13333333333333,
+        "latencyMs": {
+          "p50": 10.424873370931891,
+          "p90": 13.477165642850196,
+          "p99": 17.592295536551774,
+          "p999": 29.85729062738301,
+          "max": 29.85729062738301
+        },
+        "lagMs": {
+          "p50": 0.004046403841584834,
+          "p90": 0.04161382480288012,
+          "p99": 0.3697230340258102,
+          "p999": 2.1877785795331874,
+          "max": 2.1877785795331874
+        },
+        "generatorCpuPercent": 16.83241396871606
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.7343280000059167,
+        "p99": 4.248379999989993,
+        "count": 666,
+        "p99Every5s": [
+          4.217602000004263,
+          4.248379999989993,
+          4.4479300000093644,
+          3.5595119999925373
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 9.317823000004864,
+        "max": 35.02849499999138,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:57:51.010Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1490,
+        "completed": 1490,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 99.26666666666667,
+        "latencyMs": {
+          "p50": 9.127238831668365,
+          "p90": 12.697437936240021,
+          "p99": 17.683661381213824,
+          "p999": 21.958137579989852,
+          "max": 24.580149111359788
+        },
+        "lagMs": {
+          "p50": 0.0029745713945885655,
+          "p90": 0.04289582379715284,
+          "p99": 0.4087878699119756,
+          "p999": 0.6272989501594566,
+          "max": 0.6311016570625725
+        },
+        "generatorCpuPercent": 24.27372050449965
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.4759420000045793,
+        "p99": 4.1338660000037635,
+        "count": 676,
+        "p99Every5s": [
+          4.933032000000821,
+          4.595512999992934,
+          3.497161999999662,
+          4.1338660000037635
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.718892999997479,
+        "max": 13.244860999999219,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:58:09.477Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2236,
+        "completed": 2236,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 149.06666666666666,
+        "latencyMs": {
+          "p50": 8.530280248032795,
+          "p90": 13.224155062438513,
+          "p99": 22.91127770078947,
+          "p999": 37.64940819961839,
+          "max": 38.11845503643508
+        },
+        "lagMs": {
+          "p50": 0.002462571213072806,
+          "p90": 0.045361661635979544,
+          "p99": 0.339351121630898,
+          "p999": 1.033341470058076,
+          "max": 1.4545697919929808
+        },
+        "generatorCpuPercent": 31.63522109706443
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.2809729999862611,
+        "p99": 5.8914850000001024,
+        "count": 680,
+        "p99Every5s": [
+          11.735377999997581,
+          3.5547399999923073,
+          5.991949999995995,
+          3.5371720000111964
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 5.831172999998671,
+        "max": 30.77146000000357,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:58:27.888Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 3007,
+        "completed": 3007,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 200.33333333333334,
+        "latencyMs": {
+          "p50": 7.2809863901002245,
+          "p90": 11.895554851858833,
+          "p99": 19.917509144077485,
+          "p999": 27.243973177715816,
+          "max": 32.83253304329628
+        },
+        "lagMs": {
+          "p50": 0.001819047638491611,
+          "p90": 0.021043139258836163,
+          "p99": 0.23726695982622914,
+          "p999": 0.7515312960640586,
+          "max": 1.3077932532523846
+        },
+        "generatorCpuPercent": 36.50027619174414
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.0167319999891333,
+        "p99": 7.2836069999902975,
+        "count": 686,
+        "p99Every5s": [
+          7.399555000010878,
+          8.227547000016784,
+          4.8981930000009015,
+          4.304532999987714
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 5.085882999992464,
+        "max": 18.010066000017105,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:58:46.363Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 300,
+      "load": {
+        "offeredPerSecond": 300,
+        "measured": 4608,
+        "completed": 4608,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 307.06666666666666,
+        "latencyMs": {
+          "p50": 6.54233506829496,
+          "p90": 10.88347892913589,
+          "p99": 27.726164259194775,
+          "p999": 50.394786843917245,
+          "max": 55.02322666024702
+        },
+        "lagMs": {
+          "p50": 0.0013000615654163994,
+          "p90": 0.022403348679290502,
+          "p99": 0.30374656635649444,
+          "p999": 0.6386871109352796,
+          "max": 0.9425879624941444
+        },
+        "generatorCpuPercent": 46.311723251783974
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.7630749999952968,
+        "p99": 7.686932999989949,
+        "count": 692,
+        "p99Every5s": [
+          12.425652000005357,
+          3.1431380000140052,
+          4.504453999979887,
+          6.297105000005104
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 6.497426000016276,
+        "max": 23.93941300001461,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:59:04.821Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 5920,
+        "completed": 5920,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 394.6,
+        "latencyMs": {
+          "p50": 5.795665481351534,
+          "p90": 10.343795629156375,
+          "p99": 42.25964302325792,
+          "p999": 123.38571015085108,
+          "max": 177.73123187647343
+        },
+        "lagMs": {
+          "p50": 0.0010783558955154149,
+          "p90": 0.020397108186443802,
+          "p99": 0.23429015884994442,
+          "p999": 1.0289731337852572,
+          "max": 3.5116109098480592
+        },
+        "generatorCpuPercent": 53.479466274925244
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.5872800000070129,
+        "p99": 6.582556999986991,
+        "count": 698,
+        "p99Every5s": [
+          10.977555000019493,
+          21.77798700000858,
+          3.567165999993449,
+          1.9818519999971613
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 4.980631999991601,
+        "max": 8.96760199998971,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:59:23.218Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 800,
+      "load": {
+        "offeredPerSecond": 800,
+        "measured": 12055,
+        "completed": 12055,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 802.4666666666667,
+        "latencyMs": {
+          "p50": 27.079534615460943,
+          "p90": 131.20669864153388,
+          "p99": 475.08493813272935,
+          "p999": 1111.5820943211747,
+          "max": 1789.493160191948
+        },
+        "lagMs": {
+          "p50": 0.000977181183770881,
+          "p90": 0.023797251848918677,
+          "p99": 0.37510341973029426,
+          "p999": 1.0354514454948003,
+          "max": 9.505239470176093
+        },
+        "generatorCpuPercent": 77.29726082174746
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9842099999950733,
+        "p99": 5.281849999999395,
+        "count": 692,
+        "p99Every5s": [
+          15.9855979999993,
+          4.83515400000033,
+          4.634093000000576,
+          5.307805999997072
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.33636500002467,
+        "max": 17.78446199998143,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T07:59:41.752Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 1200,
+      "load": {
+        "offeredPerSecond": 1200,
+        "measured": 18105,
+        "completed": 13813,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 4292,
+        "achievedPerSecond": 761.2,
+        "latencyMs": {
+          "p50": 2835.085661919966,
+          "p90": 3498.691916754393,
+          "p99": 3718.394741140044,
+          "p999": 4303.589965149198,
+          "max": 4588.974210136626
+        },
+        "lagMs": {
+          "p50": 0.0009228037433786085,
+          "p90": 0.025415026561859122,
+          "p99": 0.4022636401678028,
+          "p999": 0.767998606477704,
+          "max": 1.377121340667145
+        },
+        "generatorCpuPercent": 89.5524037541186
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9932540000008885,
+        "p99": 4.990151000005426,
+        "count": 828,
+        "p99Every5s": [
+          12.512671000004048,
+          5.165435000002617,
+          3.885872000013478,
+          4.990151000005426,
+          3.3585210000164807
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.181783999985782,
+        "max": 19.320776000007754,
+        "count": 22
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:00:04.255Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 768,
+        "completed": 768,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 51.13333333333333,
+        "latencyMs": {
+          "p50": 9.624812391710293,
+          "p90": 12.281034601197462,
+          "p99": 17.201505945537065,
+          "p999": 44.0439850697112,
+          "max": 44.0439850697112
+        },
+        "lagMs": {
+          "p50": 0.0039146354065451305,
+          "p90": 0.039996133955810365,
+          "p99": 0.28566502867215604,
+          "p999": 1.614248768251855,
+          "max": 1.614248768251855
+        },
+        "generatorCpuPercent": 15.187602674543307
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.1686760000011418,
+        "p99": 2.8448130000033416,
+        "count": 682,
+        "p99Every5s": [
+          2.7934879999957047,
+          3.576881000015419,
+          3.038319999992382,
+          2.585252999997465
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:00:22.615Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1490,
+        "completed": 1490,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 99.26666666666667,
+        "latencyMs": {
+          "p50": 8.946670140368042,
+          "p90": 12.111265160958283,
+          "p99": 18.227815381231267,
+          "p999": 29.296743580023758,
+          "max": 29.29814260958392
+        },
+        "lagMs": {
+          "p50": 0.002964737159345532,
+          "p90": 0.057261818217739346,
+          "p99": 0.3530827353533823,
+          "p999": 0.8291575358725822,
+          "max": 0.9700592838016746
+        },
+        "generatorCpuPercent": 24.08231326072029
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.067341000016313,
+        "p99": 3.0852299999969546,
+        "count": 686,
+        "p99Every5s": [
+          3.9814790000091307,
+          2.773503000003984,
+          3.2488500000035856,
+          2.6917069999617524
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:00:40.950Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2236,
+        "completed": 2236,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 149,
+        "latencyMs": {
+          "p50": 8.492467214317003,
+          "p90": 13.629824864925467,
+          "p99": 22.955540134707917,
+          "p999": 33.23783267341423,
+          "max": 36.60961261133889
+        },
+        "lagMs": {
+          "p50": 0.002496598832294694,
+          "p90": 0.04282347003754694,
+          "p99": 0.3267633343821217,
+          "p999": 0.8403934712514456,
+          "max": 1.0941585990294698
+        },
+        "generatorCpuPercent": 31.434832923455847
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.8423850000253879,
+        "p99": 3.6340100000379607,
+        "count": 694,
+        "p99Every5s": [
+          2.8687020000070333,
+          3.7749450000119396,
+          8.421108999988064,
+          3.6340100000379607
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:00:59.311Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 3007,
+        "completed": 3007,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 200.33333333333334,
+        "latencyMs": {
+          "p50": 8.346352683938676,
+          "p90": 12.967011449584788,
+          "p99": 19.844117914606613,
+          "p999": 28.768548003540673,
+          "max": 33.04991701713334
+        },
+        "lagMs": {
+          "p50": 0.002177070235120482,
+          "p90": 0.03237994738265115,
+          "p99": 0.19457809444065788,
+          "p999": 0.5014363488662639,
+          "max": 1.9156371923490951
+        },
+        "generatorCpuPercent": 37.43991600245867
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.8075669999816455,
+        "p99": 3.6667020000168122,
+        "count": 694,
+        "p99Every5s": [
+          4.616928000003099,
+          3.7910520000150427,
+          3.2558159999898635,
+          2.7981109999818727
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:01:17.662Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 300,
+      "load": {
+        "offeredPerSecond": 300,
+        "measured": 4608,
+        "completed": 4608,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 307,
+        "latencyMs": {
+          "p50": 7.024270716847241,
+          "p90": 12.217552528141823,
+          "p99": 22.08487069205694,
+          "p999": 40.180342071525956,
+          "max": 69.95527913983642
+        },
+        "lagMs": {
+          "p50": 0.001528975335531868,
+          "p90": 0.02202767687776941,
+          "p99": 0.17637490390461608,
+          "p999": 0.3834245536208982,
+          "max": 0.44773331046781095
+        },
+        "generatorCpuPercent": 46.493681343962656
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.5854420000105165,
+        "p99": 3.644392999995034,
+        "count": 702,
+        "p99Every5s": [
+          3.218855999992229,
+          3.644392999995034,
+          5.313158000004478,
+          2.7015249999822117
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:01:35.934Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 5920,
+        "completed": 5920,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 394.6,
+        "latencyMs": {
+          "p50": 5.756477344821178,
+          "p90": 9.169243663387988,
+          "p99": 16.02492616249674,
+          "p999": 26.383047240392443,
+          "max": 35.7557169962447
+        },
+        "lagMs": {
+          "p50": 0.0010353562802265515,
+          "p90": 0.011707659617059107,
+          "p99": 0.08977894855888735,
+          "p999": 0.292052835352024,
+          "max": 0.5252719285545027
+        },
+        "generatorCpuPercent": 52.058547862469204
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.39629500004230067,
+        "p99": 2.2217749999836087,
+        "count": 710,
+        "p99Every5s": [
+          6.658407000009902,
+          1.4072879999876022,
+          4.883130999980494,
+          1.2129169999971054
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 1,
+      "startedAt": "2026-10-10T08:01:54.233Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 800,
+      "load": {
+        "offeredPerSecond": 800,
+        "measured": 12055,
+        "completed": 12055,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 713.0666666666667,
+        "latencyMs": {
+          "p50": 611.9850206375886,
+          "p90": 1730.2970061716005,
+          "p99": 1919.376671679147,
+          "p999": 2005.1349352380712,
+          "max": 2191.070511222875
+        },
+        "lagMs": {
+          "p50": 0.0009801892465475248,
+          "p90": 0.02294693067051412,
+          "p99": 0.44931901168547483,
+          "p999": 0.8571086337105953,
+          "max": 2.187621076567666
+        },
+        "generatorCpuPercent": 77.07871433020534
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.49457499996060506,
+        "p99": 4.994930999993812,
+        "count": 776,
+        "p99Every5s": [
+          4.790848000033293,
+          6.015955000009853,
+          5.565803000004962,
+          5.311260999995284
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:02:14.692Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 763,
+        "completed": 763,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 50.8,
+        "latencyMs": {
+          "p50": 9.071211371769095,
+          "p90": 11.747518668060366,
+          "p99": 15.041636439429567,
+          "p999": 36.97964967758526,
+          "max": 36.97964967758526
+        },
+        "lagMs": {
+          "p50": 0.0035838574040099047,
+          "p90": 0.013977991608044249,
+          "p99": 0.23555307990500296,
+          "p999": 0.6313888243612382,
+          "max": 0.6313888243612382
+        },
+        "generatorCpuPercent": 14.398015130471126
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.5851719999918714,
+        "p99": 3.3214190000435337,
+        "count": 670,
+        "p99Every5s": [
+          3.5177649999968708,
+          3.440426999994088,
+          3.332393000018783,
+          3.171306000032928
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.418297000054736,
+        "max": 12.3666240000166,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:02:33.114Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1551,
+        "completed": 1551,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 103.33333333333333,
+        "latencyMs": {
+          "p50": 8.630409591116404,
+          "p90": 12.131474539573901,
+          "p99": 16.603126729249198,
+          "p999": 27.533328091457406,
+          "max": 30.40931448075844
+        },
+        "lagMs": {
+          "p50": 0.00294723226215865,
+          "p90": 0.03465269297521445,
+          "p99": 0.3034337548124313,
+          "p999": 0.8664190319364025,
+          "max": 1.04105555760907
+        },
+        "generatorCpuPercent": 23.67032333621479
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.3567449999973178,
+        "p99": 3.7095729999709874,
+        "count": 676,
+        "p99Every5s": [
+          5.293859000026714,
+          3.0286110000452027,
+          3.1024430000106804,
+          3.200957999972161
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.221458000014536,
+        "max": 16.902667000016663,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:02:51.535Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2267,
+        "completed": 2267,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 151.06666666666666,
+        "latencyMs": {
+          "p50": 8.103474667822411,
+          "p90": 12.613579196172395,
+          "p99": 19.732368620374473,
+          "p999": 32.20054190644987,
+          "max": 32.51434697856712
+        },
+        "lagMs": {
+          "p50": 0.002567355293649598,
+          "p90": 0.0459156996839738,
+          "p99": 0.398058104359734,
+          "p999": 0.7112326593105536,
+          "max": 3.566221622451849
+        },
+        "generatorCpuPercent": 31.382405539597436
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.2045250000082888,
+        "p99": 4.523455000016838,
+        "count": 684,
+        "p99Every5s": [
+          5.206953999993857,
+          5.312317999952938,
+          3.6888449999969453,
+          4.349865999945905
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 6.482151000003796,
+        "max": 11.43228700000327,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:03:09.894Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 2966,
+        "completed": 2966,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 197.53333333333333,
+        "latencyMs": {
+          "p50": 7.471274439531044,
+          "p90": 13.226290428374341,
+          "p99": 26.535488518962666,
+          "p999": 41.93798580962721,
+          "max": 47.027969975380984
+        },
+        "lagMs": {
+          "p50": 0.0020709559325950977,
+          "p90": 0.03868566177152388,
+          "p99": 0.39042519732174696,
+          "p999": 1.258203914276237,
+          "max": 2.420008989614871
+        },
+        "generatorCpuPercent": 36.962639558057504
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9308170000440441,
+        "p99": 7.7722349999821745,
+        "count": 686,
+        "p99Every5s": [
+          18.063173999951687,
+          5.729843000008259,
+          4.543513000011444,
+          4.992985000018962
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 7.22263999999268,
+        "max": 13.965870999963954,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:03:28.272Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 300,
+      "load": {
+        "offeredPerSecond": 300,
+        "measured": 4601,
+        "completed": 4601,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 306.53333333333336,
+        "latencyMs": {
+          "p50": 6.4110490886678235,
+          "p90": 12.551419084302324,
+          "p99": 58.71922633845361,
+          "p999": 195.4056739342359,
+          "max": 239.857899010256
+        },
+        "lagMs": {
+          "p50": 0.0014523054105666233,
+          "p90": 0.027401487586757867,
+          "p99": 0.331311592944985,
+          "p999": 1.3557972889902885,
+          "max": 2.214269081421662
+        },
+        "generatorCpuPercent": 46.39905416516631
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.6930709999869578,
+        "p99": 6.2955739999888465,
+        "count": 694,
+        "p99Every5s": [
+          9.488920999981929,
+          6.2955739999888465,
+          11.672099000017624,
+          2.7841739999712445
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 4.8186059999861754,
+        "max": 10.0805709999986,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:03:46.651Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 6093,
+        "completed": 6093,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 405.93333333333334,
+        "latencyMs": {
+          "p50": 6.3704390296070414,
+          "p90": 14.297246163216187,
+          "p99": 141.50672104242403,
+          "p999": 589.1376084275598,
+          "max": 724.041894673459
+        },
+        "lagMs": {
+          "p50": 0.0013200265620980645,
+          "p90": 0.029238431105113705,
+          "p99": 0.2742047161773371,
+          "p999": 0.8951311260298098,
+          "max": 2.54117268223672
+        },
+        "generatorCpuPercent": 54.6942004458777
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.654357000021264,
+        "p99": 8.85830999998143,
+        "count": 692,
+        "p99Every5s": [
+          8.85830999998143,
+          3.6343890000134706,
+          14.712079000019003,
+          5.470677000004798
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 6.3475259999977425,
+        "max": 24.527421000006143,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:04:05.085Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 800,
+      "load": {
+        "offeredPerSecond": 800,
+        "measured": 12002,
+        "completed": 11457,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 545,
+        "achievedPerSecond": 658.0666666666667,
+        "latencyMs": {
+          "p50": 1793.0757310286172,
+          "p90": 2556.5770110998837,
+          "p99": 2883.3794240657626,
+          "p999": 3605.43693620848,
+          "max": 4306.084900255824
+        },
+        "lagMs": {
+          "p50": 0.0011378203280401067,
+          "p90": 0.06377647536555742,
+          "p99": 0.8429503741463122,
+          "p999": 2.1492891819079887,
+          "max": 4.870419892882637
+        },
+        "generatorCpuPercent": 80.7466972098291
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.322760000010021,
+        "p99": 11.106740000017453,
+        "count": 778,
+        "p99Every5s": [
+          27.739174999995157,
+          8.402322000009008,
+          7.134836000041105,
+          14.133380999963265,
+          5.319826999970246
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 7.795961000025272,
+        "max": 51.536828999989666,
+        "count": 21
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:04:26.694Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 763,
+        "completed": 763,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 50.8,
+        "latencyMs": {
+          "p50": 9.406640220629924,
+          "p90": 11.595536311036994,
+          "p99": 16.74534666067484,
+          "p999": 33.896648677593475,
+          "max": 33.896648677593475
+        },
+        "lagMs": {
+          "p50": 0.003021310627445928,
+          "p90": 0.02906799219090317,
+          "p99": 0.26142901341154356,
+          "p999": 0.985830709205402,
+          "max": 0.985830709205402
+        },
+        "generatorCpuPercent": 14.446373915192495
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.1208350000088103,
+        "p99": 3.0090610000188462,
+        "count": 684,
+        "p99Every5s": [
+          4.985008000046946,
+          2.4394440000178292,
+          2.841621999978088,
+          2.7947459999704733
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:04:45.069Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1551,
+        "completed": 1551,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 103.33333333333333,
+        "latencyMs": {
+          "p50": 9.081110044558955,
+          "p90": 13.05411511526927,
+          "p99": 24.706150593983693,
+          "p999": 35.99704651949014,
+          "max": 44.6557808458856
+        },
+        "lagMs": {
+          "p50": 0.0032796376062833588,
+          "p90": 0.039834881859860616,
+          "p99": 0.31602396393282106,
+          "p999": 0.8718294614700426,
+          "max": 0.9439856328244787
+        },
+        "generatorCpuPercent": 25.12692040630492
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.023698000004515,
+        "p99": 3.930026000016369,
+        "count": 688,
+        "p99Every5s": [
+          3.4138849999872036,
+          4.766357999993488,
+          4.165659000049345,
+          3.930026000016369
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:05:03.461Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2267,
+        "completed": 2267,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 151.06666666666666,
+        "latencyMs": {
+          "p50": 8.14653093428933,
+          "p90": 12.912124063512238,
+          "p99": 22.181193685159087,
+          "p999": 39.72219176852741,
+          "max": 45.013403052287686
+        },
+        "lagMs": {
+          "p50": 0.002692426193789288,
+          "p90": 0.04761465428782685,
+          "p99": 0.3553153328684857,
+          "p999": 1.3350434057538223,
+          "max": 1.917183312072666
+        },
+        "generatorCpuPercent": 32.07685960050603
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.8242779999272898,
+        "p99": 4.622972000041045,
+        "count": 692,
+        "p99Every5s": [
+          14.93684800004121,
+          3.6506420000223443,
+          2.9355990000767633,
+          4.622972000041045
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:05:21.760Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 2966,
+        "completed": 2966,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 197.53333333333333,
+        "latencyMs": {
+          "p50": 7.927533273310473,
+          "p90": 12.928646983716135,
+          "p99": 20.26591199791801,
+          "p999": 37.05317757287958,
+          "max": 49.414198698426844
+        },
+        "lagMs": {
+          "p50": 0.0019502905661283876,
+          "p90": 0.040152248097001575,
+          "p99": 0.2896534071805945,
+          "p999": 0.8418511198815395,
+          "max": 1.2907796230374515
+        },
+        "generatorCpuPercent": 36.90203613679725
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.7265099999494851,
+        "p99": 3.370691000018269,
+        "count": 696,
+        "p99Every5s": [
+          3.62569099990651,
+          3.049174000043422,
+          2.977447999990545,
+          3.2761760000139475
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:05:40.016Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 300,
+      "load": {
+        "offeredPerSecond": 300,
+        "measured": 4601,
+        "completed": 4601,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 306.46666666666664,
+        "latencyMs": {
+          "p50": 6.612101693650402,
+          "p90": 11.857618246411675,
+          "p99": 21.50820084526822,
+          "p999": 36.96480841135326,
+          "max": 53.66438322123122
+        },
+        "lagMs": {
+          "p50": 0.0015282451167877298,
+          "p90": 0.032435345415251504,
+          "p99": 0.24767960051212867,
+          "p999": 0.5036517183034448,
+          "max": 0.8912679168533941
+        },
+        "generatorCpuPercent": 46.26102493893175
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.5254440000280738,
+        "p99": 3.922305000014603,
+        "count": 702,
+        "p99Every5s": [
+          12.753580000018701,
+          3.2433089999249205,
+          5.40546399995219,
+          2.4479649999411777
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:05:58.255Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 6093,
+        "completed": 6093,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 406,
+        "latencyMs": {
+          "p50": 6.154664594676433,
+          "p90": 11.179924639281126,
+          "p99": 29.63048900740432,
+          "p999": 67.25439684703088,
+          "max": 93.59985954752483
+        },
+        "lagMs": {
+          "p50": 0.0011716027183865663,
+          "p90": 0.021579133137493045,
+          "p99": 0.2120262073694903,
+          "p999": 0.5809899047926592,
+          "max": 2.2103810057051305
+        },
+        "generatorCpuPercent": 53.764899784080434
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.4278080000076443,
+        "p99": 2.946003000019118,
+        "count": 708,
+        "p99Every5s": [
+          4.394648000015877,
+          2.7771620000712574,
+          5.5187170000281185,
+          2.080026999930851
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:06:16.574Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 800,
+      "load": {
+        "offeredPerSecond": 800,
+        "measured": 12002,
+        "completed": 12002,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 708.2,
+        "latencyMs": {
+          "p50": 871.4947495219203,
+          "p90": 1847.7750355745702,
+          "p99": 2556.775453868464,
+          "p999": 2652.3213268726613,
+          "max": 2792.020149530428
+        },
+        "lagMs": {
+          "p50": 0.0010702518975449493,
+          "p90": 0.03650060846848646,
+          "p99": 0.5587607641937211,
+          "p999": 1.3970086062254268,
+          "max": 2.2997923309321777
+        },
+        "generatorCpuPercent": 78.72260742766609
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.5566679999465123,
+        "p99": 5.5715540000237525,
+        "count": 798,
+        "p99Every5s": [
+          7.044114999938756,
+          6.4088079999201,
+          5.212900999933481,
+          6.824953000061214,
+          2.0434800001094118
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:06:37.527Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 763,
+        "completed": 763,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 50.8,
+        "latencyMs": {
+          "p50": 10.145271892330129,
+          "p90": 17.497570701656514,
+          "p99": 27.641535867922357,
+          "p999": 31.10861227312853,
+          "max": 31.10861227312853
+        },
+        "lagMs": {
+          "p50": 0.003641045806944021,
+          "p90": 0.02302453149241046,
+          "p99": 0.2945873412354558,
+          "p999": 0.46774989240475406,
+          "max": 0.46774989240475406
+        },
+        "generatorCpuPercent": 14.672599824083358
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.065762999933213,
+        "p99": 2.5754160000942647,
+        "count": 686,
+        "p99Every5s": [
+          2.6642010000068694,
+          2.628827999928035,
+          2.4310090000508353,
+          2.358170000021346
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:06:55.831Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1551,
+        "completed": 1551,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 103.33333333333333,
+        "latencyMs": {
+          "p50": 13.428070460333402,
+          "p90": 33.00438845935423,
+          "p99": 67.82412887073951,
+          "p999": 119.77620939867847,
+          "max": 146.93100473099184
+        },
+        "lagMs": {
+          "p50": 0.0030110476564004784,
+          "p90": 0.03509753182515851,
+          "p99": 0.23735874863996287,
+          "p999": 0.5869406361507572,
+          "max": 0.6559613502067805
+        },
+        "generatorCpuPercent": 23.90976726151185
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9243329999735579,
+        "p99": 2.37743499991484,
+        "count": 692,
+        "p99Every5s": [
+          3.1676100000040606,
+          2.4341270000441,
+          2.758704000036232,
+          2.1734200000064448
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 2,
+      "startedAt": "2026-10-10T08:07:14.142Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2267,
+        "completed": 2267,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 140.93333333333334,
+        "latencyMs": {
+          "p50": 691.1424395505401,
+          "p90": 1132.6318118146373,
+          "p99": 1620.655716366975,
+          "p999": 1908.218288188671,
+          "max": 2296.436601535008
+        },
+        "lagMs": {
+          "p50": 0.002583672297987505,
+          "p90": 0.036453476968745235,
+          "p99": 0.684720216394453,
+          "p999": 1.8161655116527982,
+          "max": 2.1498783777969948
+        },
+        "generatorCpuPercent": 30.610840785065246
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.891808999935165,
+        "p99": 3.081125999917276,
+        "count": 734,
+        "p99Every5s": [
+          2.9470839999848977,
+          3.2706989999860525,
+          3.236642000032589,
+          2.7025760000105947
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:07:33.513Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 755,
+        "completed": 755,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 50.333333333333336,
+        "latencyMs": {
+          "p50": 8.892236837287783,
+          "p90": 11.573933717134423,
+          "p99": 20.05353890915103,
+          "p999": 31.033197053544427,
+          "max": 31.033197053544427
+        },
+        "lagMs": {
+          "p50": 0.003439900263401796,
+          "p90": 0.011940690824303601,
+          "p99": 0.3027734914358007,
+          "p999": 0.5143685679222472,
+          "max": 0.5143685679222472
+        },
+        "generatorCpuPercent": 14.540108704732443
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.093504000105895,
+        "p99": 2.962874000077136,
+        "count": 684,
+        "p99Every5s": [
+          3.0403530000476167,
+          2.7368890000507236,
+          3.4727200000779703,
+          2.315554999979213
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:07:51.791Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1523,
+        "completed": 1523,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 101.53333333333333,
+        "latencyMs": {
+          "p50": 9.112036677504875,
+          "p90": 12.535380991364036,
+          "p99": 18.770209800879456,
+          "p999": 27.52419167739572,
+          "max": 31.99051219095054
+        },
+        "lagMs": {
+          "p50": 0.0031536013339064084,
+          "p90": 0.03538602454500506,
+          "p99": 0.3215126644263364,
+          "p999": 0.7273129540280934,
+          "max": 0.8199676722983895
+        },
+        "generatorCpuPercent": 24.35878598725442
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.0025329999625683,
+        "p99": 3.278442000038922,
+        "count": 688,
+        "p99Every5s": [
+          3.784442999982275,
+          3.278442000038922,
+          3.2821279999334365,
+          2.453707000007853
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:08:10.080Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2304,
+        "completed": 2304,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 153.46666666666667,
+        "latencyMs": {
+          "p50": 8.710512383790046,
+          "p90": 12.696465456256192,
+          "p99": 18.943057421074627,
+          "p999": 27.33887016734934,
+          "max": 29.124941848807794
+        },
+        "lagMs": {
+          "p50": 0.0024826439293974545,
+          "p90": 0.0419278927056439,
+          "p99": 0.2883465002751109,
+          "p999": 0.515532748266196,
+          "max": 1.0943133130558635
+        },
+        "generatorCpuPercent": 31.738513386477056
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9008199999807402,
+        "p99": 3.255797000019811,
+        "count": 694,
+        "p99Every5s": [
+          4.670931999920867,
+          3.255797000019811,
+          2.7961859999923036,
+          3.9179100000765175
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:08:28.377Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 3013,
+        "completed": 3013,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 200.73333333333332,
+        "latencyMs": {
+          "p50": 8.081998546158502,
+          "p90": 12.87024456333529,
+          "p99": 19.515441090838067,
+          "p999": 25.795880418907473,
+          "max": 33.18987209027091
+        },
+        "lagMs": {
+          "p50": 0.002103887058183318,
+          "p90": 0.02752078073717712,
+          "p99": 0.24471759242078406,
+          "p999": 0.5910720068950468,
+          "max": 1.6262563229374791
+        },
+        "generatorCpuPercent": 36.39025823116104
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.7628249999834225,
+        "p99": 3.163230999954976,
+        "count": 698,
+        "p99Every5s": [
+          3.163230999954976,
+          3.281277000089176,
+          3.097133000032045,
+          3.0775949999224395
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:08:46.721Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 300,
+      "load": {
+        "offeredPerSecond": 300,
+        "measured": 4511,
+        "completed": 4511,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 300.53333333333336,
+        "latencyMs": {
+          "p50": 6.443434807486483,
+          "p90": 11.407959318234134,
+          "p99": 20.991484278187272,
+          "p999": 28.223126761797175,
+          "max": 33.26950399079942
+        },
+        "lagMs": {
+          "p50": 0.0014265389409047202,
+          "p90": 0.022685614556394285,
+          "p99": 0.18649204548819398,
+          "p999": 0.47537569879568764,
+          "max": 0.6088255097783986
+        },
+        "generatorCpuPercent": 45.17130466777156
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.4986000000499189,
+        "p99": 3.65344600006938,
+        "count": 704,
+        "p99Every5s": [
+          3.464828999945894,
+          5.045042000012472,
+          3.677858000039123,
+          2.9236420000670478
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:09:05.007Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 6102,
+        "completed": 6102,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 406.6666666666667,
+        "latencyMs": {
+          "p50": 7.618713137546365,
+          "p90": 24.077279443630687,
+          "p99": 88.55215748786395,
+          "p999": 188.89703085904875,
+          "max": 320.0707375227903
+        },
+        "lagMs": {
+          "p50": 0.0014084602953516878,
+          "p90": 0.04378718234056578,
+          "p99": 0.37618556120287394,
+          "p999": 1.1996176126503997,
+          "max": 2.180840742763394
+        },
+        "generatorCpuPercent": 56.88240454982834
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.47161000000778586,
+        "p99": 7.705064999987371,
+        "count": 700,
+        "p99Every5s": [
+          4.7452269999776036,
+          6.381082999985665,
+          8.838754999917,
+          5.206444000010379
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:09:23.306Z",
+      "mode": "sharded-16",
+      "connections": 32,
+      "rate": 800,
+      "load": {
+        "offeredPerSecond": 800,
+        "measured": 12100,
+        "completed": 11931,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 169,
+        "achievedPerSecond": 690.4666666666667,
+        "latencyMs": {
+          "p50": 1181.1424772466617,
+          "p90": 2379.4752937660087,
+          "p99": 2524.0814921054516,
+          "p999": 2696.014775854306,
+          "max": 3100.1687678831768
+        },
+        "lagMs": {
+          "p50": 0.0010370116451667855,
+          "p90": 0.035077868106327514,
+          "p99": 0.5849954251571035,
+          "p999": 1.3165312507735507,
+          "max": 8.316562707672347
+        },
+        "generatorCpuPercent": 78.7209837255371
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.5410360000096262,
+        "p99": 5.140826000017114,
+        "count": 792,
+        "p99Every5s": [
+          6.139821000047959,
+          4.5558339999988675,
+          5.249627999961376,
+          5.148768000071868,
+          1.3703139999415725
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:09:44.040Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 755,
+        "completed": 755,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 50.333333333333336,
+        "latencyMs": {
+          "p50": 9.817112918912244,
+          "p90": 16.20092005541119,
+          "p99": 28.08343363268068,
+          "p999": 64.52353946073345,
+          "max": 64.52353946073345
+        },
+        "lagMs": {
+          "p50": 0.0035142574797646375,
+          "p90": 0.03868343069552793,
+          "p99": 0.2765057698961755,
+          "p999": 0.6871454473994163,
+          "max": 0.6871454473994163
+        },
+        "generatorCpuPercent": 14.588749772088397
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.0604919999605045,
+        "p99": 2.531178000033833,
+        "count": 686,
+        "p99Every5s": [
+          2.5985820000059903,
+          2.771555000101216,
+          2.502277999999933,
+          2.285793000017293
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:10:02.273Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1523,
+        "completed": 1523,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 101.53333333333333,
+        "latencyMs": {
+          "p50": 12.448558710451834,
+          "p90": 26.280535821781086,
+          "p99": 49.85929735414538,
+          "p999": 98.50892859054875,
+          "max": 111.21971834348369
+        },
+        "lagMs": {
+          "p50": 0.002990741515532136,
+          "p90": 0.03417513805652561,
+          "p99": 0.27930053138516087,
+          "p999": 0.9402816743931908,
+          "max": 1.0096591596993676
+        },
+        "generatorCpuPercent": 23.972143871631705
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.9269779999740422,
+        "p99": 2.433779999963008,
+        "count": 692,
+        "p99Every5s": [
+          2.597215000074357,
+          2.239943999913521,
+          2.71577500004787,
+          2.382370000006631
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:10:20.588Z",
+      "mode": "locked",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2304,
+        "completed": 2304,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 153.26666666666668,
+        "latencyMs": {
+          "p50": 258.8223535396837,
+          "p90": 719.0230362714174,
+          "p99": 1217.8140857892467,
+          "p999": 1844.7603704727708,
+          "max": 2603.7205232493116
+        },
+        "lagMs": {
+          "p50": 0.0022701858324580826,
+          "p90": 0.04442891433791374,
+          "p99": 0.3856497221204336,
+          "p999": 0.9422004493953864,
+          "max": 0.968977743468713
+        },
+        "generatorCpuPercent": 30.393272963854344
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.7601860000286251,
+        "p99": 2.8006270000478253,
+        "count": 698,
+        "p99Every5s": [
+          3.1216329999733716,
+          2.845604999922216,
+          2.407346999971196,
+          2.176179000060074
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": null,
+        "max": null,
+        "count": 0
+      },
+      "saturated": true
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:10:38.881Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 50,
+      "load": {
+        "offeredPerSecond": 50,
+        "measured": 755,
+        "completed": 755,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 50.333333333333336,
+        "latencyMs": {
+          "p50": 9.701250137384704,
+          "p90": 12.67571031677835,
+          "p99": 32.14532088442684,
+          "p999": 46.525872458831145,
+          "max": 46.525872458831145
+        },
+        "lagMs": {
+          "p50": 0.0035000662319362164,
+          "p90": 0.0222249747839669,
+          "p99": 0.3270384060501783,
+          "p999": 1.305533443762215,
+          "max": 1.305533443762215
+        },
+        "generatorCpuPercent": 14.8780517581564
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.4923300000373274,
+        "p99": 3.9723180000437424,
+        "count": 674,
+        "p99Every5s": [
+          5.361464999965392,
+          3.9723180000437424,
+          3.9947359999641776,
+          3.649949000100605
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.633540999959223,
+        "max": 30.54731399996672,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:10:57.336Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 100,
+      "load": {
+        "offeredPerSecond": 100,
+        "measured": 1523,
+        "completed": 1523,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 101.53333333333333,
+        "latencyMs": {
+          "p50": 8.344499665648982,
+          "p90": 11.723121795883344,
+          "p99": 16.838740876091833,
+          "p999": 25.420839071921364,
+          "max": 29.681435992361003
+        },
+        "lagMs": {
+          "p50": 0.0026523570759309223,
+          "p90": 0.034240318253068835,
+          "p99": 0.266734590912165,
+          "p999": 1.6435116248831037,
+          "max": 6.181014071982645
+        },
+        "generatorCpuPercent": 23.578826931554612
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.321127999923192,
+        "p99": 3.9859299999661744,
+        "count": 680,
+        "p99Every5s": [
+          4.142249000025913,
+          5.8343020000029355,
+          3.748719000024721,
+          3.284914999967441
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 6.807806000113487,
+        "max": 12.773920999956317,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:11:15.686Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 150,
+      "load": {
+        "offeredPerSecond": 150,
+        "measured": 2304,
+        "completed": 2304,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 153.46666666666667,
+        "latencyMs": {
+          "p50": 8.92118518429379,
+          "p90": 13.104359824899802,
+          "p99": 20.128410409914068,
+          "p999": 26.982025457362397,
+          "max": 37.35878328055696
+        },
+        "lagMs": {
+          "p50": 0.002783840789561509,
+          "p90": 0.033955491349843214,
+          "p99": 0.2621997423666471,
+          "p999": 0.7337843652403535,
+          "max": 4.3790685980739
+        },
+        "generatorCpuPercent": 31.663461195336723
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.3517059999285266,
+        "p99": 5.239711000001989,
+        "count": 678,
+        "p99Every5s": [
+          6.890671000001021,
+          3.7729279999621212,
+          5.481496999971569,
+          5.239711000001989
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.481430999934673,
+        "max": 16.524734999984503,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:11:34.210Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 200,
+      "load": {
+        "offeredPerSecond": 200,
+        "measured": 3013,
+        "completed": 3013,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 200.73333333333332,
+        "latencyMs": {
+          "p50": 8.373264091083911,
+          "p90": 13.172814312895753,
+          "p99": 20.344344029481363,
+          "p999": 45.812051293147306,
+          "max": 47.25120718017024
+        },
+        "lagMs": {
+          "p50": 0.0023238656053763407,
+          "p90": 0.0243413868429343,
+          "p99": 0.20944396853246872,
+          "p999": 0.4616834252965418,
+          "max": 0.594834032421204
+        },
+        "generatorCpuPercent": 36.69253823898476
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.2390100000193343,
+        "p99": 4.414042999967933,
+        "count": 682,
+        "p99Every5s": [
+          5.896963999955915,
+          4.12523699994199,
+          3.440671999938786,
+          3.57613499998115
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.443013999960385,
+        "max": 11.129584999987856,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:11:52.624Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 300,
+      "load": {
+        "offeredPerSecond": 300,
+        "measured": 4511,
+        "completed": 4511,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 300.53333333333336,
+        "latencyMs": {
+          "p50": 6.6392163153195725,
+          "p90": 11.997642489134705,
+          "p99": 21.323582214767157,
+          "p999": 37.37083617041844,
+          "max": 52.54691126373291
+        },
+        "lagMs": {
+          "p50": 0.001415085231201374,
+          "p90": 0.020159043815510813,
+          "p99": 0.18687668458005646,
+          "p999": 0.5134293035362134,
+          "max": 0.813497025763354
+        },
+        "generatorCpuPercent": 44.87632594561721
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.7418980000074953,
+        "p99": 3.9892980000004172,
+        "count": 696,
+        "p99Every5s": [
+          3.5961119999410585,
+          4.664833000046201,
+          3.1939839998958632,
+          3.455169999971986
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 6.625789999961853,
+        "max": 18.599316000007093,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:12:11.037Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 400,
+      "load": {
+        "offeredPerSecond": 400,
+        "measured": 6102,
+        "completed": 6102,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 406.6666666666667,
+        "latencyMs": {
+          "p50": 5.647379798632755,
+          "p90": 9.086685178481275,
+          "p99": 16.35909894366341,
+          "p999": 27.878553023165296,
+          "max": 44.32046955853184
+        },
+        "lagMs": {
+          "p50": 0.0011007783505192492,
+          "p90": 0.015406802285724552,
+          "p99": 0.22123253815516364,
+          "p999": 0.40430305003610556,
+          "max": 0.8498977291892515
+        },
+        "generatorCpuPercent": 54.110004843518844
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.5842150000389665,
+        "p99": 2.6252690000692382,
+        "count": 702,
+        "p99Every5s": [
+          5.424296000041068,
+          3.0342620000010356,
+          2.7262689999770373,
+          1.9844199999934062
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 4.724411000031978,
+        "max": 10.14700100000482,
+        "count": 18
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:12:29.412Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 800,
+      "load": {
+        "offeredPerSecond": 800,
+        "measured": 12100,
+        "completed": 12100,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 0,
+        "achievedPerSecond": 778.6666666666666,
+        "latencyMs": {
+          "p50": 20.481176196721208,
+          "p90": 513.4869759884059,
+          "p99": 805.2701258469388,
+          "p999": 1334.716707602147,
+          "max": 2336.3920027710683
+        },
+        "lagMs": {
+          "p50": 0.0010172397269343492,
+          "p90": 0.01979483155264461,
+          "p99": 0.32158649306438747,
+          "p999": 0.7487938703416148,
+          "max": 1.8117978004938777
+        },
+        "generatorCpuPercent": 77.4530109354924
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 0.8807939999969676,
+        "p99": 4.971631999942474,
+        "count": 716,
+        "p99Every5s": [
+          24.809008000069298,
+          4.971631999942474,
+          4.8601469999412075,
+          3.798629999975674
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 9.352778999949805,
+        "max": 25.197491000057198,
+        "count": 19
+      },
+      "saturated": false
+    },
+    {
+      "repeat": 3,
+      "startedAt": "2026-10-10T08:12:49.018Z",
+      "mode": "derived",
+      "connections": 32,
+      "rate": 1200,
+      "load": {
+        "offeredPerSecond": 1200,
+        "measured": 17956,
+        "completed": 13599,
+        "gaveUp": 0,
+        "errors": 0,
+        "dropped": 4357,
+        "achievedPerSecond": 746.6,
+        "latencyMs": {
+          "p50": 2862.14054989694,
+          "p90": 3394.6954736735315,
+          "p99": 3809.101200588204,
+          "p999": 4335.028941667395,
+          "max": 4785.424833927582
+        },
+        "lagMs": {
+          "p50": 0.0009756488125276519,
+          "p90": 0.02404276288143592,
+          "p99": 0.4332880686297358,
+          "p999": 0.9768077893213558,
+          "max": 2.0226470845445874
+        },
+        "generatorCpuPercent": 90.15368156381658
+      },
+      "attemptsPerJournal": 1,
+      "deadlocks": 0,
+      "rollbacks": 0,
+      "readMs": {
+        "p50": 1.02140500000678,
+        "p99": 8.285384999937378,
+        "count": 830,
+        "p99Every5s": [
+          13.458493000012822,
+          4.727555999998003,
+          4.994328000000678,
+          8.451739999931306,
+          51.12964900000952
+        ]
+      },
+      "longTransaction": false,
+      "snapshotMs": {
+        "p50": 8.30964899994433,
+        "max": 26.24384100001771,
+        "count": 22
+      },
+      "saturated": true
+    }
+  ]
+}
