@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { TokenBuckets } from '../src/auth/token-buckets.ts'
@@ -5,6 +6,7 @@ import { canonicalJson, requestHash } from '../src/idempotency/request-hash.ts'
 import { feeRefund, platformFee } from '../src/payments/fees.ts'
 import { canMove, isFinal, resolveCardAttempt } from '../src/payments/payment-state.ts'
 import { checkAnswer, type ExpectedAnswer } from '../src/psp/answers.ts'
+import { verifySignature } from '../src/webhooks/signature.ts'
 
 describe('fees', () => {
   it('charges 2% plus 10 cents on the design doc example', () => {
@@ -123,5 +125,21 @@ describe('TokenBuckets', () => {
     expect(buckets.take('b')).toBe(true)
     now = 500
     expect(Array.from({ length: 10 }, () => buckets.take('a')).filter(Boolean)).toHaveLength(5)
+  })
+})
+
+describe('webhook signatures', () => {
+  const body = '{"id":"evt_1"}'
+  const at = 1_700_000_000
+  const header = `t=${at},v1=${createHmac('sha256', 'whsec').update(`${at}.${body}`).digest('hex')}`
+
+  it('accepts the PSP scheme inside five minutes and nothing else', () => {
+    expect(verifySignature('whsec', body, header, at + 299)).toBe(true)
+    expect(verifySignature('whsec', body, header, at + 301)).toBe(false)
+    expect(verifySignature('whsec', `${body} `, header, at)).toBe(false)
+    expect(verifySignature('other', body, header, at)).toBe(false)
+    expect(verifySignature('whsec', body, `v1=${header.split('v1=')[1]}`, at)).toBe(false)
+    expect(verifySignature('whsec', body, `t=${at},v1=zz`, at)).toBe(false)
+    expect(verifySignature('whsec', body, '', at)).toBe(false)
   })
 })
