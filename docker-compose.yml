@@ -9,6 +9,7 @@ services:
       LEDGER_OWNER_PASSWORD: ledger_owner
       LEDGER_APP_PASSWORD: ledger_app
       LEDGER_AUDIT_PASSWORD: ledger_audit
+      PSP_DB_PASSWORD: psp
     command:
       [
         "postgres",

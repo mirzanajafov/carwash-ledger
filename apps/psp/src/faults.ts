@@ -1,0 +1,147 @@
+import { createHash } from 'node:crypto'
+
+export const CARD_OPERATIONS = ['authorize', 'capture', 'cancel', 'refund'] as const
+export type CardOperation = (typeof CARD_OPERATIONS)[number]
+export type OperationKind = CardOperation | 'payout'
+
+export const WEBHOOK_FAULTS = ['duplicate', 'delay', 'reorder', 'drop'] as const
+export type WebhookFault = (typeof WEBHOOK_FAULTS)[number]
+
+export interface FaultPlan {
+  seed: number
+  decline: number
+  fail: number
+  timeoutAfterCommit: number
+  slow: number
+  slowMs: readonly [number, number]
+  webhook: Record<WebhookFault, number>
+}
+
+export const NO_FAULTS: FaultPlan = {
+  seed: 0,
+  decline: 0,
+  fail: 0,
+  timeoutAfterCommit: 0,
+  slow: 0,
+  slowMs: [500, 3000],
+  webhook: { duplicate: 0, delay: 0, reorder: 0, drop: 0 },
+}
+
+export type TokenEffect =
+  | { kind: 'ok' | 'decline' | 'expire_authorization' }
+  | { kind: 'fail' | 'fail_once' | 'timeout_after' | 'drop_after' | 'slow'; operation: CardOperation }
+  | { kind: 'webhook'; fault: WebhookFault }
+
+const TOKEN =
+  /^tok_(?:(ok|decline|expire_authorization)|(fail_once|fail|timeout_after|drop_after|slow)_(authorize|capture|cancel|refund)|webhook_(duplicate|delay|reorder|drop))$/
+
+export function parseToken(token: string): TokenEffect | undefined {
+  const match = TOKEN.exec(token)
+  if (!match) return undefined
+  const [, simple, failure, operation, webhook] = match
+  if (simple) return { kind: simple as 'ok' | 'decline' | 'expire_authorization' }
+  if (failure) return { kind: failure as 'fail', operation: operation as CardOperation }
+  return { kind: 'webhook', fault: webhook as WebhookFault }
+}
+
+export interface Behaviour {
+  decline: boolean
+  fail: boolean
+  afterCommit: 'answer' | 'hang' | 'drop'
+  slowMs: number
+  webhook: ReadonlySet<WebhookFault>
+  draw(name: string): number
+}
+
+const REMEMBERED_KEYS = 100_000
+
+export class Faults {
+  #plan: FaultPlan
+  readonly #seen = new Map<string, number>()
+
+  constructor(plan: FaultPlan = NO_FAULTS) {
+    this.#plan = plan
+  }
+
+  get plan(): FaultPlan {
+    return this.#plan
+  }
+
+  set plan(plan: FaultPlan) {
+    this.#plan = plan
+  }
+
+  behaviour(key: string, kind: OperationKind, token: TokenEffect): Behaviour {
+    const plan = this.#plan
+    const n = this.#count(key)
+    const draw = (name: string) => unitHash(`${plan.seed}:${key}:${n}:${name}`)
+    const tokenFor = (effect: TokenEffect['kind']) => token.kind === effect && 'operation' in token && token.operation === kind
+
+    const decline = kind === 'authorize' && (token.kind === 'decline' || draw('decline') < plan.decline)
+    const fail = tokenFor('fail') || (tokenFor('fail_once') && n === 0) || draw('fail') < plan.fail
+    let afterCommit: Behaviour['afterCommit'] = 'answer'
+    if (tokenFor('timeout_after')) afterCommit = 'hang'
+    else if (tokenFor('drop_after')) afterCommit = 'drop'
+    else if (draw('timeout') < plan.timeoutAfterCommit) afterCommit = draw('timeout.kind') < 0.5 ? 'hang' : 'drop'
+    const [low, high] = plan.slowMs
+    const slowMs = tokenFor('slow') || draw('slow') < plan.slow ? low + Math.floor(draw('slow.ms') * (high - low + 1)) : 0
+    const webhook = new Set<WebhookFault>()
+    for (const fault of WEBHOOK_FAULTS) {
+      if ((token.kind === 'webhook' && token.fault === fault) || draw(`webhook.${fault}`) < plan.webhook[fault]) webhook.add(fault)
+    }
+    return { decline, fail, afterCommit, slowMs, webhook, draw }
+  }
+
+  #count(key: string): number {
+    const n = this.#seen.get(key) ?? 0
+    this.#seen.delete(key)
+    this.#seen.set(key, n + 1)
+    if (this.#seen.size > REMEMBERED_KEYS) this.#seen.delete(this.#seen.keys().next().value!)
+    return n
+  }
+}
+
+export function unitHash(input: string): number {
+  return createHash('sha256').update(input).digest().readUInt32BE(0) / 2 ** 32
+}
+
+export function parseFaultPlan(input: unknown): FaultPlan {
+  if (typeof input !== 'object' || input === null) throw new Error('the fault plan must be an object')
+  const source = input as Record<string, unknown>
+  for (const key of Object.keys(source)) {
+    if (!(key in NO_FAULTS)) throw new Error(`unknown fault plan field ${key}`)
+  }
+  const probability = (value: unknown, name: string) => {
+    if (value === undefined) return 0
+    if (typeof value !== 'number' || !(value >= 0 && value <= 1)) throw new Error(`${name} must be a probability in [0, 1]`)
+    return value
+  }
+  const seed = source.seed ?? 0
+  if (!Number.isSafeInteger(seed)) throw new Error('seed must be an integer')
+  const slowMs = source.slowMs ?? NO_FAULTS.slowMs
+  if (
+    !Array.isArray(slowMs) ||
+    slowMs.length !== 2 ||
+    !slowMs.every((ms) => Number.isSafeInteger(ms) && ms >= 0) ||
+    slowMs[0] > slowMs[1]
+  ) {
+    throw new Error('slowMs must be [low, high] in milliseconds')
+  }
+  const webhook = (source.webhook ?? {}) as Record<string, unknown>
+  if (typeof webhook !== 'object' || webhook === null) throw new Error('webhook must be an object')
+  for (const key of Object.keys(webhook)) {
+    if (!(WEBHOOK_FAULTS as readonly string[]).includes(key)) throw new Error(`unknown webhook fault ${key}`)
+  }
+  return {
+    seed: seed as number,
+    decline: probability(source.decline, 'decline'),
+    fail: probability(source.fail, 'fail'),
+    timeoutAfterCommit: probability(source.timeoutAfterCommit, 'timeoutAfterCommit'),
+    slow: probability(source.slow, 'slow'),
+    slowMs: [slowMs[0], slowMs[1]],
+    webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<
+      WebhookFault,
+      number
+    >,
+  }
+}

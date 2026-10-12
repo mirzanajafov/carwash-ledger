@@ -1,8 +1,8 @@
+import { checkout } from '@carwash/pg'
 import type pg from 'pg'
 import { DERIVED_BALANCE, SELECT_JOURNAL_ENTRIES, STORED_BALANCE, TAKE_SNAPSHOTS } from './sql.ts'
 import { InvalidJournalError } from './errors.ts'
 import { failpoint } from './failpoints.ts'
-import { checkout } from './pool.ts'
 import type { Account, JournalInput, Queryable } from './types.ts'
 
 export const SNAPSHOT_LOCK_KEY = 7_240_001
