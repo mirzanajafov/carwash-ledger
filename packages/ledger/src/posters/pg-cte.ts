@@ -1,12 +1,38 @@
 import { checkout } from '@carwash/pg'
 import type pg from 'pg'
 import type { AccountRegistry } from '../accounts.ts'
+import { InvalidJournalError } from '../errors.ts'
 import { failpoint } from '../failpoints.ts'
-import { deltaParams, entryParams, lockParams, type JournalPlan } from '../plan.ts'
+import { deltaParams, entryParams, lockParams, planJournal, type JournalPlan } from '../plan.ts'
 import type { RetryOptions } from '../retry.ts'
 import { LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'
+import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal, Poster } from '../types.ts'
 import { beginStatement, expectApplied, postWith } from './common.ts'
+
+export async function postInTransaction(client: pg.ClientBase, registry: AccountRegistry, input: JournalInput): Promise<bigint> {
+  const plan = planJournal(input, await registry.resolve(input.entries.map((e) => e.accountId)))
+  if (plan.isolation === 'serializable') {
+    throw new InvalidJournalError('a journal touching serializable accounts needs its own transaction')
+  }
+  try {
+    if (plan.locks.length > 0) {
+      await client.query(LOCK_BALANCES, lockParams(plan))
+      failpoint('post.after_lock')
+    }
+    const result = await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
+      plan.externalRef,
+      plan.reversesId?.toString() ?? null,
+      ...entryParams(plan),
+      ...deltaParams(plan),
+    ])
+    const row = result.rows[0]!
+    expectApplied(Number(row.balances), plan)
+    return BigInt(row.id)
+  } catch (error) {
+    throw translateError(error, plan)
+  }
+}
 
 export class PgCtePoster implements Poster {
   readonly name = 'pg-cte'
