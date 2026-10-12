@@ -8,6 +8,31 @@ importers:
 
   .: {}
 
+  apps/psp:
+    dependencies:
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../../packages/pg
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.1
+    devDependencies:
+      '@carwash/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
   packages/db:
     dependencies:
       '@prisma/adapter-pg':
@@ -63,6 +88,9 @@ importers:
       '@carwash/db':
         specifier: workspace:*
         version: link:../db
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../pg
       pg:
         specifier: ^8.23.0
         version: 8.23.1
@@ -88,6 +116,22 @@ importers:
       vitest:
         specifier: ^4.1.2
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
+  packages/pg:
+    dependencies:
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
 
   packages/testkit:
     dependencies:

@@ -1,0 +1,265 @@
+import { randomUUID } from 'node:crypto'
+import { once } from 'node:events'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { createScratchDatabase, type ScratchDatabase } from '@carwash/testkit'
+import pg from 'pg'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { startPsp, type RunningPsp } from '../src/app.ts'
+import { NO_FAULTS } from '../src/faults.ts'
+import { verifySignature } from '../src/signature.ts'
+
+const API_KEY = 'sk_test_psp'
+const ADMIN_KEY = 'sk_admin_psp'
+const SECRET = 'whsec_psp'
+
+interface Received {
+  signature: string
+  body: string
+}
+
+let db: ScratchDatabase
+let sql: pg.Pool
+let running: RunningPsp
+let receiver: Server
+let received: Received[]
+let answerWith: (body: string) => number
+
+interface Reply {
+  status: number
+  body: any
+  replayed: boolean
+}
+
+async function call(method: string, path: string, options: { key?: string; body?: unknown; auth?: string; timeoutMs?: number } = {}): Promise<Reply> {
+  const response = await fetch(`${running.url}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${options.auth ?? API_KEY}`,
+      'content-type': 'application/json',
+      ...(options.key ? { 'idempotency-key': options.key } : {}),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
+  })
+  return { status: response.status, body: await response.json(), replayed: response.headers.get('idempotent-replayed') === 'true' }
+}
+
+async function authorize(token = 'tok_ok', amount = 1500): Promise<string> {
+  const reply = await call('POST', '/v1/charges', { key: randomUUID(), body: { amount, currency: 'EUR', token } })
+  expect(reply.status).toBe(200)
+  return reply.body.charge.id
+}
+
+async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 10_000): Promise<T> {
+  const started = Date.now()
+  for (;;) {
+    const value = await read()
+    if (value !== undefined) return value
+    if (Date.now() - started > timeoutMs) throw new Error('timed out waiting')
+    await sleep(50)
+  }
+}
+
+beforeAll(async () => {
+  db = await createScratchDatabase('psp')
+  sql = new pg.Pool({ connectionString: db.url, max: 2 })
+  received = []
+  receiver = createServer(async (request, response) => {
+    const chunks: Buffer[] = []
+    for await (const chunk of request) chunks.push(chunk as Buffer)
+    const body = Buffer.concat(chunks).toString('utf8')
+    received.push({ signature: String(request.headers['psp-signature']), body })
+    response.writeHead(answerWith(body)).end()
+  })
+  receiver.listen(0, '127.0.0.1')
+  await once(receiver, 'listening')
+  running = await startPsp(
+    {
+      port: 0,
+      databaseUrl: db.url,
+      apiKey: API_KEY,
+      adminKey: ADMIN_KEY,
+      webhookUrl: `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/webhooks/psp`,
+      webhookSecret: SECRET,
+      authorizationTtlSeconds: 3600,
+      idempotencyWindowSeconds: 24 * 3600,
+      hangMs: 1500,
+      faultPlan: NO_FAULTS,
+    },
+    () => undefined,
+  )
+})
+
+afterAll(async () => {
+  await running?.close()
+  await sql?.end()
+  receiver?.closeAllConnections()
+  receiver?.close()
+  await db?.drop()
+})
+
+beforeEach(() => {
+  running.faults.plan = NO_FAULTS
+  answerWith = () => 200
+})
+
+describe('PSP simulator', () => {
+  it('authorizes, captures and refunds, and refuses to refund more than was captured', async () => {
+    const chargeId = await authorize('tok_ok', 1500)
+    const capture = await call('POST', `/v1/charges/${chargeId}/capture`, { key: randomUUID(), body: {} })
+    expect(capture.body).toMatchObject({ kind: 'capture', status: 'succeeded', amount: 1500, charge: { status: 'captured' } })
+    const refund = await call('POST', `/v1/charges/${chargeId}/refunds`, { key: randomUUID(), body: { amount: 1000 } })
+    expect(refund.body).toMatchObject({ kind: 'refund', status: 'succeeded', amount: 1000, charge: { refunded_amount: 1000 } })
+    const tooMuch = await call('POST', `/v1/charges/${chargeId}/refunds`, { key: randomUUID(), body: { amount: 501 } })
+    expect(tooMuch.status).toBe(409)
+    expect(tooMuch.body).toMatchObject({ status: 'declined', reason: 'refund_exceeds_captured' })
+    const charge = await call('GET', `/v1/charges/${chargeId}`)
+    expect(charge.body).toMatchObject({ status: 'captured', authorized_amount: 1500, captured_amount: 1500, refunded_amount: 1000 })
+    const again = await call('POST', `/v1/charges/${chargeId}/capture`, { key: randomUUID(), body: {} })
+    expect(again.body).toMatchObject({ status: 'declined', reason: 'charge_already_captured' })
+  })
+
+  it('replays the stored answer for the same key and body, and rejects the same key with a different body', async () => {
+    const key = randomUUID()
+    const first = await call('POST', '/v1/charges', { key, body: { amount: 700, currency: 'EUR', token: 'tok_ok' } })
+    const second = await call('POST', '/v1/charges', { key, body: { currency: 'EUR', token: 'tok_ok', amount: 700 } })
+    expect(second).toEqual({ ...first, replayed: true })
+    const reused = await call('POST', '/v1/charges', { key, body: { amount: 701, currency: 'EUR', token: 'tok_ok' } })
+    expect(reused.status).toBe(422)
+    expect(reused.body.error.code).toBe('idempotency_key_reused')
+  })
+
+  it('does one thing for many concurrent requests with one key', async () => {
+    const key = randomUUID()
+    const replies = await Promise.all(
+      Array.from({ length: 20 }, () => call('POST', '/v1/charges', { key, body: { amount: 900, currency: 'EUR', token: 'tok_ok' } })),
+    )
+    expect(new Set(replies.map((r) => r.body.id)).size).toBe(1)
+    expect(replies.filter((r) => !r.replayed)).toHaveLength(1)
+    const { rows } = await sql.query('SELECT count(*)::int AS n FROM operations WHERE idempotency_key = $1', [key])
+    expect(rows[0].n).toBe(1)
+  })
+
+  it('stores a decline, replays it, and answers the pull with it', async () => {
+    const key = randomUUID()
+    const body = { amount: 500, currency: 'EUR', token: 'tok_decline' }
+    const declined = await call('POST', '/v1/charges', { key, body })
+    expect(declined.status).toBe(402)
+    expect(declined.body).toMatchObject({ status: 'declined', reason: 'card_declined', charge: null })
+    expect((await call('POST', '/v1/charges', { key, body })).replayed).toBe(true)
+    expect((await call('GET', `/v1/operations/${key}`)).body).toMatchObject({ id: declined.body.id, status: 'declined' })
+  })
+
+  it('does nothing when it fails with a 500, so the retry with the same key does the work', async () => {
+    const chargeId = await authorize('tok_fail_once_capture')
+    const key = randomUUID()
+    const failed = await call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {} })
+    expect(failed.status).toBe(500)
+    expect((await call('GET', `/v1/operations/${key}`)).status).toBe(404)
+    expect((await call('GET', `/v1/charges/${chargeId}`)).body.status).toBe('authorized')
+    const retried = await call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {} })
+    expect(retried).toMatchObject({ status: 200, replayed: false, body: { status: 'succeeded' } })
+  })
+
+  it('captures and then hangs past the client timeout; the pull and the retry both see the capture', async () => {
+    const chargeId = await authorize('tok_timeout_after_capture')
+    const key = randomUUID()
+    await expect(call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {}, timeoutMs: 300 })).rejects.toThrow()
+    expect((await call('GET', `/v1/operations/${key}`)).body).toMatchObject({ status: 'succeeded', charge: { status: 'captured' } })
+    expect(await call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {} })).toMatchObject({ status: 200, replayed: true })
+  })
+
+  it('captures and then drops the connection', async () => {
+    const chargeId = await authorize('tok_drop_after_capture')
+    const key = randomUUID()
+    await expect(call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {} })).rejects.toThrow()
+    expect((await call('GET', `/v1/charges/${chargeId}`)).body.status).toBe('captured')
+  })
+
+  it('declines the capture of an expired authorization', async () => {
+    const chargeId = await authorize('tok_expire_authorization')
+    const capture = await call('POST', `/v1/charges/${chargeId}/capture`, { key: randomUUID(), body: {} })
+    expect(capture.status).toBe(402)
+    expect(capture.body).toMatchObject({ status: 'declined', reason: 'authorization_expired' })
+  })
+
+  it('cancels an authorization once, and never after a capture', async () => {
+    const open = await authorize()
+    expect((await call('POST', `/v1/charges/${open}/cancel`, { key: randomUUID() })).body).toMatchObject({ status: 'succeeded' })
+    const captured = await authorize()
+    await call('POST', `/v1/charges/${captured}/capture`, { key: randomUUID(), body: { amount: 1000 } })
+    const cancel = await call('POST', `/v1/charges/${captured}/cancel`, { key: randomUUID() })
+    expect(cancel.body).toMatchObject({ status: 'declined', reason: 'charge_already_captured', charge: { captured_amount: 1000 } })
+  })
+
+  it('sends a signed webhook for every operation and retries until it gets a 2xx', async () => {
+    let calls = 0
+    answerWith = (body) => (body.includes('merchant_7') && ++calls === 1 ? 500 : 200)
+    const key = randomUUID()
+    const reply = await call('POST', '/v1/payouts', { key, body: { amount: 2500, currency: 'EUR', destination: 'merchant_7' } })
+    const deliveries = await waitFor(async () => {
+      const mine = received.filter((r) => JSON.parse(r.body).data.object.id === reply.body.id)
+      return mine.length >= 2 ? mine : undefined
+    })
+    for (const delivery of deliveries) {
+      expect(verifySignature(SECRET, delivery.body, delivery.signature, Math.floor(Date.now() / 1000))).toBe(true)
+    }
+    expect(JSON.parse(deliveries[1]!.body)).toMatchObject({ type: 'operation.succeeded', data: { object: { kind: 'payout', destination: 'merchant_7' } } })
+    const { rows } = await sql.query('SELECT attempts, delivered_at IS NOT NULL AS delivered FROM deliveries d JOIN events e ON e.id = d.event_id WHERE e.operation_id = $1', [reply.body.id])
+    expect(rows).toEqual([{ attempts: 2, delivered: true }])
+  })
+
+  it('delivers a duplicated webhook twice with one event id and never sends a dropped one', async () => {
+    const duplicated = await authorize('tok_webhook_duplicate')
+    const dropped = await authorize('tok_webhook_drop')
+    const copies = await waitFor(
+      async () => {
+        const mine = received.filter((r) => JSON.parse(r.body).data.object.charge?.id === duplicated)
+        return mine.length >= 2 ? mine : undefined
+      },
+      15_000,
+    )
+    expect(new Set(copies.map((c) => JSON.parse(c.body).id)).size).toBe(1)
+    expect(received.some((r) => JSON.parse(r.body).data.object.charge?.id === dropped)).toBe(false)
+    const { rows } = await sql.query(
+      `SELECT d.dropped FROM deliveries d JOIN events e ON e.id = d.event_id JOIN operations o ON o.id = e.operation_id WHERE o.charge_id = $1`,
+      [dropped],
+    )
+    expect(rows).toEqual([{ dropped: true }])
+  })
+
+  it('treats a key as new once its window has passed', async () => {
+    const key = randomUUID()
+    await call('POST', '/v1/charges', { key, body: { amount: 300, currency: 'EUR', token: 'tok_ok' } })
+    await sql.query(`UPDATE idempotency_keys SET created_at = now() - interval '25 hours' WHERE key = $1`, [key])
+    const reused = await call('POST', '/v1/charges', { key, body: { amount: 301, currency: 'EUR', token: 'tok_ok' } })
+    expect(reused).toMatchObject({ status: 200, replayed: false, body: { amount: 301 } })
+    await sql.query(`UPDATE idempotency_keys SET created_at = now() - interval '25 hours' WHERE key = $1`, [key])
+    expect(await running.psp.sweepExpiredKeys()).toBeGreaterThanOrEqual(1)
+    const { rows } = await sql.query('SELECT count(*)::int AS n FROM idempotency_keys WHERE key = $1', [key])
+    expect(rows[0].n).toBe(0)
+  })
+
+  it('rejects bad requests without storing them, and checks both keys', async () => {
+    const key = randomUUID()
+    const bad = await call('POST', '/v1/charges', { key, body: { amount: 1.5, currency: 'EUR', token: 'tok_ok' } })
+    expect(bad.status).toBe(400)
+    const unknown = await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok', card: '4242' } })
+    expect(unknown.body.error.message).toBe('unknown field card')
+    expect((await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })).status).toBe(200)
+    expect((await call('POST', '/v1/charges', { body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })).status).toBe(400)
+    expect((await call('GET', '/v1/charges/ch_00000000-0000-0000-0000-000000000000')).status).toBe(404)
+    expect((await call('GET', '/admin/faults', { auth: 'wrong' })).status).toBe(401)
+    expect((await call('GET', '/admin/faults')).status).toBe(401)
+    expect((await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { decline: 2 } })).status).toBe(400)
+  })
+
+  it('follows the fault plan set through the admin endpoint', async () => {
+    const set = await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { seed: 3, decline: 1 } })
+    expect(set.body).toMatchObject({ seed: 3, decline: 1, fail: 0 })
+    const reply = await call('POST', '/v1/charges', { key: randomUUID(), body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })
+    expect(reply.body).toMatchObject({ status: 'declined', reason: 'card_declined' })
+  })
+})

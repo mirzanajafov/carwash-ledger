@@ -89,3 +89,21 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     },
   }
 }
+
+export interface ScratchDatabase {
+  readonly name: string
+  readonly url: string
+  drop(): Promise<void>
+}
+
+export async function createScratchDatabase(prefix: string): Promise<ScratchDatabase> {
+  const name = `test_${prefix}_${process.pid}_${randomBytes(4).toString('hex')}`
+  await withAdmin((admin) => admin.query(`CREATE DATABASE ${quoteIdent(name)}`))
+  return {
+    name,
+    url: databaseUrl('admin', name),
+    drop: async () => {
+      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
+    },
+  }
+}

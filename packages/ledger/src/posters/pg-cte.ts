@@ -1,7 +1,7 @@
+import { checkout } from '@carwash/pg'
 import type pg from 'pg'
 import type { AccountRegistry } from '../accounts.ts'
 import { failpoint } from '../failpoints.ts'
-import { checkout } from '../pool.ts'
 import { deltaParams, entryParams, lockParams, type JournalPlan } from '../plan.ts'
 import type { RetryOptions } from '../retry.ts'
 import { LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'

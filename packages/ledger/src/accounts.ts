@@ -1,6 +1,6 @@
+import { checkout } from '@carwash/pg'
 import type pg from 'pg'
 import { UnknownAccountError } from './errors.ts'
-import { checkout } from './pool.ts'
 import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS } from './sql.ts'
 import type { Account, AccountType, BalanceMode, Queryable } from './types.ts'
 
