@@ -81,6 +81,11 @@ SELECT id::text, code, type::text, currency, balance_mode::text, shards
 FROM accounts
 WHERE id = ANY($1::bigint[])`
 
+export const SELECT_ACCOUNTS_BY_CODE = `
+SELECT id::text, code, type::text, currency, balance_mode::text, shards
+FROM accounts
+WHERE code = ANY($1::text[])`
+
 export const INSERT_ACCOUNT = `
 INSERT INTO accounts (code, type, currency, balance_mode, shards)
 VALUES ($1, $2::account_type, $3, $4::balance_mode, $5)

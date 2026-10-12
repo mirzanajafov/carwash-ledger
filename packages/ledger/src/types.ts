@@ -37,4 +37,4 @@ export interface Poster {
   post(input: JournalInput): Promise<PostedJournal>
 }
 
-export type Queryable = pg.Pool | pg.PoolClient | pg.Client
+export type Queryable = pg.Pool | pg.ClientBase
