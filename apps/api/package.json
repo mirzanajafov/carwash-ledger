@@ -1,0 +1,37 @@
+{
+  "name": "@carwash/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "test:db": "vitest run --config vitest.db.config.ts",
+    "create-client": "node dist/cli/create-client.js"
+  },
+  "dependencies": {
+    "@carwash/ledger": "workspace:*",
+    "@carwash/pg": "workspace:*",
+    "@nestjs/common": "^12.1.2",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/platform-express": "^12.1.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@carwash/invariants": "workspace:*",
+    "@carwash/psp": "workspace:*",
+    "@carwash/testkit": "workspace:*",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "fast-check": "^4.3.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

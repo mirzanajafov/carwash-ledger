@@ -1,7 +1,7 @@
 import { checkout } from '@carwash/pg'
 import type pg from 'pg'
 import { UnknownAccountError } from './errors.ts'
-import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS } from './sql.ts'
+import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS, SELECT_ACCOUNTS_BY_CODE } from './sql.ts'
 import type { Account, AccountType, BalanceMode, Queryable } from './types.ts'
 
 export type AccountLoader = (ids: readonly bigint[]) => Promise<Account[]>
@@ -33,6 +33,11 @@ export function pgAccountLoader(db: Queryable): AccountLoader {
   }
 }
 
+export async function findAccounts(db: Queryable, codes: readonly string[]): Promise<Map<string, Account>> {
+  const result = await db.query<AccountRow>(SELECT_ACCOUNTS_BY_CODE, [codes])
+  return new Map(result.rows.map((row) => [row.code, toAccount(row)]))
+}
+
 export class AccountRegistry {
   readonly #accounts = new Map<bigint, Account>()
   readonly #load: AccountLoader
@@ -61,23 +66,22 @@ export interface NewAccount {
   shards?: number
 }
 
-export async function createAccount(pool: pg.Pool, spec: NewAccount): Promise<Account> {
+export async function insertAccount(client: pg.ClientBase, spec: NewAccount): Promise<Account> {
   const shards = spec.balanceMode === 'sharded' ? (spec.shards ?? 16) : 1
+  const inserted = await client.query<{ id: string }>(INSERT_ACCOUNT, [spec.code, spec.type, spec.currency, spec.balanceMode, shards])
+  const id = BigInt(inserted.rows[0]!.id)
+  if (spec.balanceMode !== 'derived') await client.query(INSERT_BALANCE_ROWS, [id.toString(), shards])
+  return { id, code: spec.code, type: spec.type, currency: spec.currency, balanceMode: spec.balanceMode, shards }
+}
+
+export async function createAccount(pool: pg.Pool, spec: NewAccount): Promise<Account> {
   const lease = await checkout(pool)
   const { client } = lease
   try {
     await client.query('BEGIN')
-    const inserted = await client.query<{ id: string }>(INSERT_ACCOUNT, [
-      spec.code,
-      spec.type,
-      spec.currency,
-      spec.balanceMode,
-      shards,
-    ])
-    const id = BigInt(inserted.rows[0]!.id)
-    if (spec.balanceMode !== 'derived') await client.query(INSERT_BALANCE_ROWS, [id.toString(), shards])
+    const account = await insertAccount(client, spec)
     await client.query('COMMIT')
-    return { id, code: spec.code, type: spec.type, currency: spec.currency, balanceMode: spec.balanceMode, shards }
+    return account
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined)
     throw error

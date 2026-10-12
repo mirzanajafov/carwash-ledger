@@ -38,19 +38,24 @@ model Account {
   entries     Entry[]
   balances    Balance[]
   snapshot    BalanceSnapshot?
+  merchant    Merchant?
 
   @@map("accounts")
 }
 
 model Journal {
-  id          BigInt                @id @default(autoincrement())
-  externalRef String                @unique @map("external_ref")
-  reversesId  BigInt?               @unique @map("reverses_id")
-  createdAt   DateTime              @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz(6)
-  createdXid  Unsupported("xid8")   @default(dbgenerated("pg_current_xact_id()")) @map("created_xid")
-  reverses    Journal?              @relation("Reversal", fields: [reversesId], references: [id])
-  reversedBy  Journal?              @relation("Reversal")
+  id          BigInt              @id @default(autoincrement())
+  externalRef String              @unique @map("external_ref")
+  reversesId  BigInt?             @unique @map("reverses_id")
+  createdAt   DateTime            @default(dbgenerated("clock_timestamp()")) @map("created_at") @db.Timestamptz(6)
+  createdXid  Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()")) @map("created_xid")
+  reverses    Journal?            @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy  Journal?            @relation("Reversal")
   entries     Entry[]
+  capture     Payment?            @relation("CaptureJournal")
+  refund      Refund?             @relation("RefundJournal")
+  payout      Payout?             @relation("PayoutJournal")
+  payoutUndo  Payout?             @relation("PayoutReversalJournal")
 
   @@map("journals")
 }
@@ -88,4 +93,220 @@ model BalanceSnapshot {
   account   Account             @relation(fields: [accountId], references: [id])
 
   @@map("balance_snapshots")
+}
+
+enum ClientScope {
+  client
+  admin
+
+  @@map("client_scope")
+}
+
+enum CaptureMode {
+  auto
+  manual
+
+  @@map("capture_mode")
+}
+
+enum PaymentStatus {
+  created
+  authorized
+  captured
+  refunded
+  canceled
+  failed
+
+  @@map("payment_status")
+}
+
+enum AttemptKind {
+  authorize
+  capture
+  cancel
+  refund
+  payout
+
+  @@map("attempt_kind")
+}
+
+enum AttemptStatus {
+  pending
+  succeeded
+  declined
+
+  @@map("attempt_status")
+}
+
+enum RefundStatus {
+  pending
+  succeeded
+  failed
+
+  @@map("refund_status")
+}
+
+enum PayoutStatus {
+  pending
+  succeeded
+  failed
+
+  @@map("payout_status")
+}
+
+enum IdempotencyState {
+  started
+  finished
+
+  @@map("idempotency_state")
+}
+
+model ApiClient {
+  id        BigInt           @id @default(autoincrement())
+  name      String
+  keyHash   Bytes            @unique @map("key_hash")
+  scope     ClientScope
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt DateTime?        @map("revoked_at") @db.Timestamptz(6)
+  payments  Payment[]
+  keys      IdempotencyKey[]
+
+  @@map("api_clients")
+}
+
+model Merchant {
+  id        BigInt    @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  currency  String    @db.Char(3)
+  accountId BigInt    @unique @map("account_id")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  account   Account   @relation(fields: [accountId], references: [id])
+  payments  Payment[]
+  payouts   Payout[]
+
+  @@map("merchants")
+}
+
+model Payment {
+  id               String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  clientId         BigInt        @map("client_id")
+  merchantId       BigInt        @map("merchant_id")
+  amount           BigInt
+  currency         String        @db.Char(3)
+  captureMode      CaptureMode   @map("capture_mode")
+  status           PaymentStatus @default(created)
+  token            String
+  pspChargeId      String?       @unique @map("psp_charge_id")
+  capturedAmount   BigInt        @default(0) @map("captured_amount")
+  refundedAmount   BigInt        @default(0) @map("refunded_amount")
+  fee              BigInt        @default(0)
+  failureReason    String?       @map("failure_reason")
+  captureJournalId BigInt?       @unique @map("capture_journal_id")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  client           ApiClient     @relation(fields: [clientId], references: [id])
+  merchant         Merchant      @relation(fields: [merchantId], references: [id])
+  captureJournal   Journal?      @relation("CaptureJournal", fields: [captureJournalId], references: [id])
+  attempts         Attempt[]
+  refunds          Refund[]
+
+  @@index([merchantId, createdAt])
+  @@map("payments")
+}
+
+model Refund {
+  id            String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  paymentId     String       @map("payment_id") @db.Uuid
+  amount        BigInt
+  status        RefundStatus @default(pending)
+  feeRefund     BigInt       @default(0) @map("fee_refund")
+  failureReason String?      @map("failure_reason")
+  journalId     BigInt?      @unique @map("journal_id")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt    DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  payment       Payment      @relation(fields: [paymentId], references: [id])
+  journal       Journal?     @relation("RefundJournal", fields: [journalId], references: [id])
+  attempts      Attempt[]
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+model Payout {
+  id                String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  merchantId        BigInt       @map("merchant_id")
+  amount            BigInt
+  currency          String       @db.Char(3)
+  status            PayoutStatus @default(pending)
+  failureReason     String?      @map("failure_reason")
+  journalId         BigInt?      @unique @map("journal_id")
+  reversalJournalId BigInt?      @unique @map("reversal_journal_id")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt        DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  merchant          Merchant     @relation(fields: [merchantId], references: [id])
+  journal           Journal?     @relation("PayoutJournal", fields: [journalId], references: [id])
+  reversalJournal   Journal?     @relation("PayoutReversalJournal", fields: [reversalJournalId], references: [id])
+  attempts          Attempt[]
+
+  @@index([merchantId, createdAt])
+  @@map("payouts")
+}
+
+model Attempt {
+  id             String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  kind           AttemptKind
+  status         AttemptStatus @default(pending)
+  paymentId      String?       @map("payment_id") @db.Uuid
+  refundId       String?       @map("refund_id") @db.Uuid
+  payoutId       String?       @map("payout_id") @db.Uuid
+  amount         BigInt
+  currency       String        @db.Char(3)
+  pspOperationId String?       @unique @map("psp_operation_id")
+  declineReason  String?       @map("decline_reason")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt     DateTime?     @map("resolved_at") @db.Timestamptz(6)
+  payment        Payment?      @relation(fields: [paymentId], references: [id])
+  refund         Refund?       @relation(fields: [refundId], references: [id])
+  payout         Payout?       @relation(fields: [payoutId], references: [id])
+  anomalies      Anomaly[]
+
+  @@index([paymentId])
+  @@index([refundId])
+  @@index([payoutId])
+  @@map("attempts")
+}
+
+model IdempotencyKey {
+  clientId       BigInt           @map("client_id")
+  key            String
+  method         String
+  path           String
+  requestHash    Bytes            @map("request_hash")
+  state          IdempotencyState @default(started)
+  recoveryPoint  String           @default("started") @map("recovery_point")
+  paymentId      String?          @map("payment_id") @db.Uuid
+  refundId       String?          @map("refund_id") @db.Uuid
+  payoutId       String?          @map("payout_id") @db.Uuid
+  lockedUntil    DateTime?        @map("locked_until") @db.Timestamptz(6)
+  responseStatus Int?             @map("response_status")
+  responseBody   Json?            @map("response_body")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  client         ApiClient        @relation(fields: [clientId], references: [id])
+
+  @@id([clientId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
+model Anomaly {
+  id        BigInt   @id @default(autoincrement())
+  attemptId String?  @map("attempt_id") @db.Uuid
+  kind      String
+  details   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  attempt   Attempt? @relation(fields: [attemptId], references: [id])
+
+  @@unique([attemptId, kind])
+  @@map("anomalies")
 }
