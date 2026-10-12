@@ -1,0 +1,104 @@
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common'
+import { takeSnapshots } from '@carwash/ledger'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { Database } from '../db/database.ts'
+import { ApiError } from '../http/api-error.ts'
+import { IdempotencyService } from '../idempotency/idempotency.service.ts'
+import { AttemptsService } from '../payments/attempts.service.ts'
+import { ATTEMPT_COLUMNS, type AttemptRecord } from '../payments/records.ts'
+import { PspClient } from '../psp/psp.client.ts'
+import { WebhooksService } from '../webhooks/webhooks.service.ts'
+
+export type RecoveryOutcome = 'applied' | 'already' | 'anomaly' | 'unknown' | 'error'
+
+@Injectable()
+export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
+  readonly #db: Database
+  readonly #attempts: AttemptsService
+  readonly #psp: PspClient
+  readonly #webhooks: WebhooksService
+  readonly #idempotency: IdempotencyService
+  readonly #config: ApiConfig
+  readonly #logger = new Logger('recovery')
+  readonly #stop = new AbortController()
+  readonly #loops: Promise<void>[] = []
+
+  constructor(
+    db: Database,
+    attempts: AttemptsService,
+    psp: PspClient,
+    webhooks: WebhooksService,
+    idempotency: IdempotencyService,
+    @Inject(API_CONFIG) config: ApiConfig,
+  ) {
+    this.#db = db
+    this.#attempts = attempts
+    this.#psp = psp
+    this.#webhooks = webhooks
+    this.#idempotency = idempotency
+    this.#config = config
+  }
+
+  onApplicationBootstrap(): void {
+    if (this.#config.recoveryEveryMs === 0) return
+    this.#every('pending attempts', this.#config.recoveryEveryMs, () => this.recoverPending())
+    this.#every('unmatched webhooks', 30_000, () => this.#webhooks.recheckUnmatched())
+    this.#every('sweepers', 60_000, async () => {
+      await this.#idempotency.sweep()
+      await this.#webhooks.prune()
+    })
+    if (this.#config.hotAccountMode === 'derived') this.#every('snapshots', 1000, () => takeSnapshots(this.#db.pool))
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    this.#stop.abort()
+    await Promise.all(this.#loops)
+  }
+
+  async recoverPending(olderThanSeconds = this.#config.recoveryAfterSeconds, batch = 50): Promise<Map<RecoveryOutcome, number>> {
+    const { rows } = await this.#db.pool.query<AttemptRecord>(
+      `SELECT ${ATTEMPT_COLUMNS} FROM attempts
+       WHERE status = 'pending' AND created_at <= now() - make_interval(secs => $1)
+       ORDER BY created_at LIMIT $2`,
+      [olderThanSeconds, batch],
+    )
+    const counts = new Map<RecoveryOutcome, number>()
+    for (const attempt of rows) {
+      const outcome = await this.recover(attempt)
+      counts.set(outcome, (counts.get(outcome) ?? 0) + 1)
+    }
+    if (rows.length > 0) this.#logger.log(`checked ${rows.length} pending attempts: ${JSON.stringify(Object.fromEntries(counts))}`)
+    return counts
+  }
+
+  async recover(attempt: AttemptRecord): Promise<RecoveryOutcome> {
+    try {
+      const reply = await this.#psp.pull(attempt.id)
+      if (reply.kind === 'unknown') return 'unknown'
+      if (reply.kind === 'none') return await this.#attempts.settle(attempt)
+      return await this.#attempts.receive(await this.#attempts.callFor(attempt), reply.body)
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'psp_unavailable') return 'unknown'
+      if (error instanceof ApiError && error.code === 'psp_answer_rejected') return 'anomaly'
+      this.#logger.error(`attempt ${attempt.id}: ${(error as Error).stack ?? String(error)}`)
+      return 'error'
+    }
+  }
+
+  #every(name: string, intervalMs: number, task: () => Promise<unknown>): void {
+    const signal = this.#stop.signal
+    this.#loops.push(
+      (async () => {
+        while (!signal.aborted) {
+          try {
+            await task()
+          } catch (error) {
+            this.#logger.error(`${name}: ${(error as Error).message}`)
+          }
+          await sleep(intervalMs, undefined, { signal }).catch(() => undefined)
+        }
+      })(),
+    )
+  }
+}

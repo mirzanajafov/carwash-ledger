@@ -13,6 +13,8 @@ import { PaymentsService } from './payments/payments.service.ts'
 import { AccountsController, MerchantsController, PayoutsController } from './payouts/payouts.controller.ts'
 import { PayoutsService } from './payouts/payouts.service.ts'
 import { PspClient } from './psp/psp.client.ts'
+import { WebhooksController } from './webhooks/webhooks.controller.ts'
+import { WebhooksService } from './webhooks/webhooks.service.ts'
 
 @Public()
 @Controller('health')
@@ -35,7 +37,7 @@ export class AppModule {
   static register(config: ApiConfig): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, PaymentsController, MerchantsController, PayoutsController, AccountsController],
+      controllers: [HealthController, PaymentsController, MerchantsController, PayoutsController, AccountsController, WebhooksController],
       providers: [
         { provide: API_CONFIG, useValue: config },
         Database,
@@ -45,6 +47,7 @@ export class AppModule {
         AttemptsService,
         PaymentsService,
         PayoutsService,
+        WebhooksService,
         { provide: APP_GUARD, useClass: AccessGuard },
         { provide: APP_FILTER, useClass: ErrorFilter },
       ],

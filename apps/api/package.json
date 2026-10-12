@@ -9,7 +9,8 @@
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:db": "vitest run --config vitest.db.config.ts",
-    "create-client": "node dist/cli/create-client.js"
+    "create-client": "node dist/cli/create-client.js",
+    "worker": "node dist/worker.js"
   },
   "dependencies": {
     "@carwash/ledger": "workspace:*",

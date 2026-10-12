@@ -310,3 +310,17 @@ model Anomaly {
   @@unique([attemptId, kind])
   @@map("anomalies")
 }
+
+model WebhookEvent {
+  id         String   @id
+  type       String
+  attemptId  String?  @map("attempt_id") @db.Uuid
+  outcome    String
+  payload    Json
+  checks     Int      @default(1)
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  checkedAt  DateTime @default(now()) @map("checked_at") @db.Timestamptz(6)
+
+  @@index([outcome, receivedAt])
+  @@map("webhook_events")
+}

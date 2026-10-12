@@ -18,7 +18,7 @@ export function pspUnavailable(reason: string): ApiError {
   })
 }
 
-export async function recordAnomaly(db: pg.ClientBase | pg.Pool, attemptId: string, kind: string, details: unknown): Promise<void> {
+export async function recordAnomaly(db: pg.ClientBase | pg.Pool, attemptId: string | null, kind: string, details: unknown): Promise<void> {
   await db.query('INSERT INTO anomalies (attempt_id, kind, details) VALUES ($1, $2, $3) ON CONFLICT (attempt_id, kind) DO NOTHING', [
     attemptId,
     kind,
@@ -43,7 +43,7 @@ export class AttemptsService {
   }
 
   async settle(attempt: AttemptRecord): Promise<Applied> {
-    const call = await this.#callFor(attempt)
+    const call = await this.callFor(attempt)
     const reply = await this.#psp.send(call)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
     return this.receive(call, reply.body)
@@ -196,7 +196,7 @@ export class AttemptsService {
     return 'applied'
   }
 
-  async #callFor(attempt: AttemptRecord): Promise<PspCall> {
+  async callFor(attempt: AttemptRecord): Promise<PspCall> {
     const base = { attemptId: attempt.id, kind: attempt.kind, amount: BigInt(attempt.amount), currency: attempt.currency }
     if (attempt.kind === 'payout') {
       const payout = (await loadPayout(this.#db.pool, attempt.payout_id!))!

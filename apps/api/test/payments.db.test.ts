@@ -1,90 +1,17 @@
-import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { checkLedger, violations } from '@carwash/invariants'
-import { NO_FAULTS, startPsp, type RunningPsp } from '@carwash/psp'
-import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
-import { NestFactory } from '@nestjs/core'
-import type { NestExpressApplication } from '@nestjs/platform-express'
-import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { AppModule, configureApp } from '../src/app.module.ts'
-import { hashApiKey } from '../src/auth/api-keys.ts'
-import type { ApiConfig } from '../src/config.ts'
 import { Database } from '../src/db/database.ts'
 import { requestHash } from '../src/idempotency/request-hash.ts'
+import { apiConfig, count, startApi, startStack, type CallOptions, type Stack } from './support.ts'
 
-const KEYS = { alice: 'cw_live_alice', bob: 'cw_live_bob', admin: 'cw_admin_ops' }
+let stack: Stack
 
-interface Reply {
-  status: number
-  body: any
-  replayed: boolean
-  retryAfter: string | null
-}
-
-let ledgerDb: TestDatabase
-let pspDb: ScratchDatabase
-let psp: RunningPsp
-let app: NestExpressApplication
-let url: string
-let owner: pg.Pool
-let admin: pg.Pool
-let pspSql: pg.Pool
-let clientIds: Record<keyof typeof KEYS, string>
-
-function config(pspUrl: string): ApiConfig {
-  return {
-    port: 0,
-    databaseUrl: ledgerDb.url('ledger_app'),
-    poolSize: 10,
-    transactionTimeoutMs: 10_000,
-    pspUrl,
-    pspApiKey: 'sk_test_api',
-    pspTimeoutMs: 500,
-    currencies: ['EUR'],
-    hotAccountMode: 'sharded',
-    hotAccountShards: 4,
-    feeBps: 200,
-    feeFixed: 10n,
-    leaseSeconds: 30,
-    idempotencyWindowSeconds: 24 * 3600,
-    rateLimitPerKey: 10_000,
-    rateLimitPerIp: 10_000,
-    trustProxy: 'loopback',
-  }
-}
-
-async function startApi(apiConfig: ApiConfig): Promise<{ app: NestExpressApplication; url: string }> {
-  const instance = await NestFactory.create<NestExpressApplication>(AppModule.register(apiConfig), { bodyParser: false, logger: false })
-  configureApp(instance, apiConfig)
-  await instance.listen(0, '127.0.0.1')
-  return { app: instance, url: `http://127.0.0.1:${(instance.getHttpServer().address() as AddressInfo).port}` }
-}
-
-async function call(
-  method: string,
-  path: string,
-  options: { key?: string | null; body?: unknown; as?: keyof typeof KEYS | 'nobody'; base?: string } = {},
-): Promise<Reply> {
-  const as = options.as ?? 'alice'
-  const response = await fetch(`${options.base ?? url}${path}`, {
-    method,
-    headers: {
-      ...(as === 'nobody' ? {} : { authorization: `Bearer ${KEYS[as]}` }),
-      ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(method === 'POST' && options.key !== null ? { 'idempotency-key': options.key ?? randomUUID() } : {}),
-    },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  })
-  return {
-    status: response.status,
-    body: await response.json(),
-    replayed: response.headers.get('idempotent-replayed') === 'true',
-    retryAfter: response.headers.get('retry-after'),
-  }
+function call(method: string, path: string, options?: CallOptions) {
+  return stack.call(method, path, options)
 }
 
 function pay(token: string, extra: Record<string, unknown> = {}) {
@@ -96,55 +23,12 @@ async function balance(code: string): Promise<number> {
   return reply.body.balance
 }
 
-async function count(pool: pg.Pool, sql: string, params: unknown[] = []): Promise<number> {
-  const { rows } = await pool.query<{ n: number }>(sql, params)
-  return rows[0]!.n
-}
-
 beforeAll(async () => {
-  ledgerDb = await createTestDatabase()
-  pspDb = await createScratchDatabase('psp')
-  owner = ledgerDb.pool('ledger_owner', 2)
-  admin = ledgerDb.pool('admin', 2)
-  pspSql = new pg.Pool({ connectionString: pspDb.url, max: 2 })
-  clientIds = {} as typeof clientIds
-  for (const [name, key] of Object.entries(KEYS) as [keyof typeof KEYS, string][]) {
-    const { rows } = await owner.query<{ id: string }>(
-      'INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text',
-      [name, hashApiKey(key), name === 'admin' ? 'admin' : 'client'],
-    )
-    clientIds[name] = rows[0]!.id
-  }
-  psp = await startPsp(
-    {
-      port: 0,
-      databaseUrl: pspDb.url,
-      apiKey: 'sk_test_api',
-      adminKey: 'sk_test_admin',
-      webhookUrl: undefined,
-      webhookSecret: undefined,
-      authorizationTtlSeconds: 3600,
-      idempotencyWindowSeconds: 24 * 3600,
-      hangMs: 1500,
-      faultPlan: NO_FAULTS,
-    },
-    () => undefined,
-  )
-  const started = await startApi(config(psp.url))
-  app = started.app
-  url = started.url
-  for (const code of ['wash_1', 'wash_2']) {
-    const created = await call('POST', '/v1/merchants', { as: 'admin', body: { code, name: `Wash ${code}`, currency: 'EUR' } })
-    expect(created.status).toBe(200)
-  }
+  stack = await startStack()
 })
 
 afterAll(async () => {
-  await app?.close()
-  await psp?.close()
-  await pspSql?.end()
-  await pspDb?.drop()
-  await ledgerDb?.drop()
+  await stack?.close()
 })
 
 describe('payments API', () => {
@@ -152,7 +36,7 @@ describe('payments API', () => {
     const reply = await call('POST', '/v1/payments', { body: pay('tok_ok') })
     expect(reply.status).toBe(200)
     expect(reply.body).toMatchObject({ object: 'payment', status: 'captured', amount: 1500, captured_amount: 1500, fee: 40 })
-    const { rows } = await admin.query<{ account: string; amount: string }>(
+    const { rows } = await stack.admin.query<{ account: string; amount: string }>(
       `SELECT a.code AS account, e.amount::text FROM journals j JOIN entries e ON e.journal_id = j.id JOIN accounts a ON a.id = e.account_id
        WHERE j.external_ref = $1 ORDER BY a.code`,
       [`capture:${reply.body.id}`],
@@ -185,8 +69,8 @@ describe('payments API', () => {
     expect(new Set(done.map((r) => r.body.id)).size).toBe(1)
     const settled = await call('POST', '/v1/payments', { key, body })
     expect(settled).toMatchObject({ status: 200, replayed: true, body: { id: done[0]!.body.id } })
-    expect(await count(admin, `SELECT count(*)::int AS n FROM idempotency_keys WHERE key = $1`, [key])).toBe(1)
-    expect(await count(admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref = $1`, [`capture:${done[0]!.body.id}`])).toBe(1)
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM idempotency_keys WHERE key = $1`, [key])).toBe(1)
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref = $1`, [`capture:${done[0]!.body.id}`])).toBe(1)
   })
 
   it('stores a decline as a 402 and replays it', async () => {
@@ -195,7 +79,7 @@ describe('payments API', () => {
     expect(declined.status).toBe(402)
     expect(declined.body).toMatchObject({ error: { code: 'card_declined' }, payment: { status: 'failed', failure_reason: 'card_declined' } })
     expect(await call('POST', '/v1/payments', { key, body: pay('tok_decline') })).toMatchObject({ status: 402, replayed: true })
-    expect(await count(admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${declined.body.payment.id}`])).toBe(0)
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${declined.body.payment.id}`])).toBe(0)
   })
 
   it('answers 503 when the PSP captures and then hangs, and the retry finishes the same capture once', async () => {
@@ -206,10 +90,10 @@ describe('payments API', () => {
     const second = await call('POST', '/v1/payments', { key, body })
     expect(second).toMatchObject({ status: 200, replayed: false, body: { status: 'captured' } })
     expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, replayed: true })
-    const { rows } = await admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [second.body.id])
+    const { rows } = await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [second.body.id])
     const chargeId = rows[0]!.psp_charge_id
-    expect(await count(pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND charge_id = $1`, [chargeId])).toBe(1)
-    expect(await count(admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${second.body.id}`])).toBe(1)
+    expect(await count(stack.pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND charge_id = $1`, [chargeId])).toBe(1)
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${second.body.id}`])).toBe(1)
   })
 
   it('recovers from a PSP that failed before doing anything, and from one that dropped the connection', async () => {
@@ -223,17 +107,17 @@ describe('payments API', () => {
   it('refuses a key whose lease is alive and takes over one whose owner went away', async () => {
     const key = randomUUID()
     const body = pay('tok_ok', { amount: 700 })
-    await owner.query(
+    await stack.owner.query(
       `INSERT INTO idempotency_keys (client_id, key, method, path, request_hash, locked_until)
        VALUES ($1, $2, 'POST', '/v1/payments', $3, now() + interval '30 seconds')`,
-      [clientIds.alice, key, requestHash('POST', '/v1/payments', body)],
+      [stack.clientIds.alice, key, requestHash('POST', '/v1/payments', body)],
     )
     expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({
       status: 409,
       retryAfter: '1',
       body: { error: { code: 'request_in_progress' } },
     })
-    await owner.query(`UPDATE idempotency_keys SET locked_until = now() - interval '1 second' WHERE key = $1`, [key])
+    await stack.owner.query(`UPDATE idempotency_keys SET locked_until = now() - interval '1 second' WHERE key = $1`, [key])
     expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, body: { amount: 700, status: 'captured' } })
   })
 
@@ -252,7 +136,7 @@ describe('payments API', () => {
   it('cancels an authorization without touching the ledger', async () => {
     const created = await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })
     expect((await call('POST', `/v1/payments/${created.body.id}/cancel`)).body).toMatchObject({ status: 'canceled' })
-    expect(await count(admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.body.id}`])).toBe(0)
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.body.id}`])).toBe(0)
   })
 
   it('refunds in parts, gives back the fee in proportion, and stops at the captured amount', async () => {
@@ -321,11 +205,11 @@ describe('payments API', () => {
     })
     liar.listen(0, '127.0.0.1')
     await once(liar, 'listening')
-    const lied = await startApi(config(`http://127.0.0.1:${(liar.address() as AddressInfo).port}`))
+    const lied = await startApi(apiConfig(stack.ledgerDb.url('ledger_app'), `http://127.0.0.1:${(liar.address() as AddressInfo).port}`))
     try {
       const reply = await call('POST', '/v1/payments', { base: lied.url, body: pay('tok_ok', { amount: 900 }) })
       expect(reply).toMatchObject({ status: 502, body: { error: { code: 'psp_answer_rejected' } } })
-      const { rows } = await admin.query<{ kind: string; problems: string[]; status: string }>(
+      const { rows } = await stack.admin.query<{ kind: string; problems: string[]; status: string }>(
         `SELECT an.kind, an.details->'problems' AS problems, a.status::text FROM anomalies an JOIN attempts a ON a.id = an.attempt_id
          JOIN payments p ON p.id = a.payment_id WHERE p.amount = 900 AND p.token = 'tok_ok'`,
       )
@@ -343,7 +227,7 @@ describe('payments API', () => {
   })
 
   it('caps how long any of its transactions may stay open', async () => {
-    const { rows } = await app.get(Database).pool.query<{ transaction_timeout: string; idle_in_transaction_session_timeout: string }>(
+    const { rows } = await stack.app.get(Database).pool.query<{ transaction_timeout: string; idle_in_transaction_session_timeout: string }>(
       `SELECT current_setting('transaction_timeout') AS transaction_timeout,
               current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout`,
     )
@@ -351,9 +235,9 @@ describe('payments API', () => {
   })
 
   it('leaves the books balanced and agreeing with the PSP', async () => {
-    expect(violations(await checkLedger(admin))).toEqual([])
-    const pspCaptures = await count(pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND status = 'succeeded'`)
-    const journals = await count(admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref LIKE 'capture:%'`)
+    expect(violations(await checkLedger(stack.admin))).toEqual([])
+    const pspCaptures = await count(stack.pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND status = 'succeeded'`)
+    const journals = await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref LIKE 'capture:%'`)
     expect(journals).toBe(pspCaptures)
   })
 })

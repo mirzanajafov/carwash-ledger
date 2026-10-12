@@ -14,6 +14,10 @@ export interface PspCall {
 
 export type PspReply = { kind: 'answer'; httpStatus: number; body: unknown } | { kind: 'unknown'; reason: string }
 
+export type PullReply = { kind: 'answer'; body: unknown } | { kind: 'none' } | { kind: 'unknown'; reason: string }
+
+type Raw = { kind: 'http'; status: number; body: unknown } | { kind: 'unknown'; reason: string }
+
 const ANSWERED = new Set([200, 402, 409])
 
 function route(call: PspCall): { path: string; body: Record<string, unknown> } {
@@ -43,14 +47,22 @@ export class PspClient {
 
   async send(call: PspCall): Promise<PspReply> {
     const { path, body } = route(call)
-    return this.#request('POST', path, call.attemptId, body)
+    const raw = await this.#request('POST', path, call.attemptId, body)
+    if (raw.kind === 'unknown') return raw
+    if (ANSWERED.has(raw.status)) return { kind: 'answer', httpStatus: raw.status, body: raw.body }
+    if (raw.status < 500 && raw.status !== 404) this.#logger.error(`POST ${path} was refused with ${raw.status}: ${JSON.stringify(raw.body)}`)
+    return { kind: 'unknown', reason: `HTTP ${raw.status}` }
   }
 
-  async pull(attemptId: string): Promise<PspReply> {
-    return this.#request('GET', `/v1/operations/${encodeURIComponent(attemptId)}`, undefined, undefined)
+  async pull(attemptId: string): Promise<PullReply> {
+    const raw = await this.#request('GET', `/v1/operations/${encodeURIComponent(attemptId)}`, undefined, undefined)
+    if (raw.kind === 'unknown') return raw
+    if (raw.status === 200) return { kind: 'answer', body: raw.body }
+    if (raw.status === 404) return { kind: 'none' }
+    return { kind: 'unknown', reason: `HTTP ${raw.status}` }
   }
 
-  async #request(method: string, path: string, key: string | undefined, body: unknown): Promise<PspReply> {
+  async #request(method: string, path: string, key: string | undefined, body: unknown): Promise<Raw> {
     let response: Response
     try {
       response = await fetch(`${this.#config.pspUrl}${path}`, {
@@ -66,15 +78,10 @@ export class PspClient {
     } catch (error) {
       return { kind: 'unknown', reason: (error as Error).name === 'TimeoutError' ? 'timeout' : (error as Error).message }
     }
-    let parsed: unknown
     try {
-      parsed = await response.json()
+      return { kind: 'http', status: response.status, body: await response.json() }
     } catch {
       return { kind: 'unknown', reason: `HTTP ${response.status} with a body that is not JSON` }
     }
-    if (ANSWERED.has(response.status)) return { kind: 'answer', httpStatus: response.status, body: parsed }
-    if (response.status >= 500 || response.status === 404) return { kind: 'unknown', reason: `HTTP ${response.status}` }
-    this.#logger.error(`${method} ${path} was refused with ${response.status}: ${JSON.stringify(parsed)}`)
-    return { kind: 'unknown', reason: `HTTP ${response.status}` }
   }
 }

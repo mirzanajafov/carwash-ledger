@@ -20,6 +20,11 @@ export interface ApiConfig {
   rateLimitPerKey: number
   rateLimitPerIp: number
   trustProxy: string
+  webhookSecret: string | undefined
+  workerPort: number
+  recoveryAfterSeconds: number
+  recoveryEveryMs: number
+  webhookRetentionDays: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -61,5 +66,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     rateLimitPerKey: integer(env, 'RATE_LIMIT_PER_KEY', 100),
     rateLimitPerIp: integer(env, 'RATE_LIMIT_PER_IP', 200),
     trustProxy: env.TRUST_PROXY ?? 'loopback',
+    webhookSecret: env.PSP_WEBHOOK_SECRET || undefined,
+    workerPort: integer(env, 'WORKER_PORT', 3144),
+    recoveryAfterSeconds: integer(env, 'RECOVERY_AFTER_SECONDS', 30),
+    recoveryEveryMs: integer(env, 'RECOVERY_EVERY_MS', 5000),
+    webhookRetentionDays: integer(env, 'WEBHOOK_RETENTION_DAYS', 7),
   }
 }

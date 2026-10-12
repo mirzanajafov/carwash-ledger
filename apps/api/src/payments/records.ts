@@ -90,6 +90,11 @@ export async function loadRefund(db: pg.ClientBase | pg.Pool, id: string): Promi
   return rows[0]
 }
 
+export async function loadAttempt(db: pg.ClientBase | pg.Pool, id: string): Promise<AttemptRecord | undefined> {
+  const { rows } = await db.query<AttemptRecord>(`SELECT ${ATTEMPT_COLUMNS} FROM attempts WHERE id = $1`, [id])
+  return rows[0]
+}
+
 export async function pendingAttempt(db: pg.ClientBase | pg.Pool, column: 'payment_id' | 'refund_id' | 'payout_id', id: string, kinds: readonly AttemptKind[]) {
   const { rows } = await db.query<AttemptRecord>(
     `SELECT ${ATTEMPT_COLUMNS} FROM attempts WHERE ${column} = $1 AND kind = ANY($2::attempt_kind[]) AND status = 'pending' ORDER BY created_at LIMIT 1`,
