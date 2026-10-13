@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import {
   checkAgainstPsp,
+  checkEvents,
+  checkEventsIn,
   checkLedger,
   checkPayments,
   checkPaymentsIn,
@@ -13,7 +15,8 @@ import {
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { startStack, type Stack } from './support.ts'
+import { Database } from '../src/db/database.ts'
+import { deliver, outboxEvents, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 const payments: Record<'auto' | 'manual' | 'authorized' | 'declined', string> = {} as never
@@ -60,6 +63,10 @@ function inLedger(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
   return corrupted(stack.admin, corrupt, async (client) => [...(await checkPaymentsIn(client)), await checkSettledIn(client)])
 }
 
+function inEvents(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
+  return corrupted(stack.admin, corrupt, checkEventsIn)
+}
+
 function atPsp(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
   return corrupted(stack.pspSql, corrupt, async (client) => [await checkAgainstPsp(stack.admin, client)])
 }
@@ -90,6 +97,8 @@ beforeAll(async () => {
   stack.psp.faults.plan = { ...NO_FAULTS, decline: 1 }
   expect((await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })).body.status).toBe('failed')
   stack.psp.faults.plan = NO_FAULTS
+  const app = stack.app.get(Database).pool
+  await deliver(app, [await outboxEvents(app)])
 })
 
 afterAll(async () => {
@@ -192,5 +201,49 @@ describe('the payment invariants', () => {
       await atPsp((psp) => psp.query(`UPDATE operations SET status = 'declined' WHERE idempotency_key = $1`, [payouts[0]!.id])),
     ).toEqual({ S4: 2 })
     expect(await atPsp(async () => undefined)).toEqual({ S4: 0 })
+  })
+})
+
+describe('the event invariants', () => {
+  it('find nothing wrong once every event reached its consumers', async () => {
+    expect(violations(await checkEvents(stack.admin))).toEqual([])
+    expect(await inEvents(async () => undefined)).toEqual({ L2: 0, L3: 0 })
+  })
+
+  it('catch an event left in the outbox and one a consumer never got (L2)', async () => {
+    expect(await inEvents((client) => client.query('UPDATE outbox SET published_at = NULL WHERE id = (SELECT max(id) FROM outbox)'))).toEqual({
+      L2: 1,
+      L3: 0,
+    })
+    expect(
+      await inEvents((client) =>
+        client.query(`DELETE FROM inbox WHERE consumer = 'statements' AND event_id = (SELECT event_id FROM outbox WHERE topic = 'ledger' LIMIT 1)`),
+      ),
+    ).toEqual({ L2: 1, L3: 0 })
+  })
+
+  it('catch a second receipt, a missing one, a gap in the numbers, a receipt for nothing, and a statement off by a cent (L3)', async () => {
+    const issue = (paymentId: string) => (client: pg.PoolClient) =>
+      client.query(
+        `WITH counter AS (UPDATE receipt_counters SET last_number = last_number + 1 WHERE merchant = 'wash_1' RETURNING last_number)
+         INSERT INTO receipts (merchant, number, payment_id, amount, fee, currency, captured_at, event_id)
+         SELECT 'wash_1', last_number, $1, 1500, 40, 'EUR', now(), gen_random_uuid() FROM counter`,
+        [paymentId],
+      )
+    expect(await inEvents(issue(payments.auto))).toEqual({ L2: 0, L3: 1 })
+    expect(await inEvents(issue(payments.authorized))).toEqual({ L2: 0, L3: 1 })
+    expect(
+      await inEvents(async (client) => {
+        await client.query(`DELETE FROM receipts WHERE payment_id = $1`, [payments.manual])
+        await client.query(`UPDATE receipt_counters SET last_number = last_number - 1 WHERE merchant = 'wash_1'`)
+      }),
+    ).toEqual({ L2: 0, L3: 1 })
+    expect(
+      await inEvents((client) => client.query(`UPDATE receipts SET number = number + 10 WHERE payment_id = $1`, [payments.manual])),
+    ).toEqual({ L2: 0, L3: 1 })
+    expect(
+      await inEvents((client) => client.query('UPDATE statements SET credits = credits + 1 WHERE ctid = (SELECT ctid FROM statements LIMIT 1)')),
+    ).toEqual({ L2: 0, L3: 1 })
+    expect(await inEvents(async () => undefined)).toEqual({ L2: 0, L3: 0 })
   })
 })

@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises'
 import { KafkaJS } from '@confluentinc/kafka-javascript'
 import type { Envelope } from './events.ts'
 import type { OutboxRow, Publisher } from './relay.ts'
@@ -8,22 +9,25 @@ export interface TopicSpec {
   retentionHours: number
 }
 
-export const TOPIC_SPECS: readonly TopicSpec[] = [
-  { topic: 'payments', partitions: 8, retentionHours: 72 },
-  { topic: 'ledger', partitions: 8, retentionHours: 72 },
-]
+export function topicSpecs(prefix = ''): TopicSpec[] {
+  return [
+    { topic: `${prefix}payments`, partitions: 8, retentionHours: 72 },
+    { topic: `${prefix}ledger`, partitions: 8, retentionHours: 72 },
+  ]
+}
 
 export interface KafkaSettings {
   brokers: string[]
   clientId: string
   deliveryTimeoutMs: number
+  topicPrefix?: string
 }
 
 export function kafkaClient(settings: Pick<KafkaSettings, 'brokers' | 'clientId'>): KafkaJS.Kafka {
   return new KafkaJS.Kafka({ kafkaJS: { brokers: settings.brokers, clientId: settings.clientId, logLevel: KafkaJS.logLevel.ERROR } })
 }
 
-export async function ensureTopics(kafka: KafkaJS.Kafka, specs: readonly TopicSpec[] = TOPIC_SPECS): Promise<string[]> {
+export async function ensureTopics(kafka: KafkaJS.Kafka, specs: readonly TopicSpec[] = topicSpecs()): Promise<string[]> {
   const admin = kafka.admin()
   await admin.connect()
   try {
@@ -39,9 +43,24 @@ export async function ensureTopics(kafka: KafkaJS.Kafka, specs: readonly TopicSp
         })),
       })
     }
+    await untilLed(admin, specs)
     return missing.map((spec) => spec.topic)
   } finally {
     await admin.disconnect()
+  }
+}
+
+async function untilLed(admin: KafkaJS.Admin, specs: readonly TopicSpec[], timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const metadata = await admin.fetchTopicMetadata({ topics: specs.map((spec) => spec.topic) }).catch(() => [])
+    const led = specs.every((spec) => {
+      const topic = metadata.find((m) => m.name === spec.topic)
+      return topic !== undefined && topic.partitions.length === spec.partitions && topic.partitions.every((p) => p.leader >= 0)
+    })
+    if (led) return
+    if (Date.now() > deadline) throw new Error(`topics ${specs.map((spec) => spec.topic).join(', ')} have no leaders yet`)
+    await sleep(100)
   }
 }
 
@@ -51,9 +70,11 @@ export function envelope(row: OutboxRow): Envelope {
 
 export class KafkaPublisher implements Publisher {
   readonly #producer: KafkaJS.Producer
+  readonly #prefix: string
 
-  private constructor(producer: KafkaJS.Producer) {
+  private constructor(producer: KafkaJS.Producer, prefix: string) {
     this.#producer = producer
+    this.#prefix = prefix
   }
 
   static async connect(settings: KafkaSettings): Promise<KafkaPublisher> {
@@ -63,7 +84,7 @@ export class KafkaPublisher implements Publisher {
       'linger.ms': 5,
     })
     await producer.connect()
-    return new KafkaPublisher(producer)
+    return new KafkaPublisher(producer, settings.topicPrefix ?? '')
   }
 
   async publish(rows: readonly OutboxRow[]): Promise<void> {
@@ -77,7 +98,7 @@ export class KafkaPublisher implements Publisher {
       })
       byTopic.set(row.topic, messages)
     }
-    await this.#producer.sendBatch({ topicMessages: [...byTopic].map(([topic, messages]) => ({ topic, messages })) })
+    await this.#producer.sendBatch({ topicMessages: [...byTopic].map(([topic, messages]) => ({ topic: `${this.#prefix}${topic}`, messages })) })
   }
 
   async close(): Promise<void> {

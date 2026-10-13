@@ -10,6 +10,7 @@ import { AttemptsService } from '../payments/attempts.service.ts'
 import { ATTEMPT_COLUMNS, type AttemptRecord } from '../payments/records.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
+import { EventConsumers } from '../consumers/event-consumers.service.ts'
 import { OutboxRelay } from './outbox-relay.service.ts'
 
 export type RecoveryOutcome = 'applied' | 'already' | 'anomaly' | 'unknown' | 'error'
@@ -22,6 +23,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
   readonly #webhooks: WebhooksService
   readonly #idempotency: IdempotencyService
   readonly #outbox: OutboxRelay
+  readonly #consumers: EventConsumers
   readonly #config: ApiConfig
   readonly #logger = new Logger('recovery')
   readonly #stop = new AbortController()
@@ -34,6 +36,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     webhooks: WebhooksService,
     idempotency: IdempotencyService,
     outbox: OutboxRelay,
+    consumers: EventConsumers,
     @Inject(API_CONFIG) config: ApiConfig,
   ) {
     this.#db = db
@@ -42,6 +45,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     this.#webhooks = webhooks
     this.#idempotency = idempotency
     this.#outbox = outbox
+    this.#consumers = consumers
     this.#config = config
   }
 
@@ -53,6 +57,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
       await this.#idempotency.sweep()
       await this.#webhooks.prune()
       await this.#outbox.prune()
+      await this.#consumers.prune()
     })
     if (this.#config.hotAccountMode === 'derived') this.#every('snapshots', 1000, () => takeSnapshots(this.#db.pool))
   }

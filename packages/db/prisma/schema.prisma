@@ -339,3 +339,48 @@ model OutboxEvent {
 
   @@map("outbox")
 }
+
+model InboxEntry {
+  consumer   String
+  eventId    String   @map("event_id") @db.Uuid
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@index([receivedAt])
+  @@map("inbox")
+}
+
+model ReceiptCounter {
+  merchant   String @id
+  lastNumber Int    @map("last_number")
+
+  @@map("receipt_counters")
+}
+
+model Receipt {
+  id         BigInt   @id @default(autoincrement())
+  merchant   String
+  number     Int
+  paymentId  String   @map("payment_id") @db.Uuid
+  amount     BigInt
+  fee        BigInt
+  currency   String   @db.Char(3)
+  capturedAt DateTime @map("captured_at") @db.Timestamptz(6)
+  eventId    String   @map("event_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([merchant, number])
+  @@index([paymentId])
+  @@map("receipts")
+}
+
+model Statement {
+  accountId BigInt   @map("account_id")
+  day       DateTime @db.Date
+  debits    BigInt
+  credits   BigInt
+  entries   Int
+
+  @@id([accountId, day])
+  @@map("statements")
+}

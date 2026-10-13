@@ -11,6 +11,8 @@ export const FAILPOINTS = [
   'recovery.after_pull',
   'relay.before_produce',
   'relay.after_produce',
+  'consumer.before_commit',
+  'consumer.before_offset',
 ] as const
 
 export type FailpointName = (typeof FAILPOINTS)[number]

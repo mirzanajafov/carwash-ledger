@@ -1,0 +1,39 @@
+import { TOPICS, type ConsumerSpec } from '@carwash/outbox'
+
+interface CapturedPayment {
+  id: string
+  merchant: string
+  captured_amount: number
+  fee: number
+  currency: string
+}
+
+const ISSUE = `
+  WITH counter AS (
+    INSERT INTO receipt_counters (merchant, last_number) VALUES ($1, 1)
+    ON CONFLICT (merchant) DO UPDATE SET last_number = receipt_counters.last_number + 1
+    RETURNING last_number
+  )
+  INSERT INTO receipts (merchant, number, payment_id, amount, fee, currency, captured_at, event_id)
+  SELECT $1, last_number, $2, $3, $4, $5, $6, $7 FROM counter`
+
+export const receipts: ConsumerSpec = {
+  name: 'receipts',
+  topic: TOPICS.payments,
+  apply: async (client, events) => {
+    const captured = events.filter((event) => event.type === 'payment.captured')
+    captured.sort((a, b) => (a.data as CapturedPayment).merchant.localeCompare((b.data as CapturedPayment).merchant))
+    for (const event of captured) {
+      const payment = event.data as CapturedPayment
+      await client.query(ISSUE, [
+        payment.merchant,
+        payment.id,
+        payment.captured_amount,
+        payment.fee,
+        payment.currency,
+        event.occurredAt,
+        event.id,
+      ])
+    }
+  },
+}
