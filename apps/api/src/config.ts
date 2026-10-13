@@ -36,6 +36,8 @@ export interface ApiConfig {
   reconFallback: 'unique' | 'oldest' | 'none'
   reconWindowDays: number
   settlementEveryMs: number
+  auditEveryMs: number
+  auditBatch: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -98,5 +100,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     reconFallback: fallback(env.RECON_FALLBACK ?? 'unique'),
     reconWindowDays: integer(env, 'RECON_WINDOW_DAYS', 7),
     settlementEveryMs: integer(env, 'SETTLEMENT_EVERY_MS', 60_000),
+    auditEveryMs: integer(env, 'AUDIT_EVERY_MS', 1000),
+    auditBatch: integer(env, 'AUDIT_BATCH', 1000) || 1000,
   }
 }
