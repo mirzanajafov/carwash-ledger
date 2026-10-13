@@ -78,6 +78,11 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     outboxRetentionHours: 24,
     kafkaTopicPrefix: '',
     inboxRetentionDays: 7,
+    pspFeeBps: 120,
+    pspFeeFixed: 8n,
+    reconFallback: 'unique',
+    reconWindowDays: 7,
+    settlementEveryMs: 0,
     ...overrides,
   }
 }

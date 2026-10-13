@@ -22,6 +22,9 @@ importers:
       '@carwash/pg':
         specifier: workspace:*
         version: link:../../packages/pg
+      '@carwash/recon':
+        specifier: workspace:*
+        version: link:../../packages/recon
       '@nestjs/common':
         specifier: ^12.1.2
         version: 12.1.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -251,6 +254,21 @@ importers:
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
+
+  packages/recon:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      fast-check:
+        specifier: ^4.3.0
+        version: 4.10.2
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/testkit:
     dependencies:

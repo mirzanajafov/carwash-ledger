@@ -10,6 +10,7 @@ import { AttemptsService } from '../payments/attempts.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
 import { EventConsumers } from '../consumers/event-consumers.service.ts'
+import { Settlements } from '../settlement/settlements.service.ts'
 import { OutboxRelay } from './outbox-relay.service.ts'
 import { Recovery } from './recovery.service.ts'
 
@@ -29,6 +30,7 @@ export class WorkerModule {
         WebhooksService,
         OutboxRelay,
         EventConsumers,
+        Settlements,
         Recovery,
         { provide: APP_FILTER, useClass: ErrorFilter },
       ],

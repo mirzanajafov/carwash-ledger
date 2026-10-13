@@ -8,6 +8,7 @@ import {
   checkPaymentsIn,
   checkSettled,
   checkSettledIn,
+  checkSettlementIn,
   violations,
   type InvariantId,
   type InvariantResult,
@@ -19,6 +20,7 @@ import { Database } from '../src/db/database.ts'
 import { deliver, outboxEvents, startStack, type Stack } from './support.ts'
 
 let stack: Stack
+let settledDay: number
 const payments: Record<'auto' | 'manual' | 'authorized' | 'declined', string> = {} as never
 
 function pay(token: string, extra: Record<string, unknown> = {}) {
@@ -67,6 +69,25 @@ function inEvents(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
   return corrupted(stack.admin, corrupt, checkEventsIn)
 }
 
+function inSettlement(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
+  return corrupted(stack.admin, corrupt, async (client) => [
+    await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay }),
+  ])
+}
+
+async function settlementExamples(corrupt: (client: pg.PoolClient) => Promise<unknown>): Promise<string[]> {
+  const client = await stack.admin.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('SET LOCAL session_replication_role = replica')
+    await corrupt(client)
+    return (await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay })).examples
+  } finally {
+    await client.query('ROLLBACK')
+    client.release()
+  }
+}
+
 function atPsp(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
   return corrupted(stack.pspSql, corrupt, async (client) => [await checkAgainstPsp(stack.admin, client)])
 }
@@ -97,6 +118,9 @@ beforeAll(async () => {
   stack.psp.faults.plan = { ...NO_FAULTS, decline: 1 }
   expect((await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })).body.status).toBe('failed')
   stack.psp.faults.plan = NO_FAULTS
+  settledDay = stack.psp.settlements.calendar().current_day
+  await stack.psp.settlements.close(settledDay)
+  expect((await call('POST', `/v1/settlements/${settledDay}/ingest`, { as: 'admin' })).body.outcome).toBe('ingested')
   const app = stack.app.get(Database).pool
   await deliver(app, [await outboxEvents(app)])
 })
@@ -245,5 +269,47 @@ describe('the event invariants', () => {
       await inEvents((client) => client.query('UPDATE statements SET credits = credits + 1 WHERE ctid = (SELECT ctid FROM statements LIMIT 1)')),
     ).toEqual({ L2: 0, L3: 1 })
     expect(await inEvents(async () => undefined)).toEqual({ L2: 0, L3: 0 })
+  })
+})
+
+describe('the settlement invariant', () => {
+  const lineOf = async (paymentId: string) => {
+    const capture = await attemptOf(paymentId, 'capture')
+    const { rows } = await stack.admin.query<{ file_id: string; line: number }>('SELECT file_id, line FROM settlement_lines WHERE reference = $1', [capture])
+    return rows[0]!
+  }
+
+  it('finds nothing wrong in a settled day, a refused PSP answer included', async () => {
+    expect(await inSettlement(async () => undefined)).toEqual({ L5: 0 })
+  })
+
+  it('catches a lost line, a changed amount, a line counted twice, a line for nothing and a journal that disagrees (L5)', async () => {
+    const auto = await lineOf(payments.auto)
+    const lost = await settlementExamples((c) => c.query('DELETE FROM settlement_lines WHERE file_id = $1 AND line = $2', [auto.file_id, auto.line]))
+    expect(lost).toHaveLength(2)
+    expect(lost[1]).toContain('is in no file')
+    const changed = await settlementExamples((c) =>
+      c.query('UPDATE settlement_lines SET gross = gross + 1, net = net + 1 WHERE file_id = $1 AND line = $2', [auto.file_id, auto.line]),
+    )
+    expect(changed).toHaveLength(2)
+    expect(changed[1]).toContain("disagrees with the ledger's 1500")
+    const twice = await settlementExamples((c) =>
+      c.query(
+        `INSERT INTO settlement_lines (file_id, line, operation, reference, kind, gross, fee, net, operated_at)
+         SELECT file_id, 1000, operation, reference, kind, gross, fee, net, operated_at FROM settlement_lines WHERE file_id = $1 AND line = $2`,
+        [auto.file_id, auto.line],
+      ),
+    )
+    expect(twice).toHaveLength(2)
+    expect(twice[1]).toContain('is settled 2 times')
+    const stranger = await settlementExamples((c) =>
+      c.query('UPDATE settlement_lines SET reference = gen_random_uuid()::text WHERE file_id = $1 AND line = $2', [auto.file_id, auto.line]),
+    )
+    expect(stranger).toHaveLength(2)
+    expect(stranger[0]).toContain('has no attempt')
+    const journal = await settlementExamples((c) => c.query('UPDATE settlement_files SET net = net - 1, fee = fee + 1 WHERE id = $1', [auto.file_id]))
+    expect(journal).toHaveLength(1)
+    expect(journal[0]).toContain('its journal moved')
+    expect(await inSettlement(async () => undefined)).toEqual({ L5: 0 })
   })
 })

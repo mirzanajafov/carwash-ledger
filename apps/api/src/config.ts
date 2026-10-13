@@ -31,6 +31,11 @@ export interface ApiConfig {
   outboxRetentionHours: number
   kafkaTopicPrefix: string
   inboxRetentionDays: number
+  pspFeeBps: number
+  pspFeeFixed: bigint
+  reconFallback: 'unique' | 'oldest' | 'none'
+  reconWindowDays: number
+  settlementEveryMs: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -44,6 +49,11 @@ function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number
   if (raw === undefined || raw === '') return fallback
   const value = Number(raw)
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer`)
+  return value
+}
+
+function fallback(value: string): ApiConfig['reconFallback'] {
+  if (value !== 'unique' && value !== 'oldest' && value !== 'none') throw new Error('RECON_FALLBACK must be unique, oldest or none')
   return value
 }
 
@@ -83,5 +93,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     outboxRetentionHours: integer(env, 'OUTBOX_RETENTION_HOURS', 24),
     kafkaTopicPrefix: env.KAFKA_TOPIC_PREFIX ?? '',
     inboxRetentionDays: integer(env, 'INBOX_RETENTION_DAYS', 7),
+    pspFeeBps: integer(env, 'PSP_FEE_BPS', 120),
+    pspFeeFixed: BigInt(integer(env, 'PSP_FEE_FIXED', 8)),
+    reconFallback: fallback(env.RECON_FALLBACK ?? 'unique'),
+    reconWindowDays: integer(env, 'RECON_WINDOW_DAYS', 7),
+    settlementEveryMs: integer(env, 'SETTLEMENT_EVERY_MS', 60_000),
   }
 }

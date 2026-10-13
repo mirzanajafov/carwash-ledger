@@ -16,6 +16,10 @@ export class ApiError extends Error {
   }
 }
 
+export function badRequest(message: string): ApiError {
+  return new ApiError(400, 'invalid_request', message)
+}
+
 export function notFound(what: string): ApiError {
   return new ApiError(404, 'not_found', `${what} does not exist`)
 }
