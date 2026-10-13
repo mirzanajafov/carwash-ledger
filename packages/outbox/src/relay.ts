@@ -6,6 +6,7 @@ import { LANES } from './events.ts'
 
 export interface OutboxRow {
   id: string
+  lane: number
   eventId: string
   topic: string
   key: string
@@ -22,13 +23,14 @@ export interface RelayOptions {
   workers: number
   batch: number
   pollMs: number
+  pauseMs: number
   lockClass: number
 }
 
-export const RELAY_DEFAULTS: RelayOptions = { workers: 4, batch: 500, pollMs: 50, lockClass: 0x0b0c }
+export const RELAY_DEFAULTS: RelayOptions = { workers: 4, batch: 500, pollMs: 50, pauseMs: 10, lockClass: 0x0b0c }
 
 export interface Relayed {
-  lane: number
+  lanes: number[]
   published: number
 }
 
@@ -42,33 +44,41 @@ const CANDIDATES = `
   ) oldest
   ORDER BY oldest.id`
 
+const LOCK = 'SELECT lane FROM unnest($2::int[]) AS lane WHERE pg_try_advisory_lock($1, lane)'
+
+const UNLOCK = 'SELECT pg_advisory_unlock($1, lane) FROM unnest($2::int[]) AS lane'
+
 const BATCH = `
-  SELECT o.id::text AS id, o.event_id::text AS "eventId", o.topic, o.key, o.type, o.payload, o.created_at AS "createdAt"
+  SELECT o.id::text AS id, o.lane, o.event_id::text AS "eventId", o.topic, o.key, o.type, o.payload, o.created_at AS "createdAt"
   FROM outbox o
-  WHERE o.lane = $1 AND o.published_at IS NULL
+  WHERE o.lane = ANY($1::smallint[]) AND o.published_at IS NULL
   ORDER BY o.id
   LIMIT $2`
 
 export async function relayOnce(client: pg.ClientBase, publisher: Publisher, options: RelayOptions = RELAY_DEFAULTS): Promise<Relayed | null> {
-  const { rows: lanes } = await client.query<{ lane: number }>(CANDIDATES)
-  for (const { lane } of lanes) {
-    const { rows } = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1, $2) AS locked', [options.lockClass, lane])
-    if (!rows[0]!.locked) continue
-    try {
-      const batch = (await client.query<OutboxRow>(BATCH, [lane, options.batch])).rows
-      if (batch.length === 0) continue
-      failpoint('relay.before_produce')
-      await publisher.publish(batch)
-      failpoint('relay.after_produce')
-      await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [
-        batch.map((row) => row.id),
-      ])
-      return { lane, published: batch.length }
-    } finally {
-      await client.query('SELECT pg_advisory_unlock($1, $2)', [options.lockClass, lane])
+  const candidates = (await client.query<{ lane: number }>(CANDIDATES)).rows.map((row) => row.lane)
+  if (candidates.length === 0) return null
+  let lanes = (await client.query<{ lane: number }>(LOCK, [options.lockClass, candidates])).rows.map((row) => row.lane)
+  if (lanes.length === 0) return null
+  try {
+    const batch = (await client.query<OutboxRow>(BATCH, [lanes, options.batch])).rows
+    const used = new Set(batch.map((row) => row.lane))
+    const spare = lanes.filter((lane) => !used.has(lane))
+    if (spare.length > 0) {
+      await client.query(UNLOCK, [options.lockClass, spare])
+      lanes = lanes.filter((lane) => used.has(lane))
     }
+    if (batch.length === 0) return null
+    failpoint('relay.before_produce')
+    await publisher.publish(batch)
+    failpoint('relay.after_produce')
+    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [
+      batch.map((row) => row.id),
+    ])
+    return { lanes, published: batch.length }
+  } finally {
+    await client.query(UNLOCK, [options.lockClass, lanes])
   }
-  return null
 }
 
 export class Relay {
@@ -104,7 +114,8 @@ export class Relay {
         const relayed = await this.#cycle()
         failures = 0
         if (relayed) this.published += relayed.published
-        if (!relayed || relayed.published < this.#options.batch) await sleep(this.#options.pollMs, undefined, { signal }).catch(() => undefined)
+        if (!relayed) await sleep(this.#options.pollMs, undefined, { signal }).catch(() => undefined)
+        else if (relayed.published < this.#options.batch) await sleep(this.#options.pauseMs, undefined, { signal }).catch(() => undefined)
       } catch (error) {
         failures++
         if (failures === 1 || failures % 50 === 0) this.#log(`relay: ${(error as Error).message}`)

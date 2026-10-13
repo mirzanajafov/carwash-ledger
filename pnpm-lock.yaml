@@ -279,6 +279,12 @@ importers:
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
+      '@carwash/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../../packages/pg
       '@carwash/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit

@@ -5,6 +5,7 @@ describe('envelope', () => {
   it('carries the event id, type and time of the outbox row around its payload', () => {
     const row = {
       id: '42',
+      lane: 3,
       eventId: '0199d5a0-0000-7000-8000-000000000001',
       topic: 'payments',
       key: 'p1',
