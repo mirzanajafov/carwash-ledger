@@ -384,3 +384,52 @@ model Statement {
   @@id([accountId, day])
   @@map("statements")
 }
+
+model SettlementFile {
+  id         String           @id
+  day        BigInt
+  currency   String           @db.Char(3)
+  lines      Int
+  gross      BigInt
+  fee        BigInt
+  net        BigInt
+  journalId  BigInt?          @map("journal_id")
+  receivedAt DateTime         @default(now()) @map("received_at") @db.Timestamptz(6)
+  rows       SettlementLine[]
+
+  @@unique([day, currency])
+  @@map("settlement_files")
+}
+
+model SettlementLine {
+  fileId     String         @map("file_id")
+  line       Int
+  operation  String
+  reference  String
+  kind       String
+  gross      BigInt
+  fee        BigInt
+  net        BigInt
+  operatedAt DateTime       @map("operated_at") @db.Timestamptz(6)
+  file       SettlementFile @relation(fields: [fileId], references: [id])
+
+  @@id([fileId, line])
+  @@index([reference])
+  @@map("settlement_lines")
+}
+
+model ReconBreak {
+  id         BigInt   @id @default(autoincrement())
+  currency   String   @db.Char(3)
+  day        BigInt
+  class      String
+  fileId     String?  @map("file_id")
+  line       Int?
+  journalRef String?  @map("journal_ref")
+  attemptId  String?  @map("attempt_id") @db.Uuid
+  detail     String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([currency, day])
+  @@map("recon_breaks")
+}

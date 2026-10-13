@@ -11,6 +11,7 @@ import { ATTEMPT_COLUMNS, type AttemptRecord } from '../payments/records.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
 import { EventConsumers } from '../consumers/event-consumers.service.ts'
+import { Settlements } from '../settlement/settlements.service.ts'
 import { OutboxRelay } from './outbox-relay.service.ts'
 
 export type RecoveryOutcome = 'applied' | 'already' | 'anomaly' | 'unknown' | 'error'
@@ -24,6 +25,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
   readonly #idempotency: IdempotencyService
   readonly #outbox: OutboxRelay
   readonly #consumers: EventConsumers
+  readonly #settlements: Settlements
   readonly #config: ApiConfig
   readonly #logger = new Logger('recovery')
   readonly #stop = new AbortController()
@@ -37,6 +39,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     idempotency: IdempotencyService,
     outbox: OutboxRelay,
     consumers: EventConsumers,
+    settlements: Settlements,
     @Inject(API_CONFIG) config: ApiConfig,
   ) {
     this.#db = db
@@ -46,6 +49,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     this.#idempotency = idempotency
     this.#outbox = outbox
     this.#consumers = consumers
+    this.#settlements = settlements
     this.#config = config
   }
 
@@ -59,6 +63,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
       await this.#outbox.prune()
       await this.#consumers.prune()
     })
+    if (this.#config.settlementEveryMs > 0) this.#every('settlements', this.#config.settlementEveryMs, () => this.#settlements.catchUp())
     if (this.#config.hotAccountMode === 'derived') this.#every('snapshots', 1000, () => takeSnapshots(this.#db.pool))
   }
 
