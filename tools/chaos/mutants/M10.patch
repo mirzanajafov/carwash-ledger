@@ -1,0 +1,12 @@
+--- a/apps/api/src/settlement/settlements.service.ts
++++ b/apps/api/src/settlement/settlements.service.ts
+@@ -65,8 +65,7 @@
+       const existing = await client.query('SELECT 1 FROM settlement_files WHERE id = $1', [file.id])
+       if (existing.rowCount === 1) return 'already'
+       const entries: EntryInput[] = [
+-        { accountId: accounts.bank.id, amount: file.net },
+-        { accountId: accounts.pspFees.id, amount: file.fee },
++        { accountId: accounts.bank.id, amount: file.gross },
+         { accountId: accounts.receivable.id, amount: -file.gross },
+       ].filter((entry) => entry.amount !== 0n)
+       let journalId: bigint | null = null
