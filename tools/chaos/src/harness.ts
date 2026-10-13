@@ -7,6 +7,7 @@ import type { BalanceMode } from '@carwash/ledger'
 import { prepareTemplate } from '@carwash/testkit'
 import { describeLedgerRun, runLedger, summarizeLedger, type Lab, type LedgerOptions, type LedgerReport } from './ledger-run.ts'
 import { describePaymentsRun, runPayments, summarizePayments, type PaymentsOptions, type PaymentsReport } from './payments/run.ts'
+import { LocalKafka } from './kafka.ts'
 import { createRoles, LocalPostgres } from './postgres.ts'
 import { appendJsonLine, createResultsDir, writeJson } from './results.ts'
 import { Toxiproxy } from './toxiproxy.ts'
@@ -22,6 +23,7 @@ const { values } = parseArgs({
     duplicates: { type: 'string', default: '0.05' },
     'kill-every': { type: 'string', default: '3000' },
     'postgres-every': { type: 'string', default: '20000' },
+    'kafka-every': { type: 'string', default: '15000' },
     'toxic-every': { type: 'string', default: '4000' },
     failpoints: { type: 'string' },
     'check-every': { type: 'string', default: '5000' },
@@ -85,6 +87,7 @@ const paymentsOptions: PaymentsOptions = {
   rivalShare: 0.1,
   payoutEveryMs: Number(values['payout-every']),
   forgeEveryMs: Number(values['forge-every']),
+  kafkaEveryMs: Number(values['kafka-every']),
   failpointProbability: Number(values.failpoints ?? 0.0005),
   leaseSeconds: Number(values.lease),
   pspTimeoutMs: Number(values['psp-timeout']),
@@ -108,7 +111,8 @@ async function main(): Promise<void> {
   const logStream = createWriteStream(join(dir, 'harness.log'), { flags: 'a' })
   const postgres = new LocalPostgres('/tmp/pgdata', POSTGRES_PORT, join(dir, 'postgres.log'))
   const toxiproxy = new Toxiproxy()
-  const lab: Lab = { dir, postgres, toxiproxy, log: (line) => logStream.write(`${new Date().toISOString()} ${line}\n`) }
+  const kafka = new LocalKafka('/tmp/kafka', { proxied: 9092, direct: 9094, controller: 9093, advertisedProxied: 6450 })
+  const lab: Lab = { dir, postgres, kafka, toxiproxy, log: (line) => logStream.write(`${new Date().toISOString()} ${line}\n`) }
   postgres.init()
   postgres.start()
   await postgres.waitReady()
@@ -145,6 +149,7 @@ async function main(): Promise<void> {
       if (values['until-violation'] && report.violations.length > 0) break
     }
   } finally {
+    await kafka.stop()
     toxiproxy.stop()
     await postgres.stop()
     logStream.end()

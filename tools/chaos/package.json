@@ -13,6 +13,7 @@
     "@carwash/failpoints": "workspace:*",
     "@carwash/invariants": "workspace:*",
     "@carwash/ledger": "workspace:*",
+    "@carwash/outbox": "workspace:*",
     "@carwash/pg": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "pg": "^8.23.0"

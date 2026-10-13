@@ -4,10 +4,10 @@ import { between, mulberry32, pick, type Random } from '../random.ts'
 export const SERVICES = ['api-0', 'api-1', 'worker'] as const
 export type ServiceName = (typeof SERVICES)[number]
 
-export const PROXIES = ['api-0-db', 'api-1-db', 'worker-db', 'psp', 'webhooks'] as const
+export const PROXIES = ['api-0-db', 'api-1-db', 'worker-db', 'psp', 'webhooks', 'worker-kafka'] as const
 export type ProxyName = (typeof PROXIES)[number]
 
-const PROXY_WEIGHTS: Record<ProxyName, number> = { 'api-0-db': 0.2, 'api-1-db': 0.2, 'worker-db': 0.15, psp: 0.3, webhooks: 0.15 }
+const PROXY_WEIGHTS: Record<ProxyName, number> = { 'api-0-db': 0.2, 'api-1-db': 0.2, 'worker-db': 0.15, psp: 0.3, webhooks: 0.15, 'worker-kafka': 0.15 }
 
 export const PRICES = [900, 1500, 2400, 3500, 4900] as const
 
@@ -37,6 +37,7 @@ export interface PlannedPayout {
 export type PaymentFault =
   | { at: number; kind: 'kill'; target: ServiceName }
   | { at: number; kind: 'postgres'; downMs: number }
+  | { at: number; kind: 'kafka'; downMs: number }
   | { at: number; kind: 'toxic'; proxy: ProxyName; toxic: ToxicKind; lastsMs: number }
 
 export interface PaymentsPlanOptions {
@@ -55,6 +56,7 @@ export interface PaymentsPlanOptions {
   payoutEveryMs: number
   killEveryMs: number
   postgresEveryMs: number
+  kafkaEveryMs: number
   toxicEveryMs: number
   forgeEveryMs: number
 }
@@ -138,6 +140,12 @@ export function planPayments(options: PaymentsPlanOptions): PaymentsPlan {
     downMs: between(postgresRandom, 200, 2000),
   }))
 
+  const kafkaRandom = mulberry32(options.seed ^ 0x6b61666b)
+  const kafka: PaymentFault[] =
+    options.kafkaEveryMs > 0
+      ? arrivals(kafkaRandom, options.kafkaEveryMs, options.durationMs).map((at) => ({ at, kind: 'kafka', downMs: between(kafkaRandom, 200, 5000) }))
+      : []
+
   const toxicRandom = mulberry32(options.seed ^ 0x746f7869)
   const toxics: PaymentFault[] = arrivals(toxicRandom, options.toxicEveryMs, options.durationMs).map((at) => ({
     at,
@@ -149,5 +157,5 @@ export function planPayments(options: PaymentsPlanOptions): PaymentsPlan {
 
   const forgeries = arrivals(mulberry32(options.seed ^ 0x666f7267), options.forgeEveryMs, options.durationMs)
 
-  return { journeys, payouts, faults: [...kills, ...postgres, ...toxics].sort((a, b) => a.at - b.at), forgeries }
+  return { journeys, payouts, faults: [...kills, ...postgres, ...kafka, ...toxics].sort((a, b) => a.at - b.at), forgeries }
 }
