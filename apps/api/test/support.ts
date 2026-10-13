@@ -83,6 +83,8 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     reconFallback: 'unique',
     reconWindowDays: 7,
     settlementEveryMs: 0,
+    auditEveryMs: 0,
+    auditBatch: 1000,
     ...overrides,
   }
 }

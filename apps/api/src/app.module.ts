@@ -1,6 +1,7 @@
 import { Controller, Get, Module, ValidationPipe, type DynamicModule, type INestApplication } from '@nestjs/common'
 import { APP_FILTER, APP_GUARD } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
+import { AuditController } from './audit/audit.controller.ts'
 import { AccessGuard, Public } from './auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from './config.ts'
 import { Database } from './db/database.ts'
@@ -48,6 +49,7 @@ export class AppModule {
         WebhooksController,
         SettlementsController,
         ReconciliationController,
+        AuditController,
       ],
       providers: [
         { provide: API_CONFIG, useValue: config },

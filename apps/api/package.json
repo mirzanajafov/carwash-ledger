@@ -13,6 +13,7 @@
     "worker": "node dist/worker.js"
   },
   "dependencies": {
+    "@carwash/audit": "workspace:*",
     "@carwash/failpoints": "workspace:*",
     "@carwash/ledger": "workspace:*",
     "@carwash/outbox": "workspace:*",

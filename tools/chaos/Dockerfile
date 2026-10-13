@@ -10,6 +10,7 @@ COPY packages/failpoints/package.json packages/failpoints/
 COPY packages/ledger/package.json packages/ledger/
 COPY packages/outbox/package.json packages/outbox/
 COPY packages/recon/package.json packages/recon/
+COPY packages/audit/package.json packages/audit/
 COPY packages/pg/package.json packages/pg/
 COPY packages/invariants/package.json packages/invariants/
 COPY packages/testkit/package.json packages/testkit/

@@ -433,3 +433,29 @@ model ReconBreak {
   @@index([currency, day])
   @@map("recon_breaks")
 }
+
+model AuditQueue {
+  journalId BigInt   @id @map("journal_id")
+  queuedAt  DateTime @default(now()) @map("queued_at") @db.Timestamptz(6)
+
+  @@map("audit_queue")
+}
+
+model AuditLeaf {
+  seq         BigInt   @id
+  journalId   BigInt   @unique @map("journal_id")
+  leaf        Bytes
+  chain       Bytes
+  sequencedAt DateTime @default(now()) @map("sequenced_at") @db.Timestamptz(6)
+
+  @@map("audit_log")
+}
+
+model AuditNode {
+  level Int    @db.SmallInt
+  idx   BigInt
+  hash  Bytes
+
+  @@id([level, idx])
+  @@map("audit_nodes")
+}

@@ -1,0 +1,10 @@
+--- a/packages/audit/src/encoding.ts
++++ b/packages/audit/src/encoding.ts
+@@ -76,7 +76,6 @@
+   const out = new Writer()
+   out.u8(ENCODING_VERSION)
+   out.u64(journal.id)
+-  out.text(journal.externalRef)
+   out.i64(journal.createdAtMicros)
+   out.u32(entries.length)
+   for (const entry of entries) {

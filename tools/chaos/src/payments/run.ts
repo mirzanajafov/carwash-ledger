@@ -7,7 +7,7 @@ import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool } from '@carwash/pg'
-import { checkAgainstPsp, checkEvents, checkLedger, checkPayments, checkSettled, checkSettlement } from '@carwash/invariants'
+import { checkAgainstPsp, checkAudit, checkEvents, checkLedger, checkPayments, checkSequenced, checkSettled, checkSettlement } from '@carwash/invariants'
 import { kafkaClient } from '@carwash/outbox'
 import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
 import pg from 'pg'
@@ -373,6 +373,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         found.addResults(await checkLedger(audit), 'during')
         found.addResults(await checkPayments(audit), 'during')
         found.addResults([await checkAgainstPsp(audit, psp)], 'during')
+        found.addResults([await checkAudit(audit)], 'during')
         report.checks.periodic++
       } catch {
         report.checks.skipped++
@@ -468,8 +469,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     log(`settled days ${report.settlement.days.join(', ')}: ${report.settlement.outcomes.join(', ')}, breaks ${JSON.stringify(report.settlement.breaks)}`)
     const drainedBy = performance.now() + 60_000
     while (performance.now() < drainedBy) {
-      const delivered = await checkEvents(audit)
-        .then((results) => results.find((r) => r.id === 'L2')!.count === 0)
+      const delivered = await Promise.all([checkEvents(audit), checkSequenced(audit)])
+        .then(([events, sequenced]) => events.find((r) => r.id === 'L2')!.count === 0 && sequenced.count === 0)
         .catch(() => false)
       if (delivered) break
       await sleep(250)
@@ -485,6 +486,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(await checkPayments(audit), 'final')
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
     found.addResults(await checkEvents(audit), 'final')
+    found.addResults([await checkAudit(audit), await checkSequenced(audit)], 'final')
     found.addResults(
       [await checkSettlement(audit, { daySeconds: SETTLEMENT_DAY_SECONDS, feeBps: 120, feeFixed: 8, completeThrough: Math.max(...report.settlement.days, -1) })],
       'final',
@@ -624,6 +626,7 @@ async function settled(tasks: readonly Promise<unknown>[], probes: readonly Prom
   if (race === pending) return false
   try {
     if ((await checkSettled(audit)).count > 0) return false
+    if ((await checkSequenced(audit)).count > 0) return false
     return (await checkEvents(audit)).find((result) => result.id === 'L2')!.count === 0
   } catch {
     return false
