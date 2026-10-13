@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
+import { applyOnce, type ConsumedEvent } from '@carwash/outbox'
 import { NO_FAULTS, startPsp, type RunningPsp } from '@carwash/psp'
 import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
 import { NestFactory } from '@nestjs/core'
@@ -11,6 +12,7 @@ import pg from 'pg'
 import { AppModule, configureApp } from '../src/app.module.ts'
 import { hashApiKey } from '../src/auth/api-keys.ts'
 import type { ApiConfig } from '../src/config.ts'
+import { CONSUMERS } from '../src/consumers/event-consumers.service.ts'
 
 export const KEYS = { alice: 'cw_live_alice', bob: 'cw_live_bob', admin: 'cw_admin_ops' }
 export const WEBHOOK_SECRET = 'whsec_test'
@@ -74,6 +76,8 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     kafkaBrokers: [],
     relayWorkers: 4,
     outboxRetentionHours: 24,
+    kafkaTopicPrefix: '',
+    inboxRetentionDays: 7,
     ...overrides,
   }
 }
@@ -179,4 +183,25 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
     if (created.status !== 200) throw new Error(`could not create merchant ${code}: ${JSON.stringify(created.body)}`)
   }
   return stack
+}
+
+export interface OutboxEvent extends ConsumedEvent {
+  topic: string
+}
+
+export async function outboxEvents(pool: pg.Pool, which: 'unpublished' | 'all' = 'unpublished'): Promise<OutboxEvent[]> {
+  const { rows } = await pool.query<{ id: string; topic: string; key: string; type: string; data: unknown; created_at: Date }>(
+    `SELECT o.event_id::text AS id, o.topic, o.key, o.type, o.payload AS data, o.created_at
+     FROM outbox o ${which === 'unpublished' ? 'WHERE o.published_at IS NULL' : ''}
+     ORDER BY o.id`,
+  )
+  return rows.map((row) => ({ id: row.id, topic: row.topic, key: row.key, type: row.type, data: row.data, occurredAt: row.created_at.toISOString() }))
+}
+
+export async function deliver(pool: pg.Pool, batches: readonly (readonly OutboxEvent[])[]): Promise<void> {
+  for (const batch of batches) {
+    for (const spec of CONSUMERS) await applyOnce(pool, spec, batch.filter((event) => event.topic === spec.topic))
+  }
+  const ids = [...new Set(batches.flat().map((event) => event.id))]
+  await pool.query('UPDATE outbox SET published_at = now() WHERE event_id = ANY($1::uuid[]) AND published_at IS NULL', [ids])
 }

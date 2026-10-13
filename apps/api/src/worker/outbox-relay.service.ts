@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { ensureTopics, kafkaClient, KafkaPublisher, Relay } from '@carwash/outbox'
+import { ensureTopics, kafkaClient, KafkaPublisher, Relay, topicSpecs } from '@carwash/outbox'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 
@@ -42,9 +42,14 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   async #start(brokers: string[]): Promise<void> {
     for (let attempt = 1; !this.#stop.signal.aborted; attempt++) {
       try {
-        const created = await ensureTopics(kafkaClient({ brokers, clientId: 'carwash-worker' }))
+        const created = await ensureTopics(kafkaClient({ brokers, clientId: 'carwash-worker' }), topicSpecs(this.#config.kafkaTopicPrefix))
         if (created.length > 0) this.#logger.log(`created topics ${created.join(', ')}`)
-        this.#publisher = await KafkaPublisher.connect({ brokers, clientId: 'carwash-relay', deliveryTimeoutMs: 10_000 })
+        this.#publisher = await KafkaPublisher.connect({
+          brokers,
+          clientId: 'carwash-relay',
+          deliveryTimeoutMs: 10_000,
+          topicPrefix: this.#config.kafkaTopicPrefix,
+        })
         if (this.#stop.signal.aborted) return
         this.#relay = new Relay(this.#db.pool, this.#publisher, { workers: this.#config.relayWorkers }, (message) => this.#logger.warn(message))
         this.#relay.start()
