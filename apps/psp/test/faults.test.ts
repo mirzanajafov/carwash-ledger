@@ -9,6 +9,7 @@ describe('parseToken', () => {
     expect(parseToken('tok_timeout_after_refund')).toEqual({ kind: 'timeout_after', operation: 'refund' })
     expect(parseToken('tok_drop_after_authorize')).toEqual({ kind: 'drop_after', operation: 'authorize' })
     expect(parseToken('tok_webhook_reorder')).toEqual({ kind: 'webhook', fault: 'reorder' })
+    expect(parseToken('tok_wrong_amount_refund')).toEqual({ kind: 'wrong_amount', operation: 'refund' })
     expect(parseToken('tok_fail_payout')).toBeUndefined()
     expect(parseToken('4242424242424242')).toBeUndefined()
   })
@@ -31,6 +32,17 @@ describe('Faults', () => {
     expect(faults.behaviour('b', 'authorize', token).afterCommit).toBe('answer')
     expect(faults.behaviour('c', 'authorize', parseToken('tok_decline')!).decline).toBe(true)
     expect(faults.behaviour('d', 'capture', parseToken('tok_decline')!).decline).toBe(false)
+    expect(faults.behaviour('e', 'capture', parseToken('tok_wrong_amount_capture')!).wrongAmount).toBe(true)
+    expect(faults.behaviour('f', 'refund', parseToken('tok_wrong_amount_capture')!).wrongAmount).toBe(false)
+  })
+
+  it('declines authorizations and payouts from the plan, never captures or refunds', () => {
+    const faults = new Faults(parseFaultPlan({ decline: 1, wrongAmount: 1 }))
+    const ok = parseToken('tok_ok')!
+    expect(faults.behaviour('a', 'authorize', ok)).toMatchObject({ decline: true, wrongAmount: false })
+    expect(faults.behaviour('b', 'payout', ok)).toMatchObject({ decline: true, wrongAmount: true })
+    expect(faults.behaviour('c', 'capture', ok)).toMatchObject({ decline: false, wrongAmount: true })
+    expect(faults.behaviour('d', 'refund', ok)).toMatchObject({ decline: false, wrongAmount: true })
   })
 
   it('draws the same faults for the same seed and key whatever else was asked in between', () => {
@@ -57,7 +69,7 @@ describe('Faults', () => {
     const faults = new Faults(NO_FAULTS)
     for (let i = 0; i < 100; i++) {
       const b = faults.behaviour(`k${i}`, 'authorize', { kind: 'ok' })
-      expect([b.decline, b.fail, b.afterCommit, b.slowMs, b.webhook.size]).toEqual([false, false, 'answer', 0, 0])
+      expect([b.decline, b.fail, b.afterCommit, b.slowMs, b.wrongAmount, b.webhook.size]).toEqual([false, false, 'answer', 0, false, 0])
     }
   })
 })

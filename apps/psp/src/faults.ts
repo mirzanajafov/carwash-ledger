@@ -14,6 +14,7 @@ export interface FaultPlan {
   timeoutAfterCommit: number
   slow: number
   slowMs: readonly [number, number]
+  wrongAmount: number
   webhook: Record<WebhookFault, number>
 }
 
@@ -24,16 +25,17 @@ export const NO_FAULTS: FaultPlan = {
   timeoutAfterCommit: 0,
   slow: 0,
   slowMs: [500, 3000],
+  wrongAmount: 0,
   webhook: { duplicate: 0, delay: 0, reorder: 0, drop: 0 },
 }
 
 export type TokenEffect =
   | { kind: 'ok' | 'decline' | 'expire_authorization' }
-  | { kind: 'fail' | 'fail_once' | 'timeout_after' | 'drop_after' | 'slow'; operation: CardOperation }
+  | { kind: 'fail' | 'fail_once' | 'timeout_after' | 'drop_after' | 'slow' | 'wrong_amount'; operation: CardOperation }
   | { kind: 'webhook'; fault: WebhookFault }
 
 const TOKEN =
-  /^tok_(?:(ok|decline|expire_authorization)|(fail_once|fail|timeout_after|drop_after|slow)_(authorize|capture|cancel|refund)|webhook_(duplicate|delay|reorder|drop))$/
+  /^tok_(?:(ok|decline|expire_authorization)|(fail_once|fail|timeout_after|drop_after|slow|wrong_amount)_(authorize|capture|cancel|refund)|webhook_(duplicate|delay|reorder|drop))$/
 
 export function parseToken(token: string): TokenEffect | undefined {
   const match = TOKEN.exec(token)
@@ -49,6 +51,7 @@ export interface Behaviour {
   fail: boolean
   afterCommit: 'answer' | 'hang' | 'drop'
   slowMs: number
+  wrongAmount: boolean
   webhook: ReadonlySet<WebhookFault>
   draw(name: string): number
 }
@@ -77,7 +80,9 @@ export class Faults {
     const draw = (name: string) => unitHash(`${plan.seed}:${key}:${n}:${name}`)
     const tokenFor = (effect: TokenEffect['kind']) => token.kind === effect && 'operation' in token && token.operation === kind
 
-    const decline = kind === 'authorize' && (token.kind === 'decline' || draw('decline') < plan.decline)
+    const decline =
+      (kind === 'authorize' && (token.kind === 'decline' || draw('decline') < plan.decline)) ||
+      (kind === 'payout' && draw('decline') < plan.decline)
     const fail = tokenFor('fail') || (tokenFor('fail_once') && n === 0) || draw('fail') < plan.fail
     let afterCommit: Behaviour['afterCommit'] = 'answer'
     if (tokenFor('timeout_after')) afterCommit = 'hang'
@@ -85,11 +90,13 @@ export class Faults {
     else if (draw('timeout') < plan.timeoutAfterCommit) afterCommit = draw('timeout.kind') < 0.5 ? 'hang' : 'drop'
     const [low, high] = plan.slowMs
     const slowMs = tokenFor('slow') || draw('slow') < plan.slow ? low + Math.floor(draw('slow.ms') * (high - low + 1)) : 0
+    const wrongAmount =
+      (kind === 'capture' || kind === 'refund' || kind === 'payout') && (tokenFor('wrong_amount') || draw('wrong_amount') < plan.wrongAmount)
     const webhook = new Set<WebhookFault>()
     for (const fault of WEBHOOK_FAULTS) {
       if ((token.kind === 'webhook' && token.fault === fault) || draw(`webhook.${fault}`) < plan.webhook[fault]) webhook.add(fault)
     }
-    return { decline, fail, afterCommit, slowMs, webhook, draw }
+    return { decline, fail, afterCommit, slowMs, wrongAmount, webhook, draw }
   }
 
   #count(key: string): number {
@@ -139,6 +146,7 @@ export function parseFaultPlan(input: unknown): FaultPlan {
     timeoutAfterCommit: probability(source.timeoutAfterCommit, 'timeoutAfterCommit'),
     slow: probability(source.slow, 'slow'),
     slowMs: [slowMs[0], slowMs[1]],
+    wrongAmount: probability(source.wrongAmount, 'wrongAmount'),
     webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<
       WebhookFault,
       number

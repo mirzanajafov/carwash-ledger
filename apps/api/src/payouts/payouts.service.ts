@@ -9,7 +9,7 @@ import { loadPayout, payoutView, pendingAttempt } from '../payments/records.ts'
 
 export interface PayoutInput {
   merchant: string
-  amount: number
+  amount?: number
   currency: string
 }
 
@@ -94,7 +94,10 @@ export class PayoutsService {
           [[merchant.account_id, bank.id.toString()]],
         )
         const payable = -BigInt(locked.rows.find((row) => row.account_id === merchant.account_id)!.amount)
-        const amount = BigInt(input.amount)
+        if (input.amount === undefined && payable <= 0n) {
+          throw new ApiError(409, 'nothing_to_pay_out', `merchant ${input.merchant} has nothing available for payout`)
+        }
+        const amount = input.amount === undefined ? payable : BigInt(input.amount)
         if (amount > payable) {
           throw new ApiError(409, 'insufficient_funds', `merchant ${input.merchant} has ${payable} available for payout`)
         }

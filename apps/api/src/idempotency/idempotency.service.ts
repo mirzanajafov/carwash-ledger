@@ -1,3 +1,4 @@
+import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
 import type { Response } from 'express'
 import type pg from 'pg'
@@ -10,6 +11,7 @@ import { requestHash } from './request-hash.ts'
 export interface OwnedKey {
   clientId: string
   key: string
+  leaseId: string
   recoveryPoint: string
   paymentId: string | null
   refundId: string | null
@@ -44,6 +46,12 @@ interface KeyRow {
 export function inProgress(): ApiError {
   return new ApiError(409, 'request_in_progress', 'a request with this idempotency key is still being processed', { 'retry-after': '1' })
 }
+
+function leaseLost(): ApiError {
+  return new ApiError(409, 'request_in_progress', 'another request with this idempotency key took it over', { 'retry-after': '1' })
+}
+
+const OWNED = 'client_id = $1 AND key = $2 AND lease_id = $3'
 
 @Injectable()
 export class IdempotencyService {
@@ -84,14 +92,16 @@ export class IdempotencyService {
         'DELETE FROM idempotency_keys WHERE client_id = $1 AND key = $2 AND created_at <= now() - make_interval(secs => $3)',
         [...keyParams, this.#config.idempotencyWindowSeconds],
       )
-      const inserted = await client.query(
-        `INSERT INTO idempotency_keys (client_id, key, method, path, request_hash, locked_until)
-         VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6))
-         ON CONFLICT DO NOTHING`,
+      const inserted = await client.query<{ lease_id: string }>(
+        `INSERT INTO idempotency_keys (client_id, key, method, path, request_hash, locked_until, lease_id)
+         VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6), gen_random_uuid())
+         ON CONFLICT DO NOTHING
+         RETURNING lease_id`,
         [...keyParams, method, path, hash, this.#config.leaseSeconds],
       )
       if (inserted.rowCount === 1) {
-        return { kind: 'owned', owned: { clientId, key, recoveryPoint: 'started', paymentId: null, refundId: null, payoutId: null } }
+        const leaseId = inserted.rows[0]!.lease_id
+        return { kind: 'owned', owned: { clientId, key, leaseId, recoveryPoint: 'started', paymentId: null, refundId: null, payoutId: null } }
       }
       const { rows } = await client.query<KeyRow>(
         `SELECT request_hash, state, recovery_point, payment_id, refund_id, payout_id, locked_until > now() AS leased,
@@ -106,8 +116,9 @@ export class IdempotencyService {
       }
       if (row.state === 'finished') return { kind: 'replay', status: row.response_status!, body: row.response_body }
       if (row.leased) throw inProgress()
-      await client.query(
-        'UPDATE idempotency_keys SET locked_until = now() + make_interval(secs => $3) WHERE client_id = $1 AND key = $2',
+      const taken = await client.query<{ lease_id: string }>(
+        `UPDATE idempotency_keys SET locked_until = now() + make_interval(secs => $3), lease_id = gen_random_uuid()
+         WHERE client_id = $1 AND key = $2 RETURNING lease_id`,
         [...keyParams, this.#config.leaseSeconds],
       )
       return {
@@ -115,6 +126,7 @@ export class IdempotencyService {
         owned: {
           clientId,
           key,
+          leaseId: taken.rows[0]!.lease_id,
           recoveryPoint: row.recovery_point,
           paymentId: row.payment_id,
           refundId: row.refund_id,
@@ -125,36 +137,40 @@ export class IdempotencyService {
   }
 
   async recordPoint(client: pg.ClientBase, owned: OwnedKey, point: string, refs: ResourceRefs): Promise<void> {
-    await client.query(
+    const recorded = await client.query(
       `UPDATE idempotency_keys
-       SET recovery_point = $3, payment_id = coalesce($4, payment_id), refund_id = coalesce($5, refund_id), payout_id = coalesce($6, payout_id)
-       WHERE client_id = $1 AND key = $2 AND state = 'started'`,
-      [owned.clientId, owned.key, point, refs.paymentId ?? null, refs.refundId ?? null, refs.payoutId ?? null],
+       SET recovery_point = $4, payment_id = coalesce($5, payment_id), refund_id = coalesce($6, refund_id), payout_id = coalesce($7, payout_id)
+       WHERE ${OWNED} AND state = 'started'`,
+      [owned.clientId, owned.key, owned.leaseId, point, refs.paymentId ?? null, refs.refundId ?? null, refs.payoutId ?? null],
     )
+    if (recorded.rowCount !== 1) throw leaseLost()
     Object.assign(owned, { recoveryPoint: point }, refs)
   }
 
   async finish(client: pg.ClientBase, owned: OwnedKey, final: Final): Promise<Final> {
-    await client.query(
+    failpoint('request.before_finish')
+    const finished = await client.query(
       `UPDATE idempotency_keys
-       SET state = 'finished', response_status = $3, response_body = $4, locked_until = NULL
-       WHERE client_id = $1 AND key = $2 AND state = 'started'`,
-      [owned.clientId, owned.key, final.status, JSON.stringify(final.body)],
+       SET state = 'finished', response_status = $4, response_body = $5, locked_until = NULL
+       WHERE ${OWNED} AND state = 'started'`,
+      [owned.clientId, owned.key, owned.leaseId, final.status, JSON.stringify(final.body)],
     )
+    if (finished.rowCount !== 1) throw leaseLost()
     return final
   }
 
   async release(owned: OwnedKey): Promise<void> {
-    await this.#db.pool.query(
-      `UPDATE idempotency_keys SET locked_until = NULL WHERE client_id = $1 AND key = $2 AND state = 'started'`,
-      [owned.clientId, owned.key],
-    )
+    await this.#db.pool.query(`UPDATE idempotency_keys SET locked_until = NULL WHERE ${OWNED} AND state = 'started'`, [
+      owned.clientId,
+      owned.key,
+      owned.leaseId,
+    ])
   }
 
   async abandon(owned: OwnedKey): Promise<void> {
     const deleted = await this.#db.pool.query(
-      `DELETE FROM idempotency_keys WHERE client_id = $1 AND key = $2 AND state = 'started' AND recovery_point = 'started'`,
-      [owned.clientId, owned.key],
+      `DELETE FROM idempotency_keys WHERE ${OWNED} AND state = 'started' AND recovery_point = 'started'`,
+      [owned.clientId, owned.key, owned.leaseId],
     )
     if (deleted.rowCount === 0) await this.release(owned)
   }

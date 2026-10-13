@@ -256,6 +256,24 @@ describe('PSP simulator', () => {
     expect((await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { decline: 2 } })).status).toBe(400)
   })
 
+  it('misstates the amount it did when the token or the plan says so', async () => {
+    const chargeId = await authorize('tok_wrong_amount_capture', 1500)
+    const capture = await call('POST', `/v1/charges/${chargeId}/capture`, { key: randomUUID(), body: {} })
+    expect(capture.body).toMatchObject({ status: 'succeeded', amount: 1499, charge: { captured_amount: 1499 } })
+    running.faults.plan = { ...NO_FAULTS, wrongAmount: 1 }
+    const payout = await call('POST', '/v1/payouts', { key: randomUUID(), body: { amount: 700, currency: 'EUR', destination: 'wash_1' } })
+    expect(payout.body).toMatchObject({ kind: 'payout', status: 'succeeded', amount: 699 })
+    const refund = await call('POST', `/v1/charges/${chargeId}/refunds`, { key: randomUUID(), body: { amount: 500 } })
+    expect(refund.body).toMatchObject({ kind: 'refund', status: 'succeeded', amount: 499, charge: { refunded_amount: 499 } })
+  })
+
+  it('rejects a payout when the plan declines it', async () => {
+    running.faults.plan = { ...NO_FAULTS, decline: 1 }
+    const payout = await call('POST', '/v1/payouts', { key: randomUUID(), body: { amount: 700, currency: 'EUR', destination: 'wash_1' } })
+    expect(payout.status).toBe(402)
+    expect(payout.body).toMatchObject({ kind: 'payout', status: 'declined', reason: 'payout_rejected', amount: 700 })
+  })
+
   it('follows the fault plan set through the admin endpoint', async () => {
     const set = await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { seed: 3, decline: 1 } })
     expect(set.body).toMatchObject({ seed: 3, decline: 1, fail: 0 })

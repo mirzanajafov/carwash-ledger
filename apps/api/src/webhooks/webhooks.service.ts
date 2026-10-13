@@ -1,3 +1,4 @@
+import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -61,6 +62,7 @@ export class WebhooksService {
     const reply = await this.#psp.pull(attempt.id)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
     if (reply.kind === 'none') return 'not_at_psp'
+    failpoint('webhook.after_pull')
     try {
       return await this.#attempts.receive(await this.#attempts.callFor(attempt), reply.body)
     } catch (error) {

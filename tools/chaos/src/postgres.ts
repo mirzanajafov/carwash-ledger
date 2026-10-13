@@ -63,6 +63,7 @@ export class LocalPostgres {
     const started = performance.now()
     for (;;) {
       const client = new pg.Client({ connectionString: this.adminUrl, connectionTimeoutMillis: 1000 })
+      client.on('error', () => undefined)
       try {
         await client.connect()
         await client.query('SELECT 1')
@@ -73,6 +74,17 @@ export class LocalPostgres {
       } finally {
         await client.end().catch(() => undefined)
       }
+    }
+  }
+
+  async checkpoint(): Promise<void> {
+    const client = new pg.Client({ connectionString: this.adminUrl })
+    client.on('error', () => undefined)
+    await client.connect()
+    try {
+      await client.query('CHECKPOINT')
+    } finally {
+      await client.end()
     }
   }
 

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { ProxyName, ToxicKind } from './plan.ts'
+import type { ToxicKind } from './plan.ts'
 import type { Random } from './random.ts'
 import { between } from './random.ts'
 
@@ -64,7 +64,7 @@ export class Toxiproxy {
     }
   }
 
-  async replaceProxy(name: ProxyName, listenPort: number, upstreamPort: number): Promise<void> {
+  async replaceProxy(name: string, listenPort: number, upstreamPort: number): Promise<void> {
     await this.#call('DELETE', `/proxies/${name}`)
     await this.#call('POST', '/proxies', {
       name,
@@ -74,15 +74,15 @@ export class Toxiproxy {
     })
   }
 
-  setEnabled(name: ProxyName, enabled: boolean): Promise<void> {
+  setEnabled(name: string, enabled: boolean): Promise<void> {
     return this.#call('POST', `/proxies/${name}`, { enabled })
   }
 
-  addToxic(proxy: ProxyName, toxic: Toxic): Promise<void> {
+  addToxic(proxy: string, toxic: Toxic): Promise<void> {
     return this.#call('POST', `/proxies/${proxy}/toxics`, toxic)
   }
 
-  removeToxic(proxy: ProxyName, name: string): Promise<void> {
+  removeToxic(proxy: string, name: string): Promise<void> {
     return this.#call('DELETE', `/proxies/${proxy}/toxics/${name}`)
   }
 

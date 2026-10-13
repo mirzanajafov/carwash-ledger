@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { checkLedger, violations } from '@carwash/invariants'
+import { checkAgainstPsp, checkLedger, checkPayments, checkSettled, violations } from '@carwash/invariants'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Database } from '../src/db/database.ts'
+import { IdempotencyService, type Begun, type OwnedKey } from '../src/idempotency/idempotency.service.ts'
 import { requestHash } from '../src/idempotency/request-hash.ts'
+import { PaymentsService } from '../src/payments/payments.service.ts'
 import { apiConfig, count, startApi, startStack, type CallOptions, type Stack } from './support.ts'
 
 let stack: Stack
@@ -16,6 +18,11 @@ function call(method: string, path: string, options?: CallOptions) {
 
 function pay(token: string, extra: Record<string, unknown> = {}) {
   return { amount: 1500, currency: 'EUR', merchant: 'wash_1', token, ...extra }
+}
+
+function owned(begun: Begun): OwnedKey {
+  if (begun.kind !== 'owned') throw new Error('expected to own the key')
+  return begun.owned
 }
 
 async function balance(code: string): Promise<number> {
@@ -121,6 +128,22 @@ describe('payments API', () => {
     expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, body: { amount: 700, status: 'captured' } })
   })
 
+  it('lets only the request holding the lease create anything with a key, so a slow owner cannot add a second payment', async () => {
+    const idempotency = stack.app.get(IdempotencyService)
+    const payments = stack.app.get(PaymentsService)
+    const key = randomUUID()
+    const body = { amount: 813, currency: 'EUR', merchant: 'wash_1', token: 'tok_ok', capture: 'auto' as const }
+    const slow = owned(await idempotency.begin(stack.clientIds.alice, key, 'POST', '/v1/payments', body))
+    await stack.owner.query(`UPDATE idempotency_keys SET locked_until = now() - interval '1 second' WHERE key = $1`, [key])
+    const retry = owned(await idempotency.begin(stack.clientIds.alice, key, 'POST', '/v1/payments', body))
+    await expect(payments.create(slow, body)).rejects.toMatchObject({ status: 409, code: 'request_in_progress' })
+    expect((await payments.create(retry, body)).body).toMatchObject({ amount: 813, status: 'captured' })
+    await idempotency.abandon(slow)
+    const { rows } = await stack.admin.query<{ id: string }>(`SELECT p.id FROM payments p JOIN idempotency_keys k ON k.key = $1 WHERE p.amount = 813`, [key])
+    expect(rows).toHaveLength(1)
+    expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, replayed: true, body: { id: rows[0]!.id } })
+  })
+
   it('authorizes, captures part of a manual payment, and refuses a second capture without storing it', async () => {
     const created = await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })
     expect(created.body).toMatchObject({ status: 'authorized', captured_amount: 0 })
@@ -165,6 +188,12 @@ describe('payments API', () => {
     expect(paid.body).toMatchObject({ object: 'payout', status: 'succeeded', amount: payable })
     expect((await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body.payable).toBe(0)
     expect(await balance('bank:EUR')).toBe(bank - payable)
+    const nothing = await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })
+    expect(nothing).toMatchObject({ status: 409, body: { error: { code: 'nothing_to_pay_out' } } })
+    await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2', amount: 2000 }) })
+    const swept = await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })
+    expect(swept.body).toMatchObject({ object: 'payout', status: 'succeeded', amount: 1950 })
+    expect((await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body.payable).toBe(0)
     expect((await call('POST', '/v1/payouts', { body: { merchant: 'wash_2', amount: 1, currency: 'EUR' } })).status).toBe(403)
   })
 
@@ -226,18 +255,48 @@ describe('payments API', () => {
     }
   })
 
-  it('caps how long any of its transactions may stay open', async () => {
+  it('caps how long a transaction may stay open and how long a request waits for a connection', async () => {
     const { rows } = await stack.app.get(Database).pool.query<{ transaction_timeout: string; idle_in_transaction_session_timeout: string }>(
       `SELECT current_setting('transaction_timeout') AS transaction_timeout,
               current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout`,
     )
     expect(rows[0]).toEqual({ transaction_timeout: '10s', idle_in_transaction_session_timeout: '10s' })
+    const tight = new Database(apiConfig(stack.ledgerDb.url('ledger_app'), stack.psp.url, { poolSize: 1, connectTimeoutMs: 200 }))
+    const held = await tight.pool.connect()
+    try {
+      const started = Date.now()
+      await expect(tight.pool.query('SELECT 1')).rejects.toThrow('timeout')
+      expect(Date.now() - started).toBeLessThan(2000)
+    } finally {
+      held.release()
+      await tight.onModuleDestroy()
+    }
+  })
+
+  it('answers 503 with Retry-After when it cannot reach the database in time, and the same key works once it can', async () => {
+    const { app, url } = await startApi(apiConfig(stack.ledgerDb.url('ledger_app'), stack.psp.url, { poolSize: 1, connectTimeoutMs: 200 }))
+    const key = randomUUID()
+    try {
+      const held = await app.get(Database).pool.connect()
+      try {
+        const busy = await call('POST', '/v1/payments', { base: url, key, body: pay('tok_ok') })
+        expect(busy.status).toBe(503)
+        expect(busy.body.error.code).toBe('database_unavailable')
+        expect(busy.retryAfter).toBe('1')
+      } finally {
+        held.release()
+      }
+      const served = await call('POST', '/v1/payments', { base: url, key, body: pay('tok_ok') })
+      expect(served.status).toBe(200)
+      expect(served.body.status).toBe('captured')
+    } finally {
+      await app.close()
+    }
   })
 
   it('leaves the books balanced and agreeing with the PSP', async () => {
     expect(violations(await checkLedger(stack.admin))).toEqual([])
-    const pspCaptures = await count(stack.pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND status = 'succeeded'`)
-    const journals = await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref LIKE 'capture:%'`)
-    expect(journals).toBe(pspCaptures)
+    expect(violations(await checkPayments(stack.admin))).toEqual([])
+    expect(violations([await checkAgainstPsp(stack.admin, stack.pspSql), await checkSettled(stack.admin)])).toEqual([])
   })
 })

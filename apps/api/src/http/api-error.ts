@@ -1,5 +1,6 @@
 import { Catch, HttpException, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common'
 import type { Response } from 'express'
+import { databaseUnavailable } from '../db/unavailable.ts'
 
 export class ApiError extends Error {
   readonly status: number
@@ -46,6 +47,12 @@ export class ErrorFilter implements ExceptionFilter {
       status = exception.getStatus()
       code = status === 400 ? 'invalid_request' : status === 404 ? 'not_found' : `http_${status}`
       message = httpExceptionMessage(exception)
+    } else if (databaseUnavailable(exception)) {
+      status = 503
+      code = 'database_unavailable'
+      message = 'the database could not be reached; retry with the same idempotency key'
+      response.setHeader('Retry-After', '1')
+      this.#logger.warn(`database unavailable: ${(exception as Error).message}`)
     } else {
       this.#logger.error((exception as Error)?.stack ?? String(exception))
     }

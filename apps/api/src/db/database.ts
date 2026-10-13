@@ -1,4 +1,5 @@
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common'
+import { failpoint } from '@carwash/failpoints'
 import { withRetry } from '@carwash/ledger'
 import { checkout, createPool } from '@carwash/pg'
 import pg from 'pg'
@@ -12,6 +13,8 @@ export class Database implements OnModuleDestroy {
     this.pool = createPool({
       connectionString: config.databaseUrl,
       max: config.poolSize,
+      connectionTimeoutMillis: config.connectTimeoutMs,
+      query_timeout: config.transactionTimeoutMs + 2000,
       idle_in_transaction_session_timeout: config.transactionTimeoutMs,
       options: `-c transaction_timeout=${config.transactionTimeoutMs}`,
     })
@@ -25,7 +28,9 @@ export class Database implements OnModuleDestroy {
       try {
         await client.query('BEGIN')
         const result = await work(client)
+        failpoint('transaction.before_commit')
         await client.query('COMMIT')
+        failpoint('transaction.after_commit')
         return result
       } catch (error) {
         await client.query('ROLLBACK').catch(() => {

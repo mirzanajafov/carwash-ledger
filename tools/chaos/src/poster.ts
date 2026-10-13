@@ -1,14 +1,12 @@
 import { writeSync } from 'node:fs'
+import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
 import {
   AccountRegistry,
   AlreadyReversedError,
-  armFailpoints,
   createPool,
-  disarmFailpoints,
   DuplicateJournalError,
   InvalidJournalError,
   LedgerRuleError,
-  parseFailpoints,
   PgCtePoster,
   pgAccountLoader,
   UnknownAccountError,

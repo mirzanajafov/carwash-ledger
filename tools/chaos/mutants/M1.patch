@@ -1,0 +1,22 @@
+--- a/packages/db/prisma/migrations/20261009110000_ledger_core/migration.sql
++++ b/packages/db/prisma/migrations/20261009110000_ledger_core/migration.sql
+@@ -54,7 +54,7 @@
+ 
+ CREATE UNIQUE INDEX "accounts_code_key" ON "accounts"("code");
+ 
+-CREATE UNIQUE INDEX "journals_external_ref_key" ON "journals"("external_ref");
++CREATE INDEX "journals_external_ref_key" ON "journals"("external_ref");
+ 
+ CREATE UNIQUE INDEX "journals_reverses_id_key" ON "journals"("reverses_id");
+ 
+--- a/packages/db/prisma/migrations/20261012100000_payments/migration.sql
++++ b/packages/db/prisma/migrations/20261012100000_payments/migration.sql
+@@ -217,7 +217,7 @@
+ CREATE UNIQUE INDEX "attempts_one_live_authorize" ON "attempts" ("payment_id")
+   WHERE "kind" = 'authorize' AND "status" IN ('pending', 'succeeded');
+ 
+-CREATE UNIQUE INDEX "attempts_one_live_settlement" ON "attempts" ("payment_id")
++CREATE INDEX "attempts_one_live_settlement" ON "attempts" ("payment_id")
+   WHERE "kind" IN ('capture', 'cancel') AND "status" IN ('pending', 'succeeded');
+ 
+ CREATE UNIQUE INDEX "attempts_one_live_refund" ON "attempts" ("refund_id")

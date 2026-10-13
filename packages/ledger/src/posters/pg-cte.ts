@@ -1,8 +1,8 @@
+import { failpoint } from '@carwash/failpoints'
 import { checkout } from '@carwash/pg'
 import type pg from 'pg'
-import type { AccountRegistry } from '../accounts.ts'
+import { pgAccountLoader, type AccountRegistry } from '../accounts.ts'
 import { InvalidJournalError } from '../errors.ts'
-import { failpoint } from '../failpoints.ts'
 import { deltaParams, entryParams, lockParams, planJournal, type JournalPlan } from '../plan.ts'
 import type { RetryOptions } from '../retry.ts'
 import { LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'
@@ -11,7 +11,8 @@ import type { JournalInput, PostedJournal, Poster } from '../types.ts'
 import { beginStatement, expectApplied, postWith } from './common.ts'
 
 export async function postInTransaction(client: pg.ClientBase, registry: AccountRegistry, input: JournalInput): Promise<bigint> {
-  const plan = planJournal(input, await registry.resolve(input.entries.map((e) => e.accountId)))
+  const accounts = await registry.resolve(input.entries.map((e) => e.accountId), pgAccountLoader(client))
+  const plan = planJournal(input, accounts)
   if (plan.isolation === 'serializable') {
     throw new InvalidJournalError('a journal touching serializable accounts needs its own transaction')
   }

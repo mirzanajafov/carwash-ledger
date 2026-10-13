@@ -7,10 +7,10 @@ services:
       dockerfile: tools/chaos/Dockerfile
       args:
         MUTANT: ${MUTANT:-}
-    image: carwash-chaos:${MUTANT:-base}
+    image: carwash-chaos:${MUTANT_TAG:-base}
     init: true
     cpus: 4
-    mem_limit: 1536m
+    mem_limit: 2560m
     shm_size: 256m
     environment:
       GIT_COMMIT: ${GIT_COMMIT:-unknown}

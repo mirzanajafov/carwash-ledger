@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { checkLedger, violations } from '@carwash/invariants'
+import { checkAgainstPsp, checkLedger, checkPayments, violations } from '@carwash/invariants'
 import { NO_FAULTS } from '@carwash/psp'
 import type { INestApplication, INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
@@ -200,9 +200,19 @@ describe('the recovery job', () => {
     }
   })
 
+  it('leaves an attempt whose answer it refused for a person, instead of asking again forever', async () => {
+    const key = randomUUID()
+    expect((await call('POST', '/v1/payments', { key, body: pay('tok_wrong_amount_capture') })).body.error.code).toBe('psp_answer_rejected')
+    const capture = await attemptOf(await paymentIdForKey(key), 'capture')
+    const outcomes = await recovery.recoverPending(0)
+    expect(outcomes.get('anomaly')).toBeUndefined()
+    expect((await loadAttempt(stack.admin, capture))!.status).toBe('pending')
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM anomalies WHERE attempt_id = $1 AND kind = 'answer_mismatch'`, [capture])).toBe(1)
+  })
+
   it('leaves the books balanced and agreeing with the PSP', async () => {
     expect(violations(await checkLedger(stack.admin))).toEqual([])
-    const pspCaptures = await count(stack.pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND status = 'succeeded'`)
-    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref LIKE 'capture:%'`)).toBe(pspCaptures)
+    expect(violations(await checkPayments(stack.admin))).toEqual([])
+    expect(violations([await checkAgainstPsp(stack.admin, stack.pspSql)])).toEqual([])
   })
 })

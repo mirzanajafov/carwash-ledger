@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@carwash/db": "workspace:*",
+    "@carwash/failpoints": "workspace:*",
     "@carwash/pg": "workspace:*",
     "pg": "^8.23.0"
   },

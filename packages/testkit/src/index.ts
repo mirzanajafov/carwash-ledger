@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { createPool } from '@carwash/pg'
 import pg from 'pg'
 
 export type Role = 'ledger_owner' | 'ledger_app' | 'ledger_audit' | 'admin'
@@ -33,6 +34,7 @@ function quoteIdent(name: string): string {
 
 async function withAdmin<T>(run: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: ADMIN_URL })
+  client.on('error', () => undefined)
   await client.connect()
   try {
     return await run(client)
@@ -78,8 +80,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     name,
     url: (role) => databaseUrl(role, name),
     pool: (role, max = 10) => {
-      const pool = new pg.Pool({ connectionString: databaseUrl(role, name), max })
-      pool.on('error', () => undefined)
+      const pool = createPool({ connectionString: databaseUrl(role, name), max })
       pools.push(pool)
       return pool
     },
