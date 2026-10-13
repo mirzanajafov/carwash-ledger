@@ -71,6 +71,9 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     recoveryAfterSeconds: 30,
     recoveryEveryMs: 0,
     webhookRetentionDays: 7,
+    kafkaBrokers: [],
+    relayWorkers: 4,
+    outboxRetentionHours: 24,
     ...overrides,
   }
 }

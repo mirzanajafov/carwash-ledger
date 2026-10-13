@@ -9,6 +9,8 @@ export const FAILPOINTS = [
   'request.before_finish',
   'webhook.after_pull',
   'recovery.after_pull',
+  'relay.before_produce',
+  'relay.after_produce',
 ] as const
 
 export type FailpointName = (typeof FAILPOINTS)[number]

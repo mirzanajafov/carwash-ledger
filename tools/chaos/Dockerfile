@@ -8,6 +8,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/db/package.json packages/db/
 COPY packages/failpoints/package.json packages/failpoints/
 COPY packages/ledger/package.json packages/ledger/
+COPY packages/outbox/package.json packages/outbox/
 COPY packages/pg/package.json packages/pg/
 COPY packages/invariants/package.json packages/invariants/
 COPY packages/testkit/package.json packages/testkit/

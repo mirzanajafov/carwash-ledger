@@ -26,6 +26,9 @@ export interface ApiConfig {
   recoveryAfterSeconds: number
   recoveryEveryMs: number
   webhookRetentionDays: number
+  kafkaBrokers: readonly string[]
+  relayWorkers: number
+  outboxRetentionHours: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -73,5 +76,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     recoveryAfterSeconds: integer(env, 'RECOVERY_AFTER_SECONDS', 30),
     recoveryEveryMs: integer(env, 'RECOVERY_EVERY_MS', 5000),
     webhookRetentionDays: integer(env, 'WEBHOOK_RETENTION_DAYS', 7),
+    kafkaBrokers: (env.KAFKA_BROKERS ?? '').split(',').map((b) => b.trim()).filter((b) => b.length > 0),
+    relayWorkers: integer(env, 'RELAY_WORKERS', 4),
+    outboxRetentionHours: integer(env, 'OUTBOX_RETENTION_HOURS', 24),
   }
 }

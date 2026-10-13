@@ -4,5 +4,6 @@ packages:
   - "tools/*"
 
 allowBuilds:
+  "@confluentinc/kafka-javascript": true
   "@prisma/engines": true
   prisma: true

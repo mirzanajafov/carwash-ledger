@@ -15,6 +15,7 @@
   "dependencies": {
     "@carwash/failpoints": "workspace:*",
     "@carwash/ledger": "workspace:*",
+    "@carwash/outbox": "workspace:*",
     "@carwash/pg": "workspace:*",
     "@nestjs/common": "^12.1.2",
     "@nestjs/core": "^12.1.2",

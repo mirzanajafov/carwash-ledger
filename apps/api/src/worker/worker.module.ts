@@ -9,6 +9,7 @@ import { Chart } from '../ledger/chart.service.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
+import { OutboxRelay } from './outbox-relay.service.ts'
 import { Recovery } from './recovery.service.ts'
 
 @Module({})
@@ -25,6 +26,7 @@ export class WorkerModule {
         IdempotencyService,
         AttemptsService,
         WebhooksService,
+        OutboxRelay,
         Recovery,
         { provide: APP_FILTER, useClass: ErrorFilter },
       ],
