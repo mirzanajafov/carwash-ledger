@@ -40,7 +40,7 @@ export interface RunPlan {
   faults: Fault[]
 }
 
-function arrivals(random: Random, meanMs: number, durationMs: number): number[] {
+export function arrivals(random: Random, meanMs: number, durationMs: number): number[] {
   if (!(meanMs > 0)) return []
   const times: number[] = []
   for (let t = exponential(random, meanMs); t < durationMs; t += exponential(random, meanMs)) times.push(Math.round(t))

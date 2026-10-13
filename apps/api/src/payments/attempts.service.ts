@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
 import type pg from 'pg'
 import { Database } from '../db/database.ts'
@@ -46,6 +47,7 @@ export class AttemptsService {
     const call = await this.callFor(attempt)
     const reply = await this.#psp.send(call)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
+    failpoint('attempt.after_psp')
     return this.receive(call, reply.body)
   }
 

@@ -1,4 +1,5 @@
 import { checkLedger, violations } from '@carwash/invariants'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   AccountRegistry,
@@ -55,6 +56,24 @@ describe('postInTransaction', () => {
     expect(await storedBalance(sharded.receivable.id)).toBe(1000n)
     expect(await storedBalance(sharded.merchants[0]!.id)).toBe(-970n)
     expect(violations(await checkLedger(ledger.admin))).toEqual([])
+  })
+
+  it("looks unknown accounts up on the transaction's own connection, so a full pool cannot stall it", async () => {
+    const single = ledger.db.pool('ledger_app', 1)
+    const cold = new AccountRegistry(pgAccountLoader(single))
+    const lease = await checkout(single)
+    try {
+      await lease.client.query('BEGIN')
+      const posted = postInTransaction(lease.client, cold, { externalRef: 'tx:full-pool', entries: capture(locked, 1, 500n, 15n) })
+      const stalled = sleep(5000, undefined, { ref: false }).then(() => {
+        throw new Error('the posting waited for a second connection from its own full pool')
+      })
+      expect(await Promise.race([posted, stalled])).toBeGreaterThan(0n)
+      await lease.client.query('COMMIT')
+    } finally {
+      lease.release()
+    }
+    expect(await journalCount('tx:full-pool')).toBe(1)
   })
 
   it('holds a locked account until the outer transaction ends', async () => {

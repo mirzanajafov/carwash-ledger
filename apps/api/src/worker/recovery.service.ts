@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common'
+import { failpoint } from '@carwash/failpoints'
 import { takeSnapshots } from '@carwash/ledger'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
@@ -60,6 +61,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     const { rows } = await this.#db.pool.query<AttemptRecord>(
       `SELECT ${ATTEMPT_COLUMNS} FROM attempts
        WHERE status = 'pending' AND created_at <= now() - make_interval(secs => $1)
+         AND NOT EXISTS (SELECT 1 FROM anomalies WHERE anomalies.attempt_id = attempts.id)
        ORDER BY created_at LIMIT $2`,
       [olderThanSeconds, batch],
     )
@@ -77,6 +79,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
       const reply = await this.#psp.pull(attempt.id)
       if (reply.kind === 'unknown') return 'unknown'
       if (reply.kind === 'none') return await this.#attempts.settle(attempt)
+      failpoint('recovery.after_pull')
       return await this.#attempts.receive(await this.#attempts.callFor(attempt), reply.body)
     } catch (error) {
       if (error instanceof ApiError && error.code === 'psp_unavailable') return 'unknown'

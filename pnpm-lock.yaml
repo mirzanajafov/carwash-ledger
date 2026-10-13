@@ -10,6 +10,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@carwash/failpoints':
+        specifier: workspace:*
+        version: link:../../packages/failpoints
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
@@ -122,8 +125,23 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
+  packages/failpoints:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
   packages/invariants:
     dependencies:
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../pg
       pg:
         specifier: ^8.23.0
         version: 8.23.1
@@ -149,6 +167,9 @@ importers:
       '@carwash/db':
         specifier: workspace:*
         version: link:../db
+      '@carwash/failpoints':
+        specifier: workspace:*
+        version: link:../failpoints
       '@carwash/pg':
         specifier: workspace:*
         version: link:../pg
@@ -196,6 +217,9 @@ importers:
 
   packages/testkit:
     dependencies:
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../pg
       pg:
         specifier: ^8.23.0
         version: 8.23.1
@@ -240,12 +264,18 @@ importers:
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@carwash/failpoints':
+        specifier: workspace:*
+        version: link:../../packages/failpoints
       '@carwash/invariants':
         specifier: workspace:*
         version: link:../../packages/invariants
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../../packages/pg
       '@carwash/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit

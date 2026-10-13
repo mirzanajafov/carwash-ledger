@@ -1,0 +1,26 @@
+--- a/apps/api/src/webhooks/webhooks.service.ts
++++ b/apps/api/src/webhooks/webhooks.service.ts
+@@ -47,7 +47,7 @@
+   async handle(event: PspEvent): Promise<{ received: true; outcome: string; duplicate?: true }> {
+     const seen = await this.#db.pool.query<{ outcome: string }>('SELECT outcome FROM webhook_events WHERE id = $1', [event.id])
+     if (seen.rows[0]) return { received: true, outcome: seen.rows[0].outcome, duplicate: true }
+-    const outcome = await this.check(event.attemptKey)
++    const outcome = await this.check(event.attemptKey, event.payload)
+     await this.#db.pool.query(
+       `INSERT INTO webhook_events (id, type, attempt_id, outcome, payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
+       [event.id, event.type, outcome === 'unmatched' ? null : event.attemptKey, outcome, JSON.stringify(event.payload)],
+@@ -55,11 +55,12 @@
+     return { received: true, outcome }
+   }
+ 
+-  async check(attemptKey: string): Promise<CheckOutcome> {
++  async check(attemptKey: string, payload?: unknown): Promise<CheckOutcome> {
+     const attempt = UUID.test(attemptKey) ? await loadAttempt(this.#db.pool, attemptKey) : undefined
+     if (!attempt) return 'unmatched'
+     if (attempt.status !== 'pending') return 'already'
+-    const reply = await this.#psp.pull(attempt.id)
++    const sent = (payload as { data?: { object?: unknown } } | undefined)?.data?.object
++    const reply = sent === undefined ? await this.#psp.pull(attempt.id) : { kind: 'answer' as const, body: sent }
+     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
+     if (reply.kind === 'none') return 'not_at_psp'
+     failpoint('webhook.after_pull')

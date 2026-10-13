@@ -63,16 +63,8 @@ export function createPspServer(psp: Psp, faults: Faults, options: ServerOptions
     }
     if (path === '/v1/payouts') {
       onlyFields(body, ['amount', 'currency', 'destination'])
-      const amount = amountField(body, 'amount')
-      const currency = currencyField(body, 'currency')
-      const destination = textField(body, 'destination')
-      return psp.execute({
-        key,
-        kind: 'payout',
-        hash,
-        token: { kind: 'ok' },
-        apply: async () => ({ status: 'succeeded', httpStatus: 200, amount, currency, destination }),
-      })
+      const input = { amount: amountField(body, 'amount'), currency: currencyField(body, 'currency'), destination: textField(body, 'destination') }
+      return psp.execute({ key, kind: 'payout', hash, token: { kind: 'ok' }, apply: async (_client, behaviour) => psp.payout(behaviour, input) })
     }
     const action = CHARGE_ACTION.exec(path)
     if (!action) throw new HttpError(404, 'not_found', `no route POST ${path}`)
@@ -82,14 +74,14 @@ export function createPspServer(psp: Psp, faults: Faults, options: ServerOptions
     if (action[2] === 'capture') {
       onlyFields(body, ['amount'])
       const amount = optionalAmountField(body, 'amount')
-      operation = { kind: 'capture', apply: (client) => psp.capture(client, chargeId, amount) }
+      operation = { kind: 'capture', apply: (client, behaviour) => psp.capture(client, behaviour, chargeId, amount) }
     } else if (action[2] === 'cancel') {
       onlyFields(body, [])
       operation = { kind: 'cancel', apply: (client) => psp.cancel(client, chargeId) }
     } else {
       onlyFields(body, ['amount'])
       const amount = amountField(body, 'amount')
-      operation = { kind: 'refund', apply: (client) => psp.refund(client, chargeId, amount) }
+      operation = { kind: 'refund', apply: (client, behaviour) => psp.refund(client, behaviour, chargeId, amount) }
     }
     return psp.execute({ key, hash, token, ...operation })
   }

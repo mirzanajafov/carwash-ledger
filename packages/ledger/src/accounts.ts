@@ -46,11 +46,11 @@ export class AccountRegistry {
     this.#load = load
   }
 
-  async resolve(ids: Iterable<bigint>): Promise<Map<bigint, Account>> {
+  async resolve(ids: Iterable<bigint>, load: AccountLoader = this.#load): Promise<Map<bigint, Account>> {
     const wanted = [...new Set(ids)]
     const missing = wanted.filter((id) => !this.#accounts.has(id))
     if (missing.length > 0) {
-      for (const account of await this.#load(missing)) this.#accounts.set(account.id, account)
+      for (const account of await load(missing)) this.#accounts.set(account.id, account)
     }
     const unknown = wanted.filter((id) => !this.#accounts.has(id))
     if (unknown.length > 0) throw new UnknownAccountError(unknown)

@@ -1,0 +1,30 @@
+--- a/apps/api/src/payments/attempts.service.ts
++++ b/apps/api/src/payments/attempts.service.ts
+@@ -116,7 +116,7 @@
+   async #resolve(client: pg.ClientBase, attempt: AttemptRecord, answer: PspAnswer): Promise<boolean> {
+     const updated = await client.query(
+       `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
+-       WHERE id = $1 AND status = 'pending'`,
++       WHERE id = $1`,
+       [attempt.id, answer.status, answer.operationId, answer.reason],
+     )
+     if (updated.rowCount === 1) return true
+@@ -136,7 +136,7 @@
+     const assignments = columns.map((column, index) => `, ${column} = $${index + 4}`).join('')
+     const moved = await client.query(
+       `UPDATE payments SET status = $3::payment_status, updated_at = now()${assignments}
+-       WHERE id = $1 AND status = $2::payment_status`,
++       WHERE id = $1 AND $2::payment_status IS NOT NULL`,
+       [paymentId, from, to, ...columns.map((column) => set[column])],
+     )
+     if (moved.rowCount !== 1) throw new Error(`payment ${paymentId} was not ${from} when it should have moved to ${to}`)
+--- a/apps/api/src/payments/payment-state.ts
++++ b/apps/api/src/payments/payment-state.ts
+@@ -34,7 +34,6 @@
+   reason: string | null,
+ ): Resolution {
+   const from = EXPECTED_FROM[kind]
+-  if (current !== from) return { kind: 'anomaly', reason: `${kind} ${status} while the payment is ${current}` }
+   if (status === 'succeeded') {
+     const to: PaymentStatus = kind === 'authorize' ? 'authorized' : kind === 'capture' ? 'captured' : 'canceled'
+     return { kind: 'move', from, to }

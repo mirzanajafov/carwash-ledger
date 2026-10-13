@@ -44,10 +44,11 @@ export class PayoutBody {
   @Matches(CODE, { message: 'merchant must be a merchant code' })
   merchant!: string
 
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(MAX_AMOUNT)
-  amount!: number
+  amount?: number
 
   @Matches(CURRENCY, { message: 'currency must be a three-letter currency code' })
   currency!: string

@@ -17,6 +17,7 @@
     "test:db": "vitest run --config vitest.db.config.ts"
   },
   "dependencies": {
+    "@carwash/pg": "workspace:*",
     "pg": "^8.23.0"
   },
   "devDependencies": {

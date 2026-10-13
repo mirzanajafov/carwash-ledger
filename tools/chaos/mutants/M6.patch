@@ -1,0 +1,10 @@
+--- a/apps/api/src/psp/answers.ts
++++ b/apps/api/src/psp/answers.ts
+@@ -45,7 +45,6 @@
+   if (reason !== null && typeof reason !== 'string') problems.push('reason is not a string')
+ 
+   const amount = field(body, 'amount')
+-  expect('amount', minorUnits(amount), expected.amount)
+   expect('currency', field(body, 'currency'), expected.currency)
+ 
+   if (expected.kind === 'authorize') {

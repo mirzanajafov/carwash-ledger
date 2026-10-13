@@ -1,25 +1,6 @@
 import type pg from 'pg'
+import { collect, inSnapshot, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
-
-const EXAMPLES = 5
-
-interface Check {
-  sql: string
-}
-
-async function collect(client: pg.ClientBase, checks: readonly Check[]): Promise<{ count: number; examples: string[] }> {
-  let count = 0
-  const examples: string[] = []
-  for (const check of checks) {
-    const result = await client.query<{ detail: string; total: string }>(
-      `SELECT detail, count(*) OVER () AS total FROM (${check.sql}) AS v LIMIT ${EXAMPLES}`,
-    )
-    if (result.rows.length === 0) continue
-    count += Number(result.rows[0]!.total)
-    for (const row of result.rows) if (examples.length < EXAMPLES) examples.push(row.detail)
-  }
-  return { count, examples }
-}
 
 const JOURNALS_BALANCE: readonly Check[] = [
   {
@@ -108,17 +89,6 @@ export async function checkLedgerIn(client: pg.ClientBase): Promise<InvariantRes
   ]
 }
 
-export async function checkLedger(pool: pg.Pool): Promise<InvariantResult[]> {
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-    const results = await checkLedgerIn(client)
-    await client.query('COMMIT')
-    return results
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined)
-    throw error
-  } finally {
-    client.release()
-  }
+export function checkLedger(pool: pg.Pool): Promise<InvariantResult[]> {
+  return inSnapshot(pool, checkLedgerIn)
 }

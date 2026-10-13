@@ -289,6 +289,7 @@ model IdempotencyKey {
   refundId       String?          @map("refund_id") @db.Uuid
   payoutId       String?          @map("payout_id") @db.Uuid
   lockedUntil    DateTime?        @map("locked_until") @db.Timestamptz(6)
+  leaseId        String?          @map("lease_id") @db.Uuid
   responseStatus Int?             @map("response_status")
   responseBody   Json?            @map("response_body")
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)

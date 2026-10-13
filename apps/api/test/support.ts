@@ -51,6 +51,7 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     port: 0,
     databaseUrl,
     poolSize: 10,
+    connectTimeoutMs: 5000,
     transactionTimeoutMs: 10_000,
     pspUrl,
     pspApiKey: 'sk_test_api',

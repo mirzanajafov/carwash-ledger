@@ -254,9 +254,9 @@ export class Psp {
     return { status: 'succeeded', httpStatus: 200, chargeId, amount, currency }
   }
 
-  async capture(client: pg.PoolClient, chargeId: string, amount: number | undefined): Promise<Outcome> {
+  async capture(client: pg.PoolClient, behaviour: Behaviour, chargeId: string, amount: number | undefined): Promise<Outcome> {
     const charge = await this.#lockCharge(client, chargeId)
-    const captured = amount ?? Number(charge.authorized_amount)
+    const captured = misstated(behaviour, amount ?? Number(charge.authorized_amount))
     const declined = (httpStatus: number, reason: string): Outcome => ({
       status: 'declined',
       httpStatus,
@@ -284,13 +284,22 @@ export class Psp {
     return { status: 'succeeded', httpStatus: 200, chargeId, amount, currency: charge.currency }
   }
 
-  async refund(client: pg.PoolClient, chargeId: string, amount: number): Promise<Outcome> {
+  async refund(client: pg.PoolClient, behaviour: Behaviour, chargeId: string, requested: number): Promise<Outcome> {
+    const amount = misstated(behaviour, requested)
     const charge = await this.#lockCharge(client, chargeId)
     const declined = (reason: string): Outcome => ({ status: 'declined', httpStatus: 409, reason, chargeId, amount, currency: charge.currency })
     if (charge.status !== 'captured') return declined('charge_not_captured')
     if (Number(charge.refunded_amount) + amount > Number(charge.captured_amount)) return declined('refund_exceeds_captured')
     await client.query('UPDATE charges SET refunded_amount = refunded_amount + $2 WHERE id = $1', [chargeId, amount])
     return { status: 'succeeded', httpStatus: 200, chargeId, amount, currency: charge.currency }
+  }
+
+  payout(behaviour: Behaviour, input: PayoutInput): Outcome {
+    const { currency, destination } = input
+    if (behaviour.decline) {
+      return { status: 'declined', httpStatus: 402, reason: 'payout_rejected', amount: input.amount, currency, destination }
+    }
+    return { status: 'succeeded', httpStatus: 200, amount: misstated(behaviour, input.amount), currency, destination }
   }
 
   async #lockCharge(client: pg.PoolClient, chargeId: string): Promise<ChargeRow> {
@@ -334,6 +343,17 @@ export class Psp {
       )
     }
   }
+}
+
+function misstated(behaviour: Behaviour, amount: number): number {
+  if (!behaviour.wrongAmount) return amount
+  return amount > 1 ? amount - 1 : amount + 1
+}
+
+export interface PayoutInput {
+  amount: number
+  currency: string
+  destination: string
 }
 
 export interface AuthorizeInput {

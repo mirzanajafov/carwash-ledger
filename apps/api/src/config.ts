@@ -6,6 +6,7 @@ export interface ApiConfig {
   port: number
   databaseUrl: string
   poolSize: number
+  connectTimeoutMs: number
   transactionTimeoutMs: number
   pspUrl: string
   pspApiKey: string
@@ -52,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     port: integer(env, 'PORT', 3140),
     databaseUrl: required(env, 'DATABASE_URL'),
     poolSize: integer(env, 'DATABASE_POOL_SIZE', 10),
+    connectTimeoutMs: integer(env, 'DATABASE_CONNECT_TIMEOUT_MS', 5000),
     transactionTimeoutMs: integer(env, 'TRANSACTION_TIMEOUT_MS', 10_000),
     pspUrl: required(env, 'PSP_URL'),
     pspApiKey: required(env, 'PSP_API_KEY'),

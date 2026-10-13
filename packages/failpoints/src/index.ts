@@ -1,4 +1,15 @@
-export const FAILPOINTS = ['post.after_lock', 'post.before_commit', 'post.after_commit', 'snapshot.before_commit'] as const
+export const FAILPOINTS = [
+  'post.after_lock',
+  'post.before_commit',
+  'post.after_commit',
+  'snapshot.before_commit',
+  'transaction.before_commit',
+  'transaction.after_commit',
+  'attempt.after_psp',
+  'request.before_finish',
+  'webhook.after_pull',
+  'recovery.after_pull',
+] as const
 
 export type FailpointName = (typeof FAILPOINTS)[number]
 
