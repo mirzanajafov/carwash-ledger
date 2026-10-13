@@ -1,0 +1,119 @@
+{
+  "mode": "payments",
+  "mutant": null,
+  "runs": 5,
+  "journeys": 2249,
+  "payouts": 290,
+  "outcomes": {
+    "captured": 1383,
+    "declined": 92,
+    "refunded": 234,
+    "canceled": 142,
+    "part refunded": 388,
+    "refused": 10
+  },
+  "payoutOutcomes": {
+    "succeeded": 212,
+    "nothing to pay out": 68,
+    "failed": 10
+  },
+  "requests": 4596,
+  "sends": 10068,
+  "duplicates": 148,
+  "probes": 66,
+  "answers": {
+    "200": 4320,
+    "409 nothing_to_pay_out": 68,
+    "402 card_declined": 92,
+    "409 request_in_progress": 2028,
+    "503 psp_unavailable": 894,
+    "422 idempotency_key_reused": 66,
+    "network error": 979,
+    "503 database_unavailable": 1567,
+    "409 payment_not_capturable": 44,
+    "502 psp_answer_rejected": 10
+  },
+  "surprises": 0,
+  "forged": {
+    "nothing pending": 11,
+    "payout not_at_psp": 6,
+    "capture not_at_psp": 35,
+    "no database": 14,
+    "capture applied": 10,
+    "payout already": 4,
+    "capture anomaly": 2,
+    "capture http 503": 20,
+    "no api": 10,
+    "capture not delivered": 8,
+    "payout not delivered": 1,
+    "capture already": 9,
+    "payout http 503": 3,
+    "payout applied": 3
+  },
+  "randomKills": {
+    "api-0": 12,
+    "api-1": 14,
+    "worker": 14
+  },
+  "failpointKills": {
+    "attempt.after_psp": 12,
+    "request.before_finish": 4,
+    "transaction.after_commit": 5,
+    "transaction.before_commit": 6,
+    "post.after_lock": 6,
+    "webhook.after_pull": 1
+  },
+  "exits": {
+    "killed": 40,
+    "failpoint": 34,
+    "boot": 7,
+    "crash": 0,
+    "stopped": 20
+  },
+  "starts": {
+    "psp": 5,
+    "api-0": 38,
+    "api-1": 36,
+    "worker": 22
+  },
+  "postgresKills": 8,
+  "postgresRecoveryMsMedian": 535,
+  "toxics": {
+    "latency": 6,
+    "timeout": 8,
+    "reset_peer": 2,
+    "limit_data": 7,
+    "down": 14
+  },
+  "toxicsByProxy": {
+    "api-0-db": 5,
+    "api-1-db": 3,
+    "worker-db": 8,
+    "psp": 16,
+    "webhooks": 5
+  },
+  "anomalies": {
+    "answer_mismatch": 10
+  },
+  "webhooks": {
+    "applied": 253,
+    "already": 5218,
+    "anomaly": 11,
+    "not_at_psp": 41
+  },
+  "pspOperations": {
+    "cancel succeeded": 142,
+    "authorize succeeded": 2157,
+    "authorize declined": 92,
+    "payout declined": 10,
+    "capture succeeded": 2015,
+    "payout succeeded": 212,
+    "refund succeeded": 1214
+  },
+  "settleMsMedian": 8631,
+  "settleMsMax": 10119,
+  "runsWithViolations": 0,
+  "violationsByInvariant": {},
+  "firstViolatingRun": null,
+  "harnessErrors": 0
+}

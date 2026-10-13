@@ -1,0 +1,114 @@
+{
+  "mode": "payments",
+  "mutant": "M8",
+  "runs": 1,
+  "journeys": 464,
+  "payouts": 60,
+  "outcomes": {
+    "captured": 280,
+    "canceled": 34,
+    "declined": 27,
+    "part refunded": 74,
+    "refunded": 49
+  },
+  "payoutOutcomes": {
+    "nothing to pay out": 13,
+    "succeeded": 41,
+    "failed": 6
+  },
+  "requests": 931,
+  "sends": 3152,
+  "duplicates": 15,
+  "probes": 13,
+  "answers": {
+    "200": 873,
+    "503 psp_unavailable": 182,
+    "409 nothing_to_pay_out": 13,
+    "402 authorization_expired": 12,
+    "network error": 458,
+    "409 request_in_progress": 840,
+    "422 idempotency_key_reused": 13,
+    "500 internal_error": 741,
+    "402 card_declined": 15,
+    "409 payment_not_capturable": 5
+  },
+  "surprises": 0,
+  "forged": {
+    "capture applied": 11,
+    "payout applied": 2,
+    "no database": 7,
+    "capture not delivered": 6,
+    "capture already": 3,
+    "no api": 2,
+    "payout http 500": 2,
+    "capture http 500": 2
+  },
+  "randomKills": {
+    "api-0": 3,
+    "api-1": 1,
+    "worker": 3
+  },
+  "failpointKills": {
+    "request.before_finish": 1,
+    "transaction.after_commit": 3,
+    "post.after_lock": 3,
+    "transaction.before_commit": 1,
+    "attempt.after_psp": 1
+  },
+  "exits": {
+    "killed": 7,
+    "failpoint": 9,
+    "boot": 3,
+    "crash": 0,
+    "stopped": 4
+  },
+  "starts": {
+    "psp": 1,
+    "api-0": 9,
+    "api-1": 9,
+    "worker": 4
+  },
+  "postgresKills": 2,
+  "postgresRecoveryMsMedian": 450,
+  "toxics": {
+    "latency": 1,
+    "timeout": 0,
+    "reset_peer": 0,
+    "limit_data": 0,
+    "down": 5
+  },
+  "toxicsByProxy": {
+    "api-0-db": 2,
+    "api-1-db": 1,
+    "worker-db": 0,
+    "psp": 3,
+    "webhooks": 0
+  },
+  "anomalies": {
+    "answer_changed": 6
+  },
+  "webhooks": {
+    "applied": 53,
+    "already": 1027
+  },
+  "pspOperations": {
+    "cancel succeeded": 34,
+    "authorize succeeded": 449,
+    "authorize declined": 15,
+    "payout declined": 4,
+    "capture succeeded": 410,
+    "payout succeeded": 43,
+    "refund succeeded": 243
+  },
+  "settleMsMedian": 9616,
+  "settleMsMax": 9616,
+  "runsWithViolations": 1,
+  "violationsByInvariant": {
+    "S4": {
+      "runs": 1,
+      "count": 23
+    }
+  },
+  "firstViolatingRun": 1,
+  "harnessErrors": 0
+}
