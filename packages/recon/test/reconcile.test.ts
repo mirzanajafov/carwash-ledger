@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contractFee, reconcile, type FileLine, type LedgerItem, type ReconcileOptions } from '../src/index.ts'
+import { contractFee, reconcile, window, type FileLine, type LedgerItem, type ReconcileOptions } from '../src/index.ts'
 
 const contract = { bps: 120n, fixed: 8n }
 const options: ReconcileOptions = { contract, fallback: 'unique', settledThrough: 11 }
@@ -62,5 +62,11 @@ describe('reconcile', () => {
     const oldest = reconcile([blind, lineFor(b)], [{ ...a, resolvedAt: 9 }, b, twin], { ...options, fallback: 'oldest' })
     expect(oldest.matches.find((m) => m.how === 'fallback')!.item.attemptId).toBe('att-twin')
     expect(classes(oldest)).toEqual(['missing_line'])
+  })
+})
+
+describe('window', () => {
+  it('keeps a week of breaks, and reads the file of the day before it and the payments of the day after', () => {
+    expect(window(14, 7)).toEqual({ linesFrom: 6, linesThrough: 14, itemsFrom: 6, itemsThrough: 15, keepFrom: 7, keepThrough: 14 })
   })
 })
