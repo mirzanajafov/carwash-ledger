@@ -87,6 +87,9 @@ beforeAll(async () => {
       idempotencyWindowSeconds: 24 * 3600,
       hangMs: 1500,
       faultPlan: NO_FAULTS,
+      settlementDaySeconds: 86_400,
+      feeBps: 120,
+      feeFixed: 8,
     },
     () => undefined,
   )
@@ -279,5 +282,64 @@ describe('PSP simulator', () => {
     expect(set.body).toMatchObject({ seed: 3, decline: 1, fail: 0 })
     const reply = await call('POST', '/v1/charges', { key: randomUUID(), body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })
     expect(reply.body).toMatchObject({ status: 'declined', reason: 'card_declined' })
+  })
+})
+
+interface FileLine {
+  line: number
+  operation: string
+  reference: string
+  kind: string
+  gross: number
+  fee: number
+  net: number
+}
+
+async function settlementFile(day: number): Promise<{ status: number; text: string; head: Record<string, string>; lines: FileLine[] }> {
+  const response = await fetch(`${running.url}/v1/settlements/${day}?currency=EUR`, { headers: { authorization: `Bearer ${API_KEY}` } })
+  const text = await response.text()
+  if (response.status !== 200) return { status: response.status, text, head: {}, lines: [] }
+  const [headNames, headValues, , ...rows] = text.trim().split('\n')
+  const head = Object.fromEntries(headNames!.split(',').map((name, i) => [name, headValues!.split(',')[i]!]))
+  const lines = rows.map((row) => {
+    const [line, operation, reference, kind, gross, fee, net] = row.split(',')
+    return { line: Number(line), operation: operation!, reference: reference!, kind: kind!, gross: Number(gross), fee: Number(fee), net: Number(net) }
+  })
+  return { status: 200, text, head, lines }
+}
+
+describe('settlement files', () => {
+  it('settles a closed day once, with the contracted fee, and serves the same file again', async () => {
+    const { current_day: today } = (await call('GET', '/v1/settlements')).body
+    expect((await settlementFile(today)).status).toBe(404)
+    const chargeId = await authorize('tok_ok', 2400)
+    const captureKey = randomUUID()
+    const refundKey = randomUUID()
+    expect((await call('POST', `/v1/charges/${chargeId}/capture`, { key: captureKey, body: {} })).status).toBe(200)
+    expect((await call('POST', `/v1/charges/${chargeId}/refunds`, { key: refundKey, body: { amount: 400 } })).status).toBe(200)
+    expect((await call('PUT', `/admin/settlements/${today}/close`, { auth: ADMIN_KEY })).body).toEqual({ day: today, closed: true })
+
+    const file = await settlementFile(today)
+    expect(file.status).toBe(200)
+    expect(file.lines.find((l) => l.reference === captureKey)).toMatchObject({ kind: 'capture', gross: 2400, fee: 37, net: 2363 })
+    expect(file.lines.find((l) => l.reference === refundKey)).toMatchObject({ kind: 'refund', gross: -400, fee: 0, net: -400 })
+    expect(file.lines.map((l) => l.line)).toEqual(file.lines.map((_, i) => i + 1))
+    expect(Number(file.head.gross)).toBe(file.lines.reduce((sum, l) => sum + l.gross, 0))
+    expect(Number(file.head.net)).toBe(Number(file.head.gross) - Number(file.head.fee))
+    expect(file.head).toMatchObject({ file: `stl_EUR_${today}`, day: String(today), lines: String(file.lines.length) })
+    expect((await settlementFile(today)).text).toBe(file.text)
+  })
+
+  it('puts what happens after an early close into the next file, with the faults of the plan', async () => {
+    const { current_day: today } = (await call('GET', '/v1/settlements')).body
+    running.faults.plan = { ...NO_FAULTS, settlement: { ...NO_FAULTS.settlement, wrongAmount: 1 } }
+    const chargeId = await authorize('tok_ok', 1500)
+    const key = randomUUID()
+    expect((await call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {} })).status).toBe(200)
+    await call('PUT', `/admin/settlements/${today}/close`, { auth: ADMIN_KEY })
+    expect((await settlementFile(today)).lines.some((l) => l.reference === key)).toBe(false)
+    expect((await settlementFile(today + 1)).status).toBe(404)
+    await call('PUT', `/admin/settlements/${today + 1}/close`, { auth: ADMIN_KEY })
+    expect((await settlementFile(today + 1)).lines.find((l) => l.reference === key)).toMatchObject({ kind: 'capture', gross: 1499, fee: 26, net: 1473 })
   })
 })

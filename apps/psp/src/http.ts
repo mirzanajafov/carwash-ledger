@@ -45,6 +45,11 @@ export function sendJson(response: ServerResponse, status: number, body: unknown
   response.end(text)
 }
 
+export function sendText(response: ServerResponse, status: number, contentType: string, text: string): void {
+  response.writeHead(status, { 'content-type': contentType, 'content-length': Buffer.byteLength(text) })
+  response.end(text)
+}
+
 export function sendError(response: ServerResponse, error: HttpError): void {
   sendJson(response, error.status, { error: { code: error.code, message: error.message } })
 }

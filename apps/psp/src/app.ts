@@ -7,12 +7,14 @@ import { Faults } from './faults.ts'
 import { Psp } from './psp.ts'
 import { migrate } from './schema.ts'
 import { createPspServer } from './server.ts'
+import { Settlements } from './settlement.ts'
 
 export interface RunningPsp {
   readonly url: string
   readonly faults: Faults
   readonly psp: Psp
   readonly webhooks: WebhookSender | undefined
+  readonly settlements: Settlements
   close(): Promise<void>
 }
 
@@ -31,7 +33,8 @@ export async function startPsp(config: Config, log?: (message: string) => void):
     config.webhookUrl === undefined
       ? undefined
       : new WebhookSender(pool, { url: config.webhookUrl, secret: config.webhookSecret!, log })
-  const server = createPspServer(psp, faults, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, log })
+  const settlements = new Settlements(pool, faults, { daySeconds: config.settlementDaySeconds, feeBps: config.feeBps, feeFixed: config.feeFixed })
+  const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, log })
   server.listen(config.port, '0.0.0.0')
   await once(server, 'listening')
   webhooks?.start()
@@ -46,6 +49,7 @@ export async function startPsp(config: Config, log?: (message: string) => void):
     faults,
     psp,
     webhooks,
+    settlements,
     async close() {
       clearInterval(sweeper)
       await webhooks?.stop()

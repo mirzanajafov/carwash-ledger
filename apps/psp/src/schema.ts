@@ -67,6 +67,44 @@ CREATE TABLE deliveries (
 
 CREATE INDEX deliveries_due ON deliveries (due_at, id) WHERE delivered_at IS NULL AND failed_at IS NULL AND NOT dropped;
 `,
+  `
+CREATE INDEX operations_settleable ON operations (currency, created_at) WHERE status = 'succeeded' AND kind IN ('capture', 'refund');
+
+CREATE TABLE settlement_closures (
+  day bigint PRIMARY KEY,
+  closed_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE settlement_files (
+  id text PRIMARY KEY,
+  day bigint NOT NULL,
+  currency char(3) NOT NULL,
+  lines int NOT NULL,
+  gross bigint NOT NULL,
+  fee bigint NOT NULL,
+  net bigint NOT NULL,
+  generated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (day, currency)
+);
+
+CREATE TABLE settlement_lines (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  file_id text NOT NULL REFERENCES settlement_files (id),
+  line int,
+  operation_id text NOT NULL REFERENCES operations (id),
+  shown_operation text NOT NULL,
+  reference text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('capture', 'refund')),
+  gross bigint NOT NULL,
+  fee bigint NOT NULL,
+  net bigint NOT NULL,
+  operated_at timestamptz NOT NULL,
+  faults text[] NOT NULL DEFAULT '{}',
+  UNIQUE (file_id, line)
+);
+
+CREATE INDEX settlement_lines_by_operation ON settlement_lines (operation_id);
+`,
 ]
 
 export async function migrate(pool: pg.Pool): Promise<number> {
