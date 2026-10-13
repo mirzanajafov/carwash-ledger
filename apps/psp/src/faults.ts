@@ -16,6 +16,7 @@ export interface FaultPlan {
   slowMs: readonly [number, number]
   wrongAmount: number
   webhook: Record<WebhookFault, number>
+  settlement: Record<SettlementFault, number>
 }
 
 export const NO_FAULTS: FaultPlan = {
@@ -27,6 +28,7 @@ export const NO_FAULTS: FaultPlan = {
   slowMs: [500, 3000],
   wrongAmount: 0,
   webhook: { duplicate: 0, delay: 0, reorder: 0, drop: 0 },
+  settlement: { nextDay: 0, feeDifference: 0, wrongAmount: 0, missingLine: 0, duplicateLine: 0, droppedReference: 0 },
 }
 
 export type TokenEffect =
@@ -57,6 +59,15 @@ export interface Behaviour {
 }
 
 const REMEMBERED_KEYS = 100_000
+
+export const SETTLEMENT_FAULTS = ['nextDay', 'feeDifference', 'wrongAmount', 'missingLine', 'duplicateLine', 'droppedReference'] as const
+
+export type SettlementFault = (typeof SETTLEMENT_FAULTS)[number]
+
+export interface LineFaults {
+  faults: ReadonlySet<SettlementFault>
+  draw(name: string): number
+}
 
 export class Faults {
   #plan: FaultPlan
@@ -99,6 +110,14 @@ export class Faults {
     return { decline, fail, afterCommit, slowMs, wrongAmount, webhook, draw }
   }
 
+  settlement(operationId: string): LineFaults {
+    const plan = this.#plan
+    const draw = (name: string) => unitHash(`${plan.seed}:${operationId}:settlement.${name}`)
+    const faults = new Set<SettlementFault>()
+    for (const fault of SETTLEMENT_FAULTS) if (draw(fault) < plan.settlement[fault]) faults.add(fault)
+    return { faults, draw }
+  }
+
   #count(key: string): number {
     const n = this.#seen.get(key) ?? 0
     this.#seen.delete(key)
@@ -134,6 +153,11 @@ export function parseFaultPlan(input: unknown): FaultPlan {
   ) {
     throw new Error('slowMs must be [low, high] in milliseconds')
   }
+  const settlement = (source.settlement ?? {}) as Record<string, unknown>
+  if (typeof settlement !== 'object' || settlement === null) throw new Error('settlement must be an object')
+  for (const key of Object.keys(settlement)) {
+    if (!(SETTLEMENT_FAULTS as readonly string[]).includes(key)) throw new Error(`unknown settlement fault ${key}`)
+  }
   const webhook = (source.webhook ?? {}) as Record<string, unknown>
   if (typeof webhook !== 'object' || webhook === null) throw new Error('webhook must be an object')
   for (const key of Object.keys(webhook)) {
@@ -149,6 +173,10 @@ export function parseFaultPlan(input: unknown): FaultPlan {
     wrongAmount: probability(source.wrongAmount, 'wrongAmount'),
     webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<
       WebhookFault,
+      number
+    >,
+    settlement: Object.fromEntries(SETTLEMENT_FAULTS.map((fault) => [fault, probability(settlement[fault], `settlement.${fault}`)])) as Record<
+      SettlementFault,
       number
     >,
   }

@@ -12,9 +12,11 @@ import {
   readJson,
   sendError,
   sendJson,
+  sendText,
   textField,
 } from './http.ts'
 import { requestHash, type Answer, type OperationRequest, type Psp } from './psp.ts'
+import type { Settlements } from './settlement.ts'
 
 export interface ServerOptions {
   apiKey: string
@@ -26,6 +28,8 @@ export interface ServerOptions {
 const CHARGE_ACTION = /^\/v1\/charges\/(ch_[0-9a-f-]{36})\/(capture|cancel|refunds)$/
 const CHARGE = /^\/v1\/charges\/(ch_[0-9a-f-]{36})$/
 const OPERATION = /^\/v1\/operations\/([^/]{1,255})$/
+const SETTLEMENT = /^\/v1\/settlements\/(\d{1,12})$/
+const CLOSE_DAY = /^\/admin\/settlements\/(\d{1,12})\/close$/
 
 function idempotencyKey(request: IncomingMessage): string {
   const key = request.headers['idempotency-key']
@@ -41,7 +45,7 @@ function tokenEffect(token: string): TokenEffect {
   return effect
 }
 
-export function createPspServer(psp: Psp, faults: Faults, options: ServerOptions): Server {
+export function createPspServer(psp: Psp, faults: Faults, settlements: Settlements, options: ServerOptions): Server {
   const log = options.log ?? ((message: string) => process.stderr.write(`${message}\n`))
 
   async function post(request: IncomingMessage, path: string): Promise<Answer> {
@@ -93,6 +97,11 @@ export function createPspServer(psp: Psp, faults: Faults, options: ServerOptions
 
     if (path.startsWith('/admin/')) {
       if (!bearerMatches(request, options.adminKey)) throw new HttpError(401, 'unauthorized', 'the admin key is missing or wrong')
+      const close = CLOSE_DAY.exec(path)
+      if (close && method === 'PUT') {
+        await settlements.close(Number(close[1]))
+        return sendJson(response, 200, { day: Number(close[1]), closed: true })
+      }
       if (path !== '/admin/faults') throw new HttpError(404, 'not_found', `no route ${method} ${path}`)
       if (method === 'PUT') {
         try {
@@ -113,6 +122,15 @@ export function createPspServer(psp: Psp, faults: Faults, options: ServerOptions
       if (charge) return sendJson(response, 200, await psp.charge(charge[1]!))
       const operation = OPERATION.exec(path)
       if (operation) return sendJson(response, 200, await psp.operation(decodeURIComponent(operation[1]!)))
+      if (path === '/v1/settlements') return sendJson(response, 200, settlements.calendar())
+      const settlement = SETTLEMENT.exec(path)
+      if (settlement) {
+        const currency = new URL(request.url ?? '/', 'http://psp').searchParams.get('currency') ?? ''
+        if (!/^[A-Z]{3}$/.test(currency)) throw badRequest('currency must be a three-letter code')
+        const file = await settlements.file(Number(settlement[1]), currency)
+        if (!file) throw new HttpError(404, 'settlement_not_ready', `day ${settlement[1]} is not closed yet`)
+        return sendText(response, 200, 'text/csv', file.csv)
+      }
       throw new HttpError(404, 'not_found', `no route GET ${path}`)
     }
     if (method !== 'POST') throw new HttpError(405, 'method_not_allowed', `${method} is not allowed on ${path}`)

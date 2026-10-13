@@ -153,6 +153,9 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
       idempotencyWindowSeconds: 24 * 3600,
       hangMs: 1500,
       faultPlan: NO_FAULTS,
+      settlementDaySeconds: 86_400,
+      feeBps: 120,
+      feeFixed: 8,
     },
     () => undefined,
   )
