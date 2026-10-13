@@ -325,3 +325,17 @@ model WebhookEvent {
   @@index([outcome, receivedAt])
   @@map("webhook_events")
 }
+
+model OutboxEvent {
+  id          BigInt    @id @default(autoincrement())
+  eventId     String    @unique @default(dbgenerated("uuidv7()")) @map("event_id") @db.Uuid
+  topic       String
+  key         String
+  lane        Int       @db.SmallInt
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox")
+}

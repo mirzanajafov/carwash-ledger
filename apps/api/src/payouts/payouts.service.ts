@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { insertAccount, postInTransaction, readBalance, sqlStateOf } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
+import { journalEvents } from '../events/events.ts'
 import { ApiError, notFound } from '../http/api-error.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { Chart, merchantAccountCode } from '../ledger/chart.service.ts'
@@ -114,6 +115,7 @@ export class PayoutsService {
           ],
         })
         await client.query('UPDATE payouts SET journal_id = $2 WHERE id = $1', [payoutId, journalId])
+        await journalEvents(client, journalId)
         await client.query(`INSERT INTO attempts (kind, payout_id, amount, currency) VALUES ('payout', $1, $2, $3)`, [
           payoutId,
           amount,

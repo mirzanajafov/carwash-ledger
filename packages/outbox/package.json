@@ -1,0 +1,33 @@
+{
+  "name": "@carwash/outbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:db": "vitest run --config vitest.db.config.ts"
+  },
+  "dependencies": {
+    "@carwash/failpoints": "workspace:*",
+    "@carwash/pg": "workspace:*",
+    "@confluentinc/kafka-javascript": "1.10.1",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@carwash/ledger": "workspace:*",
+    "@carwash/testkit": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

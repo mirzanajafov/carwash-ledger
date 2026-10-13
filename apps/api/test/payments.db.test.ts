@@ -177,6 +177,37 @@ describe('payments API', () => {
     expect(more).toMatchObject({ status: 409, body: { error: { code: 'payment_not_refundable' } } })
   })
 
+  it('writes an event for every state change and every entry, in the transaction that makes it', async () => {
+    const payment = (await call('POST', '/v1/payments', { body: pay('tok_ok') })).body
+    await call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 600 } })
+    await call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 900 } })
+    const declined = (await call('POST', '/v1/payments', { body: pay('tok_decline') })).body.payment
+    const events = async (key: string) =>
+      (
+        await stack.admin.query<{ type: string; status: string }>(
+          `SELECT type, payload->>'status' AS status FROM outbox WHERE topic = 'payments' AND key = $1 ORDER BY id`,
+          [key],
+        )
+      ).rows
+    expect(await events(payment.id)).toEqual([
+      { type: 'payment.authorized', status: 'authorized' },
+      { type: 'payment.captured', status: 'captured' },
+      { type: 'refund.succeeded', status: 'succeeded' },
+      { type: 'refund.succeeded', status: 'succeeded' },
+      { type: 'payment.refunded', status: 'refunded' },
+    ])
+    expect(await events(declined.id)).toEqual([{ type: 'payment.failed', status: 'failed' }])
+    const { rows } = await stack.admin.query<{ external_ref: string; entries: number; events: number }>(
+      `SELECT j.external_ref, count(DISTINCT e.id)::int AS entries, count(o.id)::int AS events
+       FROM journals j
+       JOIN entries e ON e.journal_id = j.id
+       LEFT JOIN outbox o ON o.topic = 'ledger' AND o.key = e.account_id::text AND o.payload->>'entry_id' = e.id::text
+       GROUP BY j.external_ref`,
+    )
+    expect(rows.length).toBeGreaterThan(5)
+    expect(rows.filter((row) => row.entries !== row.events)).toEqual([])
+  })
+
   it('pays a merchant out only up to what it is owed, checked under its lock', async () => {
     await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2', amount: 5000 }) })
     const payable = (await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body.payable

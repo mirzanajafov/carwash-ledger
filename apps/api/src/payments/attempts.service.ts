@@ -3,6 +3,7 @@ import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
 import type pg from 'pg'
 import { Database } from '../db/database.ts'
+import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
 import { ApiError } from '../http/api-error.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { checkAnswer, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
@@ -106,6 +107,7 @@ export class AttemptsService {
           { accountId: accounts.fees.id, amount: -fee },
         ]),
       })
+      await journalEvents(client, journalId)
       await this.#move(client, payment.id, from, to, { captured_amount: amount, fee, capture_journal_id: journalId })
     } else {
       await this.#move(client, payment.id, from, to, {})
@@ -140,6 +142,7 @@ export class AttemptsService {
       [paymentId, from, to, ...columns.map((column) => set[column])],
     )
     if (moved.rowCount !== 1) throw new Error(`payment ${paymentId} was not ${from} when it should have moved to ${to}`)
+    await paymentEvent(client, paymentId, `payment.${to}`)
   }
 
   async #applyRefund(client: pg.ClientBase, attempt: AttemptRecord, payment: PaymentRecord, answer: PspAnswer): Promise<Applied> {
@@ -150,6 +153,7 @@ export class AttemptsService {
         refundId,
         answer.reason ?? 'declined',
       ])
+      await refundEvent(client, refundId, 'refund.failed')
       await recordAnomaly(client, attempt.id, 'refund_declined', { answer })
       return 'anomaly'
     }
@@ -173,6 +177,8 @@ export class AttemptsService {
       `UPDATE refunds SET status = 'succeeded', fee_refund = $2, journal_id = $3, resolved_at = now() WHERE id = $1 AND status = 'pending'`,
       [refundId, back, journalId],
     )
+    await journalEvents(client, journalId)
+    await refundEvent(client, refundId, 'refund.succeeded')
     const after = before + amount
     if (after === captured) {
       await this.#move(client, payment.id, 'captured', 'refunded', { refunded_amount: after })
@@ -191,6 +197,7 @@ export class AttemptsService {
     }
     const reversal = await reversalOf(client, BigInt(payout.journal_id!), `payout-reversal:${payout.id}`)
     const reversalId = await postInTransaction(client, this.#chart.registry, reversal)
+    await journalEvents(client, reversalId)
     await client.query(
       `UPDATE payouts SET status = 'failed', failure_reason = $2, reversal_journal_id = $3, resolved_at = now() WHERE id = $1 AND status = 'pending'`,
       [payout.id, answer.reason ?? 'declined', reversalId],
