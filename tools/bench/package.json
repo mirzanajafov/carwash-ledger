@@ -8,11 +8,14 @@
     "posting": "node --conditions=source src/posting.ts",
     "hot": "node --conditions=source src/hot.ts",
     "validate": "node --conditions=source src/validate.ts",
-    "floor": "node --conditions=source src/floor.ts"
+    "floor": "node --conditions=source src/floor.ts",
+    "e4": "node --conditions=source src/e4.ts"
   },
   "dependencies": {
     "@carwash/db": "workspace:*",
     "@carwash/ledger": "workspace:*",
+    "@carwash/outbox": "workspace:*",
+    "@carwash/pg": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "pg": "^8.23.0"
   },

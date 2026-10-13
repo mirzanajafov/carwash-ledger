@@ -13,6 +13,7 @@ throttled() {
 
 export GIT_COMMIT="$(git rev-parse --short HEAD)"
 compose up -d --wait postgres
+if [ "${BENCH_KAFKA:-0}" = "1" ]; then compose up -d kafka; fi
 export PG_CGROUP="$(docker exec carwash-postgres sh -c 'echo "cpu.max=$(cat /sys/fs/cgroup/cpu.max) cpuset=$(cat /sys/fs/cgroup/cpuset.cpus.effective) memory.max=$(cat /sys/fs/cgroup/memory.max)"')"
 echo "postgres: $PG_CGROUP"
 before="$(throttled)"

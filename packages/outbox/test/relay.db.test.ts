@@ -115,17 +115,19 @@ describe('the outbox', () => {
 })
 
 describe('relayOnce', () => {
-  it('publishes the oldest lane in id order and marks what it published', async () => {
-    await addEvents(['k1', 'k1', 'k1'])
+  it('publishes every free lane in one batch, in id order, and marks what it published', async () => {
+    await addEvents(['k1', 'k2', 'k1', 'k3', 'k1'])
     const publisher = new Recorder()
     const relayed = await once(publisher)
-    expect(relayed).toEqual({ lane: await laneOf('k1'), published: 3 })
+    const lanes = [...new Set(await Promise.all(['k1', 'k2', 'k3'].map(laneOf)))].sort((a, b) => a - b)
+    expect({ ...relayed!, lanes: [...relayed!.lanes].sort((a, b) => a - b) }).toEqual({ lanes, published: 5 })
+    expect(publisher.batches).toHaveLength(1)
     expect(publisher.rows.map((row) => Number(row.id))).toEqual([...publisher.rows.map((row) => Number(row.id))].sort((a, b) => a - b))
     expect(await unpublished()).toBe(0)
     expect(await once(publisher)).toBeNull()
   })
 
-  it('skips a lane another relay holds and takes the next one', async () => {
+  it('leaves a lane another relay holds and takes the others', async () => {
     const keys = ['x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7', 'x8']
     await addEvents(keys)
     const lanes = new Set(await Promise.all(keys.map(laneOf)))
@@ -137,7 +139,7 @@ describe('relayOnce', () => {
       await holder.client.query('SELECT pg_advisory_lock($1, $2)', [RELAY_DEFAULTS.lockClass, first])
       const publisher = new Recorder()
       let relayed
-      while ((relayed = await relayOnce(other.client, publisher))) expect(relayed.lane).not.toBe(first)
+      while ((relayed = await relayOnce(other.client, publisher))) expect(relayed.lanes).not.toContain(first)
       expect(publisher.rows.some((row) => keys.includes(row.key))).toBe(true)
       expect(await unpublished()).toBe((await app.query('SELECT 1 FROM outbox WHERE lane = $1', [first])).rowCount)
     } finally {
@@ -180,6 +182,25 @@ describe('relayOnce', () => {
 })
 
 describe('Relay', () => {
+  it('only waits its poll interval when no lane has work, so a steady stream never queues up', async () => {
+    const relay = new Relay(app, new Recorder(), { workers: 1, batch: 500, pollMs: 200 })
+    relay.start()
+    try {
+      for (let n = 0; n < 100; n++) {
+        await writeEvent(app, { topic: 'payments', key: `stream-${n}`, type: 'test.stream', payload: { n } })
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      const deadline = Date.now() + 10_000
+      while ((await unpublished()) > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20))
+    } finally {
+      await relay.stop()
+    }
+    const { rows } = await app.query<{ worst: number }>(
+      `SELECT max(extract(epoch FROM published_at - created_at) * 1000)::float8 AS worst FROM outbox WHERE type = 'test.stream'`,
+    )
+    expect(rows[0]!.worst).toBeLessThan(400)
+  })
+
   it('keeps each key in order while several relays and writers run at once', async () => {
     const keys = Array.from({ length: 40 }, (_, i) => `order-${i}`)
     const publisher = new Recorder()
