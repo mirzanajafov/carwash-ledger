@@ -7,7 +7,7 @@ import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool } from '@carwash/pg'
-import { checkAgainstPsp, checkEvents, checkLedger, checkPayments, checkSettled } from '@carwash/invariants'
+import { checkAgainstPsp, checkEvents, checkLedger, checkPayments, checkSettled, checkSettlement } from '@carwash/invariants'
 import { kafkaClient } from '@carwash/outbox'
 import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
 import pg from 'pg'
@@ -82,6 +82,7 @@ export interface PaymentsReport {
   postgres: { kills: number; recoveryMs: number[] }
   kafka: { kills: number; recoveryMs: number[] }
   events: Record<string, number>
+  settlement: { days: number[]; outcomes: string[]; breaks: Record<string, number> }
   toxics: Record<string, number>
   toxicsByProxy: Record<string, number>
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
@@ -111,6 +112,7 @@ const PROXY_UPSTREAMS: Record<ProxyName, number> = {
   'worker-kafka': KAFKA_PROXY_UPSTREAM,
 }
 
+const SETTLEMENT_DAY_SECONDS = 86_400
 const PSP_API_KEY = 'sk_chaos_api'
 const PSP_ADMIN_KEY = 'sk_chaos_admin'
 const WEBHOOK_SECRET = 'whsec_chaos'
@@ -174,6 +176,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     postgres: { kills: 0, recoveryMs: [] },
     kafka: { kills: 0, recoveryMs: [] },
     events: {},
+    settlement: { days: [], outcomes: [], breaks: {} },
     toxics: Object.fromEntries(TOXIC_KINDS.map((k) => [k, 0])),
     toxicsByProxy: Object.fromEntries(PROXIES.map((p) => [p, 0])),
     ledger: { anomalies: {}, webhooks: {} },
@@ -448,6 +451,29 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       await sleep(5)
     }
     report.settleMs = Math.round(now() - settleStarted!)
+    const firstDay = Math.floor(Date.parse(report.startedAt) / 1000 / SETTLEMENT_DAY_SECONDS)
+    const lastDay = Math.floor(Date.now() / 1000 / SETTLEMENT_DAY_SECONDS)
+    for (let day = firstDay; day <= lastDay; day++) {
+      try {
+        const settled = await settleDay(day, keys.admin!)
+        report.settlement.days.push(day)
+        report.settlement.outcomes.push(settled.outcome)
+        for (const [name, n] of Object.entries(settled.reconciliation?.breaks ?? {})) {
+          report.settlement.breaks[name] = (report.settlement.breaks[name] ?? 0) + (n as number)
+        }
+      } catch (error) {
+        report.harnessErrors.push(`settling day ${day}: ${String(error)}`)
+      }
+    }
+    log(`settled days ${report.settlement.days.join(', ')}: ${report.settlement.outcomes.join(', ')}, breaks ${JSON.stringify(report.settlement.breaks)}`)
+    const drainedBy = performance.now() + 60_000
+    while (performance.now() < drainedBy) {
+      const delivered = await checkEvents(audit)
+        .then((results) => results.find((r) => r.id === 'L2')!.count === 0)
+        .catch(() => false)
+      if (delivered) break
+      await sleep(250)
+    }
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
 
@@ -459,6 +485,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(await checkPayments(audit), 'final')
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
     found.addResults(await checkEvents(audit), 'final')
+    found.addResults(
+      [await checkSettlement(audit, { daySeconds: SETTLEMENT_DAY_SECONDS, feeBps: 120, feeFixed: 8, completeThrough: Math.max(...report.settlement.days, -1) })],
+      'final',
+    )
     const keyFindings = checkKeys(clients.records.values(), clients.probes)
     found.add('S5', 'final', 'every idempotency key answered one way, and refused a different request', keyFindings.count, keyFindings.examples)
     const state = await readState(audit, journeys.refused.map((r) => r.key))
@@ -499,6 +529,29 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     await keepLogs(logs, join(lab.dir, 'logs'), seed).catch((error) => log(`could not keep the service logs: ${String(error)}`))
     await pspDb.drop().catch((error) => log(`psp drop failed: ${String(error)}`))
     await ledgerDb.drop().catch((error) => log(`drop failed: ${String(error)}`))
+  }
+
+  async function settleDay(day: number, adminKey: string): Promise<{ outcome: string; reconciliation?: { breaks: Record<string, number> } }> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const closed = await fetch(`http://127.0.0.1:${PSP_PORT}/admin/settlements/${day}/close`, {
+          method: 'PUT',
+          headers: { authorization: `Bearer ${PSP_ADMIN_KEY}` },
+          signal: AbortSignal.timeout(5000),
+        })
+        if (!closed.ok) throw new Error(`closing day ${day}: status ${closed.status}`)
+        const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/settlements/${day}/ingest`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${adminKey}`, 'idempotency-key': `settle-${day}-${attempt}` },
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (response.status !== 201) throw new Error(`ingesting day ${day}: status ${response.status} ${await response.text()}`)
+        return (await response.json()) as { outcome: string; reconciliation?: { breaks: Record<string, number> } }
+      } catch (error) {
+        if (attempt >= 20) throw error
+        await sleep(500)
+      }
+    }
   }
 
   async function setPspFaults(plan: unknown): Promise<void> {
@@ -622,6 +675,7 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     postgresKills: sum((r) => r.postgres.kills),
     postgresRecoveryMsMedian: median(reports.flatMap((r) => r.postgres.recoveryMs)),
     kafkaKills: sum((r) => r.kafka.kills),
+    settlementBreaks: merged((r) => r.settlement.breaks),
     kafkaRecoveryMsMedian: median(reports.flatMap((r) => r.kafka.recoveryMs)),
     events: merged((r) => r.events),
     toxics: merged((r) => r.toxics),
