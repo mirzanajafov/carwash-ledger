@@ -18,6 +18,7 @@ const options: PaymentsPlanOptions = {
   payoutEveryMs: 500,
   killEveryMs: 3000,
   postgresEveryMs: 20_000,
+  kafkaEveryMs: 15_000,
   toxicEveryMs: 4000,
   forgeEveryMs: 1000,
 }
@@ -71,5 +72,13 @@ describe('planPayments', () => {
     expect(payouts.every((p) => p.merchant >= 0 && p.merchant < options.merchants)).toBe(true)
     expect(forgeries.length).toBeGreaterThan(40)
     expect(planPayments({ ...options, forgeEveryMs: 0 }).forgeries).toEqual([])
+  })
+
+  it('crashes Kafka for 0.2-5 s at a time, and not at all when asked not to', () => {
+    const crashes = planPayments(options).faults.filter((f) => f.kind === 'kafka')
+    expect(crashes.length).toBeGreaterThan(2)
+    expect(crashes.every((f) => f.kind === 'kafka' && f.downMs >= 200 && f.downMs <= 5000)).toBe(true)
+    expect(planPayments({ ...options, kafkaEveryMs: 0 }).faults.some((f) => f.kind === 'kafka')).toBe(false)
+    expect(PROXIES).toContain('worker-kafka')
   })
 })

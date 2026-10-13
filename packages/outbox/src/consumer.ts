@@ -88,7 +88,13 @@ export class EventConsumer {
 
   async start(): Promise<void> {
     const consumer = this.#kafka.consumer({
-      kafkaJS: { groupId: `${this.#settings.topicPrefix}${this.#spec.name}`, fromBeginning: true, autoCommit: false },
+      kafkaJS: {
+        groupId: `${this.#settings.topicPrefix}${this.#spec.name}`,
+        fromBeginning: true,
+        autoCommit: false,
+        sessionTimeout: 6000,
+        heartbeatInterval: 1000,
+      },
       'js.consumer.max.batch.size': this.#settings.batchSize,
       'topic.metadata.refresh.interval.ms': 10_000,
     })

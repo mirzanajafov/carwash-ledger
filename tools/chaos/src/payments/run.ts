@@ -7,11 +7,12 @@ import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool } from '@carwash/pg'
-import { checkAgainstPsp, checkLedger, checkPayments, checkSettled } from '@carwash/invariants'
+import { checkAgainstPsp, checkEvents, checkLedger, checkPayments, checkSettled } from '@carwash/invariants'
+import { kafkaClient } from '@carwash/outbox'
 import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
 import pg from 'pg'
 import type { Lab } from '../ledger-run.ts'
-import { crashPostgres, holdToxic } from '../outages.ts'
+import { crashKafka, crashPostgres, holdToxic } from '../outages.ts'
 import { TOXIC_KINDS } from '../plan.ts'
 import { mulberry32 } from '../random.ts'
 import { Service, type ExitKind, type ServiceEvents } from '../service.ts'
@@ -46,6 +47,7 @@ export interface PaymentsOptions {
   payoutEveryMs: number
   killEveryMs: number
   postgresEveryMs: number
+  kafkaEveryMs: number
   toxicEveryMs: number
   forgeEveryMs: number
   failpointProbability: number
@@ -78,6 +80,8 @@ export interface PaymentsReport {
   crashes: string[]
   starts: Record<string, number>
   postgres: { kills: number; recoveryMs: number[] }
+  kafka: { kills: number; recoveryMs: number[] }
+  events: Record<string, number>
   toxics: Record<string, number>
   toxicsByProxy: Record<string, number>
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
@@ -96,13 +100,15 @@ const POSTGRES_PORT = 5432
 const PSP_PORT = 3142
 const API_PORTS = [3140, 3141]
 const WORKER_PORT = 3144
-const PROXY_PORTS: Record<ProxyName, number> = { 'api-0-db': 6432, 'api-1-db': 6433, 'worker-db': 6434, psp: 6440, webhooks: 6441 }
+const KAFKA_PROXY_UPSTREAM = 9092
+const PROXY_PORTS: Record<ProxyName, number> = { 'api-0-db': 6432, 'api-1-db': 6433, 'worker-db': 6434, psp: 6440, webhooks: 6441, 'worker-kafka': 6450 }
 const PROXY_UPSTREAMS: Record<ProxyName, number> = {
   'api-0-db': POSTGRES_PORT,
   'api-1-db': POSTGRES_PORT,
   'worker-db': POSTGRES_PORT,
   psp: PSP_PORT,
   webhooks: API_PORTS[0]!,
+  'worker-kafka': KAFKA_PROXY_UPSTREAM,
 }
 
 const PSP_API_KEY = 'sk_chaos_api'
@@ -111,7 +117,7 @@ const WEBHOOK_SECRET = 'whsec_chaos'
 const NO_FAULTS = { seed: 0, decline: 0, fail: 0, timeoutAfterCommit: 0, slow: 0, wrongAmount: 0, webhook: {} }
 
 const API_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'request.', 'webhook.']
-const WORKER_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'recovery.', 'webhook.']
+const WORKER_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'recovery.', 'webhook.', 'relay.', 'consumer.']
 
 function withPort(url: string, port: number): string {
   const parsed = new URL(url)
@@ -139,7 +145,7 @@ async function countBy(pool: pg.Pool, sql: string): Promise<Record<string, numbe
 }
 
 export async function runPayments(lab: Lab, options: PaymentsOptions, seed: number): Promise<PaymentsReport> {
-  const { postgres, toxiproxy } = lab
+  const { postgres, kafka, toxiproxy } = lab
   const log = (line: string) => lab.log(`seed ${seed} ${line}`)
   const plan = planPayments({ ...options, seed })
   const random = mulberry32(seed ^ 0x636c69)
@@ -166,6 +172,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     crashes: [],
     starts: {},
     postgres: { kills: 0, recoveryMs: [] },
+    kafka: { kills: 0, recoveryMs: [] },
+    events: {},
     toxics: Object.fromEntries(TOXIC_KINDS.map((k) => [k, 0])),
     toxicsByProxy: Object.fromEntries(PROXIES.map((p) => [p, 0])),
     ledger: { anomalies: {}, webhooks: {} },
@@ -195,6 +203,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         name === 'admin' ? 'admin' : 'client',
       ])
     }
+
+    kafka.fresh(logFile('kafka'))
+    kafka.start()
+    await kafka.waitReady()
 
     await toxiproxy.reset()
     for (const proxy of PROXIES) await toxiproxy.replaceProxy(proxy, PROXY_PORTS[proxy], PROXY_UPSTREAMS[proxy])
@@ -278,6 +290,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           ...shared,
           WORKER_PORT: String(WORKER_PORT),
           DATABASE_URL: ledgerUrl('worker-db'),
+          KAFKA_BROKERS: `127.0.0.1:${PROXY_PORTS['worker-kafka']}`,
+          RELAY_WORKERS: '4',
           CHAOS_FAILPOINTS: failpointSpec(WORKER_FAILPOINTS, options.failpointProbability),
         },
         logFile('worker'),
@@ -307,6 +321,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const forger = new Forger(audit, endpoints, WEBHOOK_SECRET, mulberry32(seed ^ 0x77656268))
 
     let postgresBusy = false
+    let kafkaBusy = false
     let toxicCount = 0
     const applyFault = async (fault: PaymentFault, index: number): Promise<void> => {
       try {
@@ -325,6 +340,17 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
             log(`postgres back after ${report.postgres.recoveryMs.at(-1)} ms`)
           } finally {
             postgresBusy = false
+          }
+        } else if (fault.kind === 'kafka') {
+          if (kafkaBusy) return
+          kafkaBusy = true
+          try {
+            report.kafka.kills++
+            log(`kafka crash, down for ${fault.downMs} ms`)
+            report.kafka.recoveryMs.push(await crashKafka(kafka, fault.downMs))
+            log(`kafka back after ${report.kafka.recoveryMs.at(-1)} ms`)
+          } finally {
+            kafkaBusy = false
           }
         } else {
           report.toxics[fault.toxic]!++
@@ -386,6 +412,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
             postgres.start()
             await postgres.waitReady()
           }
+          if (!kafka.running) {
+            kafka.start()
+            await kafka.waitReady()
+          }
           for (const s of services.values()) {
             s.disarm()
             s.start()
@@ -428,6 +458,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(await checkLedger(audit), 'final')
     found.addResults(await checkPayments(audit), 'final')
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
+    found.addResults(await checkEvents(audit), 'final')
     const keyFindings = checkKeys(clients.records.values(), clients.probes)
     found.add('S5', 'final', 'every idempotency key answered one way, and refused a different request', keyFindings.count, keyFindings.examples)
     const state = await readState(audit, journeys.refused.map((r) => r.key))
@@ -452,11 +483,18 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         webhooks: await countBy(audit, 'SELECT outcome AS name, count(*)::int AS n FROM webhook_events GROUP BY outcome'),
       },
       pspOperations: await countBy(psp, `SELECT kind || ' ' || status AS name, count(*)::int AS n FROM operations GROUP BY 1`),
+      events: {
+        ...(await countBy(audit, `SELECT 'outbox ' || topic AS name, count(*)::int AS n FROM outbox GROUP BY topic`)),
+        ...(await countBy(audit, `SELECT 'inbox ' || consumer AS name, count(*)::int AS n FROM inbox GROUP BY consumer`)),
+        receipts: (await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM receipts')).rows[0]!.n,
+        ...(await publishedMessages(kafka.directBroker)),
+      },
     })
     return report
   } finally {
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop())).catch(() => undefined)
+    await kafka.stop().catch(() => undefined)
     await psp.end().catch(() => undefined)
     await keepLogs(logs, join(lab.dir, 'logs'), seed).catch((error) => log(`could not keep the service logs: ${String(error)}`))
     await pspDb.drop().catch((error) => log(`psp drop failed: ${String(error)}`))
@@ -512,7 +550,7 @@ async function activity(adminUrl: string, database: string): Promise<string> {
 
 async function keepLogs(from: string, to: string, seed: number): Promise<void> {
   mkdirSync(to, { recursive: true })
-  for (const name of ['psp', 'api-0', 'api-1', 'worker']) {
+  for (const name of ['psp', 'api-0', 'api-1', 'worker', 'kafka']) {
     await pipeline(createReadStream(join(from, `${name}.log`)), createGzip(), createWriteStream(join(to, `seed-${seed}-${name}.log.gz`)))
   }
   rmSync(from, { recursive: true, force: true })
@@ -532,9 +570,27 @@ async function settled(tasks: readonly Promise<unknown>[], probes: readonly Prom
   const race = await Promise.race([Promise.allSettled([...tasks, ...probes]).then(() => 'done'), sleep(0, pending)])
   if (race === pending) return false
   try {
-    return (await checkSettled(audit)).count === 0
+    if ((await checkSettled(audit)).count > 0) return false
+    return (await checkEvents(audit)).find((result) => result.id === 'L2')!.count === 0
   } catch {
     return false
+  }
+}
+
+async function publishedMessages(broker: string): Promise<Record<string, number>> {
+  const admin = kafkaClient({ brokers: [broker], clientId: 'chaos-harness' }).admin()
+  try {
+    await admin.connect()
+    const counts: Record<string, number> = {}
+    for (const topic of ['payments', 'ledger']) {
+      const offsets = await admin.fetchTopicOffsets(topic)
+      counts[`kafka ${topic}`] = offsets.reduce((sum, p) => sum + Number(p.high) - Number(p.low), 0)
+    }
+    return counts
+  } catch {
+    return {}
+  } finally {
+    await admin.disconnect().catch(() => undefined)
   }
 }
 
@@ -565,6 +621,9 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     starts: merged((r) => r.starts),
     postgresKills: sum((r) => r.postgres.kills),
     postgresRecoveryMsMedian: median(reports.flatMap((r) => r.postgres.recoveryMs)),
+    kafkaKills: sum((r) => r.kafka.kills),
+    kafkaRecoveryMsMedian: median(reports.flatMap((r) => r.kafka.recoveryMs)),
+    events: merged((r) => r.events),
     toxics: merged((r) => r.toxics),
     toxicsByProxy: merged((r) => r.toxicsByProxy),
     anomalies: merged((r) => r.ledger.anomalies),
@@ -585,7 +644,7 @@ export function describePaymentsRun(index: number, r: PaymentsReport): string {
   return (
     `run ${index} seed ${r.seed}: ${r.journeys} journeys, ${r.payouts} payouts, ${r.requests} requests, ${r.sends} sends, ` +
     `kills ${total(r.kills.random)} random + ${total(r.kills.failpoints)} at failpoints, crashes ${r.exits.crash}, ` +
-    `postgres ${r.postgres.kills}, toxics ${total(r.toxics)}, surprises ${r.surprises.count}, ` +
+    `postgres ${r.postgres.kills}, kafka ${r.kafka.kills}, toxics ${total(r.toxics)}, surprises ${r.surprises.count}, ` +
     `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}`
   )
 }

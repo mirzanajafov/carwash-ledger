@@ -25,6 +25,8 @@ RUN pnpm --filter @carwash/db generate && pnpm --filter "@carwash/api..." --filt
 
 FROM postgres:18
 COPY --from=ghcr.io/shopify/toxiproxy:2.12.0 /toxiproxy /usr/local/bin/toxiproxy-server
+COPY --from=apache/kafka-native:4.3.1 /opt/kafka/kafka.Kafka /usr/local/bin/kafka-native
+COPY --from=apache/kafka-native:4.3.1 /etc/kafka/docker/log4j2.yaml /opt/kafka/log4j2.yaml
 COPY --from=deps /usr/local/bin/node /usr/local/bin/node
 COPY --from=deps --chown=postgres:postgres /app /app
 RUN mkdir -p /app/tools/chaos/results && chown postgres:postgres /app/tools/chaos/results

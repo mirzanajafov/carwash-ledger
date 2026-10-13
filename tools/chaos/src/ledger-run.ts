@@ -15,6 +15,7 @@ import { mulberry32 } from './random.ts'
 import type { Toxiproxy } from './toxiproxy.ts'
 import { addCounts, byInvariant, median, Violations, type Violation } from './violations.ts'
 import { Worker, type WorkerEvents } from './workers.ts'
+import type { LocalKafka } from './kafka.ts'
 
 export interface LedgerOptions {
   durationMs: number
@@ -39,6 +40,7 @@ export interface LedgerOptions {
 export interface Lab {
   dir: string
   postgres: LocalPostgres
+  kafka: LocalKafka
   toxiproxy: Toxiproxy
   log(line: string): void
 }
