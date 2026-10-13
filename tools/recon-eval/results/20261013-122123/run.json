@@ -1,0 +1,18 @@
+{
+  "experiment": "e5",
+  "options": {
+    "volumes": "50,500,2000",
+    "policies": "unique,oldest",
+    "seeds": "1,2,3",
+    "days": "30",
+    "rate": "0.01",
+    "window": "7",
+    "skew": "300",
+    "out": "results"
+  },
+  "contract": {
+    "bps": 120,
+    "fixed": 8
+  },
+  "node": "v24.18.0"
+}

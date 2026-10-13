@@ -1,0 +1,387 @@
+[
+  {
+    "perDay": 50,
+    "fallback": "unique",
+    "seeds": 3,
+    "items": 4701,
+    "lines": 4704,
+    "breaks": 200,
+    "falseBreaks": 0,
+    "transientBreaks": 31,
+    "transientByClass": {
+      "unknown_line": 30,
+      "missing_line": 1
+    },
+    "faults": {
+      "nextDay": {
+        "injected": 45,
+        "detected": 45,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "feeDifference": {
+        "injected": 52,
+        "detected": 52,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "wrongAmount": {
+        "injected": 41,
+        "detected": 41,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "missingLine": {
+        "injected": 41,
+        "detected": 41,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "duplicateLine": {
+        "injected": 44,
+        "detected": 44,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "droppedReference": {
+        "injected": 46,
+        "detected": 46,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      }
+    },
+    "dropped": {
+      "placedRight": 36,
+      "placedWrong": 0,
+      "unplaced": 10,
+      "wrongShare": 0
+    },
+    "msPerRun": 14
+  },
+  {
+    "perDay": 50,
+    "fallback": "oldest",
+    "seeds": 3,
+    "items": 4701,
+    "lines": 4704,
+    "breaks": 178,
+    "falseBreaks": 0,
+    "transientBreaks": 0,
+    "transientByClass": {},
+    "faults": {
+      "nextDay": {
+        "injected": 45,
+        "detected": 45,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "feeDifference": {
+        "injected": 52,
+        "detected": 52,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "wrongAmount": {
+        "injected": 41,
+        "detected": 41,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "missingLine": {
+        "injected": 41,
+        "detected": 39,
+        "wrongClass": 0,
+        "missed": 2,
+        "detectionRate": 0.9512195121951219
+      },
+      "duplicateLine": {
+        "injected": 44,
+        "detected": 44,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "droppedReference": {
+        "injected": 46,
+        "detected": 40,
+        "wrongClass": 6,
+        "missed": 0,
+        "detectionRate": 0.8695652173913043
+      }
+    },
+    "dropped": {
+      "placedRight": 40,
+      "placedWrong": 6,
+      "unplaced": 0,
+      "wrongShare": 0.13043478260869565
+    },
+    "msPerRun": 10
+  },
+  {
+    "perDay": 500,
+    "fallback": "unique",
+    "seeds": 3,
+    "items": 47325,
+    "lines": 47310,
+    "breaks": 2610,
+    "falseBreaks": 0,
+    "transientBreaks": 25,
+    "transientByClass": {
+      "unknown_line": 22,
+      "missing_line": 3
+    },
+    "faults": {
+      "nextDay": {
+        "injected": 461,
+        "detected": 461,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "feeDifference": {
+        "injected": 414,
+        "detected": 414,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "wrongAmount": {
+        "injected": 503,
+        "detected": 503,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "missingLine": {
+        "injected": 468,
+        "detected": 468,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "duplicateLine": {
+        "injected": 453,
+        "detected": 453,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "droppedReference": {
+        "injected": 464,
+        "detected": 464,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      }
+    },
+    "dropped": {
+      "placedRight": 84,
+      "placedWrong": 0,
+      "unplaced": 380,
+      "wrongShare": 0
+    },
+    "msPerRun": 76
+  },
+  {
+    "perDay": 500,
+    "fallback": "oldest",
+    "seeds": 3,
+    "items": 47325,
+    "lines": 47310,
+    "breaks": 1804,
+    "falseBreaks": 0,
+    "transientBreaks": 34,
+    "transientByClass": {
+      "missing_line": 34
+    },
+    "faults": {
+      "nextDay": {
+        "injected": 461,
+        "detected": 461,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "feeDifference": {
+        "injected": 414,
+        "detected": 414,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "wrongAmount": {
+        "injected": 503,
+        "detected": 503,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "missingLine": {
+        "injected": 468,
+        "detected": 299,
+        "wrongClass": 0,
+        "missed": 169,
+        "detectionRate": 0.6388888888888888
+      },
+      "duplicateLine": {
+        "injected": 453,
+        "detected": 453,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "droppedReference": {
+        "injected": 464,
+        "detected": 238,
+        "wrongClass": 226,
+        "missed": 0,
+        "detectionRate": 0.5129310344827587
+      }
+    },
+    "dropped": {
+      "placedRight": 238,
+      "placedWrong": 226,
+      "unplaced": 0,
+      "wrongShare": 0.4870689655172414
+    },
+    "msPerRun": 67
+  },
+  {
+    "perDay": 2000,
+    "fallback": "unique",
+    "seeds": 3,
+    "items": 189132,
+    "lines": 189104,
+    "breaks": 10597,
+    "falseBreaks": 0,
+    "transientBreaks": 34,
+    "transientByClass": {
+      "unknown_line": 32,
+      "missing_line": 2
+    },
+    "faults": {
+      "nextDay": {
+        "injected": 1896,
+        "detected": 1896,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "feeDifference": {
+        "injected": 1850,
+        "detected": 1850,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "wrongAmount": {
+        "injected": 1913,
+        "detected": 1913,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "missingLine": {
+        "injected": 1841,
+        "detected": 1841,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "duplicateLine": {
+        "injected": 1813,
+        "detected": 1813,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "droppedReference": {
+        "injected": 1772,
+        "detected": 1772,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      }
+    },
+    "dropped": {
+      "placedRight": 194,
+      "placedWrong": 0,
+      "unplaced": 1578,
+      "wrongShare": 0
+    },
+    "msPerRun": 494
+  },
+  {
+    "perDay": 2000,
+    "fallback": "oldest",
+    "seeds": 3,
+    "items": 189132,
+    "lines": 189104,
+    "breaks": 7194,
+    "falseBreaks": 0,
+    "transientBreaks": 223,
+    "transientByClass": {
+      "missing_line": 223
+    },
+    "faults": {
+      "nextDay": {
+        "injected": 1896,
+        "detected": 1896,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "feeDifference": {
+        "injected": 1850,
+        "detected": 1850,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "wrongAmount": {
+        "injected": 1913,
+        "detected": 1913,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "missingLine": {
+        "injected": 1841,
+        "detected": 993,
+        "wrongClass": 0,
+        "missed": 848,
+        "detectionRate": 0.5393807713199348
+      },
+      "duplicateLine": {
+        "injected": 1813,
+        "detected": 1813,
+        "wrongClass": 0,
+        "missed": 0,
+        "detectionRate": 1
+      },
+      "droppedReference": {
+        "injected": 1772,
+        "detected": 416,
+        "wrongClass": 1356,
+        "missed": 0,
+        "detectionRate": 0.23476297968397292
+      }
+    },
+    "dropped": {
+      "placedRight": 416,
+      "placedWrong": 1356,
+      "unplaced": 0,
+      "wrongShare": 0.7652370203160271
+    },
+    "msPerRun": 571
+  }
+]

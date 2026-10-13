@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { postInTransaction, type EntryInput } from '@carwash/ledger'
-import { BREAK_CLASSES, reconcile, type BreakClass, type LedgerItem } from '@carwash/recon'
+import { BREAK_CLASSES, reconcile, window, type BreakClass, type LedgerItem } from '@carwash/recon'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
@@ -103,15 +103,15 @@ export class Settlements {
     const { rows: latest } = await this.#db.pool.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [currency])
     const through = latest[0]!.day
     if (through === null) return undefined
-    const from = through - this.#config.reconWindowDays
+    const span = window(through, this.#config.reconWindowDays)
     const receivable = this.#chart.accounts(currency).receivable.id
     const items = (
-      await this.#db.pool.query<Omit<LedgerItem, 'gross'> & { gross: string }>(ITEMS, [calendar.daySeconds, receivable, currency, from - 1, through])
+      await this.#db.pool.query<Omit<LedgerItem, 'gross'> & { gross: string }>(ITEMS, [calendar.daySeconds, receivable, currency, span.itemsFrom, span.itemsThrough])
     ).rows.map((row) => ({ ...row, gross: BigInt(row.gross) }))
     const lines = (
       await this.#db.pool.query<{ fileId: string; day: number; line: number; operation: string; reference: string; kind: 'capture' | 'refund'; gross: string; fee: string; net: string }>(
         LINES,
-        [currency, from, through],
+        [currency, span.linesFrom, span.linesThrough],
       )
     ).rows.map((row) => ({ ...row, gross: BigInt(row.gross), fee: BigInt(row.fee), net: BigInt(row.net) }))
     const result = reconcile(lines, items, {
@@ -119,9 +119,9 @@ export class Settlements {
       fallback: this.#config.reconFallback,
       settledThrough: through,
     })
-    const kept = result.breaks.filter((b) => b.day >= from && b.day <= through)
+    const kept = result.breaks.filter((b) => b.day >= span.keepFrom && b.day <= span.keepThrough)
     await this.#db.transaction(async (client) => {
-      await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, from, through])
+      await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, span.keepFrom, span.keepThrough])
       if (kept.length === 0) return
       await client.query(
         `INSERT INTO recon_breaks (currency, day, class, file_id, line, journal_ref, attempt_id, detail)
@@ -141,7 +141,7 @@ export class Settlements {
     const breaks = Object.fromEntries(BREAK_CLASSES.map((c) => [c, kept.filter((b) => b.class === c).length])) as Record<BreakClass, number>
     return {
       currency,
-      from,
+      from: span.keepFrom,
       through,
       lines: lines.length,
       items: items.length,

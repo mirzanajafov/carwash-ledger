@@ -59,6 +59,20 @@ export interface Reconciliation {
   pending: LedgerItem[]
 }
 
+export interface Window {
+  linesFrom: number
+  linesThrough: number
+  itemsFrom: number
+  itemsThrough: number
+  keepFrom: number
+  keepThrough: number
+}
+
+export function window(through: number, days: number): Window {
+  const keepFrom = through - days
+  return { linesFrom: keepFrom - 1, linesThrough: through, itemsFrom: keepFrom - 1, itemsThrough: through + 1, keepFrom, keepThrough: through }
+}
+
 export function contractFee(kind: Kind, gross: bigint, contract: FeeContract): bigint {
   if (kind === 'refund') return 0n
   const amount = gross < 0n ? -gross : gross
