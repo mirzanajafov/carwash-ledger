@@ -159,6 +159,121 @@ export default function EvidencePage() {
         </div>
       </Section>
 
+      {evidence.e4.steady.length > 0 ? (
+        <Section
+          title="Outbox lag"
+          note="Events are written in the same transaction as the money and a relay publishes them to Kafka. How long that takes, at three steady rates (five runs each, median and range), and what happens when the broker is killed for 30 s at 500 events a second."
+        >
+          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2 font-medium">Events a second</th>
+                  <th className="px-2 py-2 text-right font-medium">To Kafka, p50</th>
+                  <th className="px-2 py-2 text-right font-medium">To Kafka, p99</th>
+                  <th className="px-2 py-2 text-right font-medium">To the consumer, p99</th>
+                  <th className="px-4 py-2 text-right font-medium">Transactions an event</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {evidence.e4.steady.map((r) => (
+                  <tr key={r.rate}>
+                    <td className="px-4 py-2 font-mono tabular-nums">{r.rate.toLocaleString('en')}</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50?.median.toFixed(1)} ms</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">
+                      {r.ackP99?.median.toFixed(1)} ms <span className="text-xs text-muted">({r.ackP99?.min.toFixed(0)}–{r.ackP99?.max.toFixed(0)})</span>
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">
+                      {r.consumedP99?.median.toFixed(1)} ms <span className="text-xs text-muted">({r.consumedP99?.min.toFixed(0)}–{r.consumedP99?.max.toFixed(0)})</span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent?.median.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {evidence.e4.outages.length > 0 ? (
+            <ul className="grid gap-2 text-sm sm:grid-cols-3">
+              {evidence.e4.outages.map((o, i) => (
+                <li key={o.dir} className="rounded-xl border border-line bg-surface p-3">
+                  <p className="font-medium">Broker killed, run {i + 1}</p>
+                  <p className="text-xs text-muted">
+                    Back after {o.kafkaBackS} s, first publish {o.firstPublishS} s later. {o.peakBacklog.toLocaleString('en')} events waited and drained in {o.drainS} s at{' '}
+                    {o.drainPerSecond.toLocaleString('en')} a second; latency was normal again {o.settledS} s after the broker came back.
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Section>
+      ) : null}
+
+      {evidence.e6.scale.length > 0 ? (
+        <Section
+          title="Audit log"
+          note="Every committed journal becomes a leaf in a Merkle tree, and a witness outside the database signs its roots. How fast that runs as the log grows, how big a proof is, and whether tampering is caught."
+        >
+          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2 font-medium">Journals</th>
+                  <th className="px-2 py-2 text-right font-medium">Sequenced a second</th>
+                  <th className="px-2 py-2 text-right font-medium">Full verification</th>
+                  <th className="px-2 py-2 text-right font-medium">Proof size</th>
+                  <th className="px-4 py-2 text-right font-medium">Bytes a journal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {evidence.e6.scale.map((r) => (
+                  <tr key={r.size}>
+                    <td className="px-4 py-2 font-mono tabular-nums">{r.size.toLocaleString('en')}</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.sequencerPerSecond.toLocaleString('en')}</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.verifyS.toFixed(1)} s</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">
+                      {r.proofBytes.min}–{r.proofBytes.max} B
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.auditBytesPerJournal}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="max-w-3xl text-sm text-muted">
+            {evidence.e6.incremental.length > 0
+              ? `Checking only what was added on top of a million: ${evidence.e6.incremental.map((r) => `${r.journals.toLocaleString('en')} journals in ${r.ms.toLocaleString('en')} ms`).join(', ')}. `
+              : ''}
+            {evidence.e6.lag ? `Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.` : ''}
+          </p>
+          {evidence.e6.trials.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead className="text-left text-xs uppercase tracking-wide text-muted">
+                  <tr className="border-b border-line">
+                    <th className="px-4 py-2 font-medium">Tampering</th>
+                    <th className="px-2 py-2 text-right font-medium">Trials</th>
+                    <th className="px-2 py-2 text-right font-medium">Caught</th>
+                    <th className="px-2 py-2 text-right font-medium">Right journal named</th>
+                    <th className="px-4 py-2 text-right font-medium">Caught without the witness</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {evidence.e6.trials.map((r) => (
+                    <tr key={r.key}>
+                      <td className="px-4 py-2">{r.key}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums">{r.trials}</td>
+                      <td className={`px-2 py-2 text-right font-mono tabular-nums ${r.caught === r.trials ? '' : 'text-warn'}`}>{r.caught}</td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums">{r.named}</td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums">{r.caughtWithoutWitness}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </Section>
+      ) : null}
+
       <Section
         title="Reconciliation"
         note="Settlement files with faults injected at known rates, over three seeds. With references, everything is found. Without them, matching on the amount guesses, and a car wash sells five prices."
@@ -204,11 +319,11 @@ export default function EvidencePage() {
       </Section>
 
       <Section title="Still to measure" note="These need a quiet machine and run at night. Their numbers will appear here as they come in.">
-        <ul className="grid gap-2 text-sm sm:grid-cols-3">
+        <ul className="grid gap-2 text-sm sm:grid-cols-2">
           {[
-            ['Outbox lag', 'From the insert to Kafka and to the consumer, at 100 to 2,000 events a second and through a 30 s broker outage.'],
-            ['Audit log', 'Verifying a million journals, proofs, the sequencer, and a thousand tamper trials per class.'],
+            ...(evidence.e6.trials.length > 0 ? [] : [['Audit log', 'Verifying a million journals, proofs, the sequencer, and a thousand tamper trials per class.']]),
             ['Schema change', 'Adding a column to 20 million entries under live payments, naive against expand and contract.'],
+            ['A long chaos campaign', 'A few hundred runs instead of five, on the final code.'],
           ].map(([title, detail]) => (
             <li key={title} className="rounded-xl border border-dashed border-line p-3">
               <p className="font-medium">{title}</p>

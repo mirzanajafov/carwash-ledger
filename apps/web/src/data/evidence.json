@@ -928,6 +928,145 @@
    }
   ]
  },
+ "e4": {
+  "source": "20261014-173703",
+  "steady": [
+   {
+    "rate": 100,
+    "cells": 5,
+    "ackP50": {
+     "median": 20.2,
+     "min": 19.8,
+     "max": 20.6
+    },
+    "ackP99": {
+     "median": 46.1,
+     "min": 45.1,
+     "max": 47.2
+    },
+    "consumedP50": {
+     "median": 30.3,
+     "min": 28.9,
+     "max": 31.6
+    },
+    "consumedP99": {
+     "median": 64.9,
+     "min": 63,
+     "max": 66.7
+    },
+    "transactionsPerEvent": {
+     "median": 5.48,
+     "min": 5.41,
+     "max": 5.52
+    },
+    "walSyncsPerEvent": {
+     "median": 2.17,
+     "min": 2.14,
+     "max": 2.2
+    }
+   },
+   {
+    "rate": 500,
+    "cells": 5,
+    "ackP50": {
+     "median": 16.4,
+     "min": 16.2,
+     "max": 16.5
+    },
+    "ackP99": {
+     "median": 36,
+     "min": 34.8,
+     "max": 37.5
+    },
+    "consumedP50": {
+     "median": 42.5,
+     "min": 41.6,
+     "max": 43
+    },
+    "consumedP99": {
+     "median": 94.3,
+     "min": 91,
+     "max": 100.8
+    },
+    "transactionsPerEvent": {
+     "median": 2.68,
+     "min": 2.65,
+     "max": 2.72
+    },
+    "walSyncsPerEvent": {
+     "median": 0.94,
+     "min": 0.93,
+     "max": 0.96
+    }
+   },
+   {
+    "rate": 2000,
+    "cells": 5,
+    "ackP50": {
+     "median": 21.1,
+     "min": 20.9,
+     "max": 21.7
+    },
+    "ackP99": {
+     "median": 46,
+     "min": 45.1,
+     "max": 279
+    },
+    "consumedP50": {
+     "median": 57.4,
+     "min": 56.4,
+     "max": 59
+    },
+    "consumedP99": {
+     "median": 146,
+     "min": 134.3,
+     "max": 348.6
+    },
+    "transactionsPerEvent": {
+     "median": 1.35,
+     "min": 1.34,
+     "max": 1.36
+    },
+    "walSyncsPerEvent": {
+     "median": 0.24,
+     "min": 0.23,
+     "max": 0.24
+    }
+   }
+  ],
+  "outages": [
+   {
+    "dir": "20261014-175525",
+    "valid": true,
+    "kafkaBackS": 44.1,
+    "firstPublishS": 6.5,
+    "peakBacklog": 25084,
+    "drainPerSecond": 13131,
+    "drainS": 1.9,
+    "settledS": 54.9
+   },
+   {
+    "dir": "20261014-175807",
+    "valid": true,
+    "kafkaBackS": 43.8,
+    "firstPublishS": 6.7,
+    "peakBacklog": 24912,
+    "drainPerSecond": 13304,
+    "drainS": 1.9,
+    "settledS": 57.2
+   },
+   {
+    "dir": "20261014-180048",
+    "valid": true,
+    "kafkaBackS": 43.6,
+    "firstPublishS": 7.3,
+    "peakBacklog": 24772,
+    "drainPerSecond": 13959,
+    "drainS": 1.8,
+    "settledS": 24.4
+   }
+  ]
+ },
  "e5": {
   "source": "20261013-122123",
   "rows": [
@@ -1044,6 +1183,112 @@
      "wrong": 1356,
      "unplaced": 0
     }
+   }
+  ]
+ },
+ "e6": {
+  "source": [
+   "20261014-180844",
+   "20261014-181321",
+   "20261014-181446"
+  ],
+  "scale": [
+   {
+    "size": 100000,
+    "sequencerPerSecond": 25462,
+    "verifyS": 2.75,
+    "proofBytes": {
+     "min": 320,
+     "max": 544
+    },
+    "proofP50Ms": 0.61,
+    "auditBytesPerJournal": 405
+   },
+   {
+    "size": 500000,
+    "sequencerPerSecond": 23172,
+    "verifyS": 13.87,
+    "proofBytes": {
+     "min": 448,
+     "max": 608
+    },
+    "proofP50Ms": 1.25,
+    "auditBytesPerJournal": 404
+   },
+   {
+    "size": 1000000,
+    "sequencerPerSecond": 21718,
+    "verifyS": 31.49,
+    "proofBytes": {
+     "min": 480,
+     "max": 640
+    },
+    "proofP50Ms": 0.99,
+    "auditBytesPerJournal": 404
+   }
+  ],
+  "incremental": [
+   {
+    "journals": 1000,
+    "ms": 33
+   },
+   {
+    "journals": 10000,
+    "ms": 228
+   },
+   {
+    "journals": 100000,
+    "ms": 2236
+   }
+  ],
+  "lag": {
+   "rate": 200,
+   "p50": 510,
+   "p99": 1026,
+   "max": 1057
+  },
+  "trials": [
+   {
+    "key": "class 1, covered",
+    "trials": 917,
+    "caught": 917,
+    "named": 917,
+    "caughtWithoutWitness": 917
+   },
+   {
+    "key": "class 1, above the last checkpoint",
+    "trials": 83,
+    "caught": 83,
+    "named": 83,
+    "caughtWithoutWitness": 83
+   },
+   {
+    "key": "class 2, covered",
+    "trials": 900,
+    "caught": 900,
+    "named": 900,
+    "caughtWithoutWitness": 0
+   },
+   {
+    "key": "class 2, above the last checkpoint",
+    "trials": 100,
+    "caught": 0,
+    "named": 0,
+    "caughtWithoutWitness": 0
+   },
+   {
+    "key": "class 3, covered",
+    "trials": 887,
+    "caught": 887,
+    "named": 887,
+    "caughtWithoutWitness": 887
+   },
+   {
+    "key": "class 3, above the last checkpoint",
+    "trials": 113,
+    "caught": 113,
+    "named": 113,
+    "caughtWithoutWitness": 113
    }
   ]
  },

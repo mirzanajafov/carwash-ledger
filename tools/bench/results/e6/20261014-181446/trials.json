@@ -1,0 +1,79 @@
+{
+  "size": 10250,
+  "checkpointEvery": 500,
+  "covered": 10000,
+  "result": {
+    "class 1, covered": {
+      "trials": 917,
+      "caught": 917,
+      "named": 917,
+      "caughtWithoutWitness": 917,
+      "ms": {
+        "n": 917,
+        "p50": 255.07750400000077,
+        "p99": 525.8453609999851,
+        "max": 584.7974500000128
+      }
+    },
+    "class 1, above the last checkpoint": {
+      "trials": 83,
+      "caught": 83,
+      "named": 83,
+      "caughtWithoutWitness": 83,
+      "ms": {
+        "n": 83,
+        "p50": 254.20578099996783,
+        "p99": 571.2786560000022,
+        "max": 571.2786560000022
+      }
+    },
+    "class 2, covered": {
+      "trials": 900,
+      "caught": 900,
+      "named": 900,
+      "caughtWithoutWitness": 0,
+      "ms": {
+        "n": 900,
+        "p50": 258.3265109998174,
+        "p99": 534.866309999954,
+        "max": 603.9055170000065
+      }
+    },
+    "class 2, above the last checkpoint": {
+      "trials": 100,
+      "caught": 0,
+      "named": 0,
+      "caughtWithoutWitness": 0,
+      "ms": {
+        "n": 100,
+        "p50": 254.61054100003093,
+        "p99": 531.2975319999969,
+        "max": 531.2975319999969
+      }
+    },
+    "class 3, above the last checkpoint": {
+      "trials": 113,
+      "caught": 113,
+      "named": 113,
+      "caughtWithoutWitness": 113,
+      "ms": {
+        "n": 113,
+        "p50": 236.44581199996173,
+        "p99": 492.31868400005624,
+        "max": 520.3208630001172
+      }
+    },
+    "class 3, covered": {
+      "trials": 887,
+      "caught": 887,
+      "named": 887,
+      "caughtWithoutWitness": 887,
+      "ms": {
+        "n": 887,
+        "p50": 237.73707100003958,
+        "p99": 473.90620299987495,
+        "max": 508.9111800000537
+      }
+    }
+  }
+}
