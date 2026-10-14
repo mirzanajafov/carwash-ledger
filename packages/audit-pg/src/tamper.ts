@@ -1,6 +1,6 @@
 import { leafHash, nodeHash, type Hash } from '@carwash/audit'
 import type pg from 'pg'
-import { canonicalOf, type JournalRow } from './log.ts'
+import { canonicalOf, SEQUENCER_LOCK, type JournalRow } from './log.ts'
 
 export type TamperClass = 1 | 2 | 3
 
@@ -8,6 +8,7 @@ export interface Tampered {
   tamperClass: TamperClass
   seq: number
   journalId: string
+  undo: { amounts?: { id: string; amount: string }[]; journal?: string; entries?: string }
 }
 
 const JOURNAL = `
@@ -26,15 +27,18 @@ const RECHAIN = `
   )
   UPDATE audit_log a SET chain = r.chain FROM rechained r WHERE a.seq = r.seq`
 
-async function moveCents(client: pg.ClientBase, journalId: string, cents: number): Promise<void> {
-  const moved = await client.query(
+async function moveCents(client: pg.ClientBase, journalId: string, cents: number): Promise<{ id: string; amount: string }[]> {
+  const { rows } = await client.query<{ id: string; amount: string }>(
     `WITH plus AS (SELECT id FROM entries WHERE journal_id = $1 AND amount > 0 ORDER BY id LIMIT 1),
-          minus AS (SELECT id FROM entries WHERE journal_id = $1 AND amount < 0 ORDER BY id LIMIT 1)
-     UPDATE entries SET amount = amount + CASE WHEN id IN (SELECT id FROM plus) THEN $2::bigint ELSE -$2::bigint END
-     WHERE id IN (SELECT id FROM plus UNION ALL SELECT id FROM minus)`,
+          minus AS (SELECT id FROM entries WHERE journal_id = $1 AND amount < 0 ORDER BY id LIMIT 1),
+          before AS (SELECT id, amount FROM entries WHERE id IN (SELECT id FROM plus UNION ALL SELECT id FROM minus))
+     UPDATE entries e SET amount = e.amount + CASE WHEN e.id IN (SELECT id FROM plus) THEN $2::bigint ELSE -$2::bigint END
+     FROM before b WHERE e.id = b.id
+     RETURNING e.id::text, b.amount::text`,
     [journalId, cents],
   )
-  if (moved.rowCount !== 2) throw new Error(`journal ${journalId} has no pair of entries to move cents between`)
+  if (rows.length !== 2) throw new Error(`journal ${journalId} has no pair of entries to move cents between`)
+  return rows
 }
 
 async function rewriteHashes(client: pg.ClientBase, seq: number, journalId: string): Promise<void> {
@@ -63,15 +67,31 @@ async function rewriteHashes(client: pg.ClientBase, seq: number, journalId: stri
 
 export async function tamper(client: pg.ClientBase, tamperClass: TamperClass, seq: number, cents = 100): Promise<Tampered> {
   await client.query('SET LOCAL session_replication_role = replica')
+  await client.query('SELECT pg_advisory_xact_lock($1)', [SEQUENCER_LOCK])
   const { rows } = await client.query<{ journal_id: string }>('SELECT journal_id::text FROM audit_log WHERE seq = $1', [seq])
   if (!rows[0]) throw new Error(`the audit log has no seq ${seq}`)
   const journalId = rows[0].journal_id
   if (tamperClass === 3) {
-    await client.query('DELETE FROM entries WHERE journal_id = $1', [journalId])
-    await client.query('DELETE FROM journals WHERE id = $1', [journalId])
-  } else {
-    await moveCents(client, journalId, cents)
-    if (tamperClass === 2) await rewriteHashes(client, seq, journalId)
+    const entries = await client.query<{ rows: string }>(
+      `WITH gone AS (DELETE FROM entries WHERE journal_id = $1 RETURNING *) SELECT jsonb_agg(to_jsonb(gone.*))::text AS rows FROM gone`,
+      [journalId],
+    )
+    const journal = await client.query<{ row: string }>('DELETE FROM journals WHERE id = $1 RETURNING to_jsonb(journals.*)::text AS row', [journalId])
+    return { tamperClass, seq, journalId, undo: { journal: journal.rows[0]!.row, entries: entries.rows[0]!.rows } }
   }
-  return { tamperClass, seq, journalId }
+  const amounts = await moveCents(client, journalId, cents)
+  if (tamperClass === 2) await rewriteHashes(client, seq, journalId)
+  return { tamperClass, seq, journalId, undo: { amounts } }
+}
+
+export async function restore(client: pg.ClientBase, tampered: Tampered): Promise<void> {
+  await client.query('SET LOCAL session_replication_role = replica')
+  await client.query('SELECT pg_advisory_xact_lock($1)', [SEQUENCER_LOCK])
+  if (tampered.tamperClass === 3) {
+    await client.query('INSERT INTO journals SELECT * FROM jsonb_populate_record(NULL::journals, $1::jsonb)', [tampered.undo.journal])
+    await client.query('INSERT INTO entries SELECT * FROM jsonb_populate_recordset(NULL::entries, $1::jsonb)', [tampered.undo.entries])
+    return
+  }
+  for (const { id, amount } of tampered.undo.amounts ?? []) await client.query('UPDATE entries SET amount = $2 WHERE id = $1', [id, amount])
+  if (tampered.tamperClass === 2) await rewriteHashes(client, tampered.seq, tampered.journalId)
 }

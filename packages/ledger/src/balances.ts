@@ -58,3 +58,28 @@ export async function reversalOf(db: Queryable, journalId: bigint, externalRef: 
     entries: result.rows.map((row) => ({ accountId: BigInt(row.account_id), amount: -BigInt(row.amount) })),
   }
 }
+
+export interface AccountBalance {
+  code: string
+  type: string
+  currency: string
+  amount: bigint
+}
+
+const ALL_BALANCES = `
+SELECT a.code, a.type::text, a.currency,
+       (CASE WHEN a.balance_mode = 'derived'
+             THEN coalesce(s.amount, 0) + coalesce((
+                    SELECT sum(e.amount) FROM entries e
+                    WHERE e.account_id = a.id AND e.created_xid >= coalesce(s.horizon, '0'::xid8)
+                  ), 0)
+             ELSE coalesce((SELECT sum(b.amount) FROM balances b WHERE b.account_id = a.id), 0)
+        END)::text AS amount
+FROM accounts a
+LEFT JOIN balance_snapshots s ON s.account_id = a.id
+ORDER BY a.id`
+
+export async function readAllBalances(db: Queryable): Promise<AccountBalance[]> {
+  const { rows } = await db.query<{ code: string; type: string; currency: string; amount: string }>(ALL_BALANCES)
+  return rows.map((row) => ({ ...row, amount: BigInt(row.amount) }))
+}

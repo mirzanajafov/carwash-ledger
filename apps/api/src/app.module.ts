@@ -4,10 +4,13 @@ import type { NestExpressApplication } from '@nestjs/platform-express'
 import { AuditController } from './audit/audit.controller.ts'
 import { AccessGuard, Public } from './auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from './config.ts'
+import { AuditDatabase, DashboardController } from './dashboard/dashboard.controller.ts'
 import { Database } from './db/database.ts'
 import { ErrorFilter } from './http/api-error.ts'
 import { IdempotencyService } from './idempotency/idempotency.service.ts'
 import { Chart } from './ledger/chart.service.ts'
+import { LiveController } from './live/live.controller.ts'
+import { LiveFeed } from './live/live-feed.ts'
 import { AttemptsService } from './payments/attempts.service.ts'
 import { PaymentsController } from './payments/payments.controller.ts'
 import { PaymentsService } from './payments/payments.service.ts'
@@ -50,6 +53,8 @@ export class AppModule {
         SettlementsController,
         ReconciliationController,
         AuditController,
+        LiveController,
+        DashboardController,
       ],
       providers: [
         { provide: API_CONFIG, useValue: config },
@@ -62,6 +67,8 @@ export class AppModule {
         PayoutsService,
         WebhooksService,
         Settlements,
+        LiveFeed,
+        AuditDatabase,
         { provide: APP_GUARD, useClass: AccessGuard },
         { provide: APP_FILTER, useClass: ErrorFilter },
       ],

@@ -10,7 +10,7 @@ import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Checkpointer, head, sequenceBatch, tamper, verifyLog, WitnessClient, type TamperClass, type VerifierState, type WitnessedRoots } from '../src/index.ts'
+import { Checkpointer, head, restore, sequenceBatch, tamper, verifyLog, WitnessClient, type TamperClass, type VerifierState, type WitnessedRoots } from '../src/index.ts'
 
 let db: TestDatabase
 let app: pg.Pool
@@ -154,6 +154,28 @@ describe('full verification', () => {
       return { journalId: rows[0]!.journal_id, report: await verifyLog(client, { witness: witnessed }) }
     })
     expect(last.report.examples).toEqual([{ kind: 'unsequenced', journalId: last.journalId }])
+  })
+})
+
+describe('restoring a tamper', () => {
+  it('puts every class back so that the full verifier and the stored hashes agree with the witness again', async () => {
+    const before = await head(app)
+    for (const tamperClass of [1, 2, 3] as const) {
+      const client = await admin.connect()
+      try {
+        await client.query('BEGIN')
+        const what = await tamper(client, tamperClass, 20)
+        expect((await verifyLog(client, { witness: witnessed })).findings).toBeGreaterThan(0)
+        await restore(client, what)
+        const report = await verifyLog(client, { witness: witnessed })
+        expect(report.findings).toBe(0)
+        expect(report.state).toMatchObject({ root: toHex(before.root), chain: toHex(before.chain) })
+        expect(toHex((await head(client)).root)).toBe(toHex(before.root))
+      } finally {
+        await client.query('ROLLBACK')
+        client.release()
+      }
+    }
   })
 })
 

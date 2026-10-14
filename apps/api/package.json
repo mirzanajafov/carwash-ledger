@@ -16,6 +16,7 @@
     "@carwash/audit": "workspace:*",
     "@carwash/audit-pg": "workspace:*",
     "@carwash/failpoints": "workspace:*",
+    "@carwash/invariants": "workspace:*",
     "@carwash/ledger": "workspace:*",
     "@carwash/outbox": "workspace:*",
     "@carwash/pg": "workspace:*",
@@ -30,7 +31,6 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@carwash/invariants": "workspace:*",
     "@carwash/psp": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "@carwash/witness": "workspace:*",

@@ -90,6 +90,11 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     witnessTimeoutMs: 2000,
     checkpointEveryMs: 10_000,
     checkpointEveryLeaves: 10_000,
+    auditDatabaseUrl: undefined,
+    liveEveryMs: 200,
+    liveMaxConnections: 100,
+    plugEveryMs: 60_000,
+    checksEveryMs: 0,
     ...overrides,
   }
 }
@@ -171,7 +176,7 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
     },
     () => undefined,
   )
-  const config = apiConfig(ledgerDb.url('ledger_app'), psp.url, { webhookSecret: options.webhooks ? WEBHOOK_SECRET : undefined })
+  const config = apiConfig(ledgerDb.url('ledger_app'), psp.url, { webhookSecret: options.webhooks ? WEBHOOK_SECRET : undefined, auditDatabaseUrl: ledgerDb.url('ledger_audit') })
   const { app, url } = await startApi(config, apiPort)
   const stack: Stack = {
     ledgerDb,

@@ -16,6 +16,7 @@ export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
     this.#db = db
     this.#config = config
+    if (config.witnessUrl && !config.witnessToken) throw new Error('WITNESS_TOKEN is required when WITNESS_URL is set')
     if (config.witnessUrl && config.witnessToken) {
       this.#checkpointer = new Checkpointer(db.pool, new WitnessClient(config.witnessUrl, config.witnessToken, config.witnessTimeoutMs))
     }
