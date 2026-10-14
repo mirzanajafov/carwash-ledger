@@ -2,7 +2,7 @@ import { fromHex, rootFromLeaves, toHex, verifyConsistency, verifyInclusion } fr
 import { checkAudit, checkAuditIn, checkSequenced, violations } from '@carwash/invariants'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { sequenceBatch } from '../src/audit/audit-log.ts'
+import { sequenceBatch } from '@carwash/audit-pg'
 import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
 

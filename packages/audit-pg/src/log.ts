@@ -72,11 +72,20 @@ export async function proveConsistency(db: Queryable, first: number, second: num
   return withNodes(db, (source) => consistencyProof(first, second, source))
 }
 
-interface JournalRow {
+export interface JournalRow {
   id: string
   external_ref: string
   micros: string
   entries: [string, string, string][]
+}
+
+export function canonicalOf(journal: JournalRow): Uint8Array {
+  return canonicalJournal({
+    id: BigInt(journal.id),
+    externalRef: journal.external_ref,
+    createdAtMicros: BigInt(journal.micros),
+    entries: journal.entries.map(([id, accountId, amount]) => ({ id: BigInt(id), accountId: BigInt(accountId), amount: BigInt(amount) })),
+  })
 }
 
 export async function sequenceBatch(client: pg.ClientBase, limit: number): Promise<number> {
@@ -107,14 +116,7 @@ export async function sequenceBatch(client: pg.ClientBase, limit: number): Promi
   const indexes: number[] = []
   const hashes: Buffer[] = []
   journals.forEach((journal, offset) => {
-    const leaf = leafHash(
-      canonicalJournal({
-        id: BigInt(journal.id),
-        externalRef: journal.external_ref,
-        createdAtMicros: BigInt(journal.micros),
-        entries: journal.entries.map(([id, accountId, amount]) => ({ id: BigInt(id), accountId: BigInt(accountId), amount: BigInt(amount) })),
-      }),
-    )
+    const leaf = leafHash(canonicalOf(journal))
     chain = chainHash(chain, leaf)
     const seq = size + offset
     seqs.push(seq)
