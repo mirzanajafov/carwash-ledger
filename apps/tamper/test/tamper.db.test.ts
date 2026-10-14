@@ -1,4 +1,5 @@
 import { once } from 'node:events'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { mkdtempSync, rmSync } from 'node:fs'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -77,7 +78,7 @@ afterAll(async () => {
 
 describe('the tamper service', () => {
   it('tampers with one witnessed journal at a time, survives a restart, and restores it so that verification is clean again', async () => {
-    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, () => 0.5), 'tamper-token')))
+    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.5 }), 'tamper-token')))
     expect((await client(`http://127.0.0.1:${(servers.at(-1)!.address() as AddressInfo).port}`, 'nope')('GET', '/v1/tamper')).status).toBe(401)
     expect(await call('GET', '/v1/tamper')).toEqual({ status: 200, body: { tamper: null } })
     expect((await call('POST', '/v1/tamper', { class: 4 })).status).toBe(400)
@@ -94,8 +95,28 @@ describe('the tamper service', () => {
     expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
   })
 
+  it('restores on its own after the configured time, also after a restart', async () => {
+    const service = new TamperService(admin, stateDir, { random: () => 0.7, autoRestoreMs: 600 })
+    try {
+      const tampered = await service.tamper(1)
+      expect(tampered.restores_at).not.toBeNull()
+      expect((await verifyLog(admin, { witness: roots() })).findings).toBeGreaterThan(0)
+      service.close()
+      const restarted = new TamperService(admin, stateDir, { autoRestoreMs: 600 })
+      try {
+        await sleep(1500)
+        expect(restarted.current()).toBeNull()
+        expect((await verifyLog(admin, { witness: roots() })).findings).toBe(0)
+      } finally {
+        restarted.close()
+      }
+    } finally {
+      service.close()
+    }
+  })
+
   it('puts a deleted journal back with its own ids', async () => {
-    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, () => 0.1), 'tamper-token')))
+    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.1 }), 'tamper-token')))
     const before = await admin.query('SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id')
     const { body } = await call('POST', '/v1/tamper', { class: 3 })
     expect((await verifyLog(admin, { witness: roots() })).examples).toEqual([{ kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id }])

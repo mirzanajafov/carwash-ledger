@@ -19,27 +19,45 @@ export interface Tamper {
   journal_id: string
   witnessed_size: number
   at: string
+  restores_at: string | null
 }
 
 export class TamperService {
   readonly #pool: pg.Pool
   readonly #file: string
   readonly #random: () => number
+  readonly #autoRestoreMs: number
   #current: (Tampered & { witnessedSize: number; at: string }) | undefined
   #queue: Promise<unknown> = Promise.resolve()
+  #timer: NodeJS.Timeout | undefined
 
-  constructor(pool: pg.Pool, dir: string, random: () => number = Math.random) {
+  constructor(pool: pg.Pool, dir: string, options: { random?: () => number; autoRestoreMs?: number } = {}) {
     this.#pool = pool
-    this.#random = random
+    this.#random = options.random ?? Math.random
+    this.#autoRestoreMs = options.autoRestoreMs ?? 0
     mkdirSync(dir, { recursive: true })
     this.#file = join(dir, 'tamper.json')
     if (existsSync(this.#file)) this.#current = JSON.parse(readFileSync(this.#file, 'utf8'))
+    this.#schedule()
+  }
+
+  close(): void {
+    clearTimeout(this.#timer)
+  }
+
+  #schedule(): void {
+    clearTimeout(this.#timer)
+    if (!this.#current || this.#autoRestoreMs <= 0) return
+    const due = Date.parse(this.#current.at) + this.#autoRestoreMs - Date.now()
+    this.#timer = setTimeout(() => void this.restore().catch(() => this.#schedule()), Math.max(0, due))
+    this.#timer.unref()
   }
 
   current(): Tamper | null {
     const current = this.#current
     if (!current) return null
-    return { tamper_class: current.tamperClass, seq: current.seq, journal_id: current.journalId, witnessed_size: current.witnessedSize, at: current.at }
+    const restoresAt = this.#autoRestoreMs > 0 ? new Date(Date.parse(current.at) + this.#autoRestoreMs).toISOString() : null
+    return { tamper_class: current.tamperClass, seq: current.seq, journal_id: current.journalId, witnessed_size: current.witnessedSize, at: current.at, restores_at: restoresAt }
   }
 
   tamper(tamperClass: TamperClass): Promise<Tamper> {
@@ -51,6 +69,7 @@ export class TamperService {
       const seq = Math.floor(this.#random() * witnessedSize)
       const done = await this.#transaction((client) => tamper(client, tamperClass, seq))
       this.#save({ ...done, witnessedSize, at: new Date().toISOString() })
+      this.#schedule()
       return this.current()!
     })
   }
@@ -62,6 +81,7 @@ export class TamperService {
       await this.#transaction((client) => restore(client, current))
       const restored = this.current()!
       this.#save(undefined)
+      this.#schedule()
       return restored
     })
   }

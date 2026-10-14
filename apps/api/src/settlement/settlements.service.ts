@@ -183,6 +183,45 @@ export class Settlements {
     return rows
   }
 
+  async days(currency: string, limit: number) {
+    const calendar = await this.#psp.calendar()
+    const { rows } = await this.#db.pool.query<{ day: number; id: string; lines: number; gross: string; fee: string; net: string; journal_id: string | null; received_at: Date; breaks: Record<string, number> | null }>(
+      `SELECT f.day::int AS day, f.id, f.lines, f.gross::text, f.fee::text, f.net::text, f.journal_id::text, f.received_at,
+              (SELECT jsonb_object_agg(class, n) FROM (SELECT class, count(*)::int AS n FROM recon_breaks b WHERE b.currency = f.currency AND b.day = f.day GROUP BY class) c) AS breaks
+       FROM settlement_files f WHERE f.currency = $1 ORDER BY f.day DESC LIMIT $2`,
+      [currency, limit],
+    )
+    return {
+      day_seconds: calendar.kind === 'answer' ? calendar.daySeconds : null,
+      current_day: calendar.kind === 'answer' ? calendar.currentDay : null,
+      data: rows.map((row) => ({ ...row, received_at: row.received_at.toISOString(), breaks: row.breaks ?? {} })),
+    }
+  }
+
+  async day(currency: string, day: number, limit: number) {
+    const { rows: files } = await this.#db.pool.query<{ id: string; lines: number; gross: string; fee: string; net: string; journal_id: string | null; received_at: Date }>(
+      `SELECT id, lines, gross::text, fee::text, net::text, journal_id::text, received_at FROM settlement_files WHERE currency = $1 AND day = $2`,
+      [currency, day],
+    )
+    const file = files[0]
+    const { rows: lines } = file
+      ? await this.#db.pool.query(
+          `SELECT l.line, l.operation, l.reference, l.kind, l.gross::text, l.fee::text, l.net::text, l.operated_at,
+                  (SELECT b.class FROM recon_breaks b WHERE b.file_id = l.file_id AND b.line = l.line ORDER BY b.id LIMIT 1) AS break
+           FROM settlement_lines l WHERE l.file_id = $1 ORDER BY (SELECT 1 FROM recon_breaks b WHERE b.file_id = l.file_id AND b.line = l.line LIMIT 1) NULLS LAST, l.line LIMIT $2`,
+          [file.id, limit],
+        )
+      : { rows: [] }
+    return {
+      object: 'settlement_day',
+      day,
+      currency,
+      file: file ? { ...file, received_at: file.received_at.toISOString() } : null,
+      lines,
+      breaks: await this.breaks(currency, day, day),
+    }
+  }
+
   async #firstOpenDay(currency: string, daySeconds: number, currentDay: number): Promise<number> {
     const { rows } = await this.#db.pool.query<{ latest: number | null; first: number | null }>(
       `SELECT (SELECT max(day)::int FROM settlement_files WHERE currency = $1) AS latest,

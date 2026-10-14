@@ -1,4 +1,4 @@
-import { fromHex, rootFromLeaves, toHex, verifyConsistency, verifyInclusion } from '@carwash/audit'
+import { canonicalJournal, fromHex, leafHash, rootFromLeaves, toHex, verifyConsistency, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, checkSequenced, violations } from '@carwash/invariants'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -106,6 +106,29 @@ describe('the audit log', () => {
     expect(unrecorded.some((d) => d.endsWith('is neither sequenced nor queued'))).toBe(true)
     const forged = await s7((c) => c.query(`UPDATE audit_nodes SET hash = sha256(hash) WHERE level = 1 AND idx = 0`))
     expect([...forged].sort()).toEqual(['subtree 1:0 does not hash its children', 'subtree 2:0 does not hash its children'])
+  })
+
+  it('gives anyone with a key the rows of a journal, from which the leaf the log holds can be computed again', async () => {
+    await sequenceAll()
+    const { rows } = await stack.admin.query<{ journal_id: string; seq: string; leaf: Buffer }>('SELECT journal_id::text, seq::text, leaf FROM audit_log ORDER BY seq DESC LIMIT 3')
+    for (const row of rows) {
+      const journal = (await stack.call('GET', `/v1/journals/${row.journal_id}`)).body
+      expect(journal).toMatchObject({ object: 'journal', id: row.journal_id, seq: Number(row.seq) })
+      const leaf = leafHash(
+        canonicalJournal({
+          id: BigInt(journal.id),
+          externalRef: journal.external_ref,
+          createdAtMicros: BigInt(journal.created_at_micros),
+          entries: journal.entries.map((e: { id: string; account_id: string; amount: string }) => ({ id: BigInt(e.id), accountId: BigInt(e.account_id), amount: BigInt(e.amount) })),
+        }),
+      )
+      expect(toHex(leaf)).toBe(toHex(new Uint8Array(row.leaf)))
+    }
+    const top = (await stack.call('GET', `/v1/audit/leaves/${rows[0]!.seq}`)).body
+    expect(top).toEqual({ object: 'leaf', seq: Number(rows[0]!.seq), journal_id: rows[0]!.journal_id, leaf: toHex(new Uint8Array(rows[0]!.leaf)) })
+    expect((await stack.call('GET', '/v1/audit/leaves/999999')).status).toBe(404)
+    expect((await stack.call('GET', '/v1/journals/999999999')).status).toBe(404)
+    expect((await stack.call('GET', '/v1/journals/1', { as: 'nobody' })).status).toBe(401)
   })
 
   it('reports a journal still waiting to be sequenced (L4)', async () => {

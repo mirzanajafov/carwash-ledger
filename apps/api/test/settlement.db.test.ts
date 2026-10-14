@@ -64,6 +64,17 @@ describe('settlement', () => {
       { code: 'psp_receivable:EUR', amount: `-${files[0]!.gross}` },
     ])
     expect((await stack.call('POST', `/v1/settlements/${today}/ingest`, { as: 'admin' })).body.outcome).toBe('already')
+    const days = await stack.call('GET', '/v1/reconciliation/days', { as: 'admin' })
+    expect(days.body).toMatchObject({ day_seconds: 86_400, data: [{ day: today, id: files[0]!.id, lines: 4, gross: files[0]!.gross, breaks: {} }] })
+    expect((await stack.call('GET', '/v1/reconciliation/days')).status).toBe(403)
+    const day = await stack.call('GET', `/v1/reconciliation/days/${today}`, { as: 'admin' })
+    expect(day.body).toMatchObject({ day: today, file: { id: files[0]!.id, lines: 4 }, breaks: [] })
+    expect(day.body.lines.map((l: { kind: string; break: string | null }) => [l.kind, l.break])).toEqual([
+      ['capture', null],
+      ['capture', null],
+      ['refund', null],
+      ['capture', null],
+    ])
     expect(violations(await checkLedger(stack.admin))).toEqual([])
     const l5 = await checkSettlement(stack.admin, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: today })
     expect(l5.examples).toEqual([])
