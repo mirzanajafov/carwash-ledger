@@ -38,6 +38,20 @@ export class Journeys {
     this.#callers = callers
   }
 
+  learnAccepted(anomaly: { attempt: { kind: string; amount: string } | null; payment_id: string | null; refund_id: string | null }): void {
+    const belief = this.payments.find((p) => p.paymentId === anomaly.payment_id)
+    if (!belief || !anomaly.attempt) return
+    const amount = Number(anomaly.attempt.amount)
+    if (anomaly.attempt.kind === 'capture') {
+      belief.status = 'captured'
+      belief.captured = amount
+    } else if (anomaly.attempt.kind === 'refund' && anomaly.refund_id) {
+      belief.refunds.push({ id: anomaly.refund_id, amount })
+      belief.refunded += amount
+      if (belief.refunded === belief.captured) belief.status = 'refunded'
+    }
+  }
+
   async payment(journey: PaymentJourney): Promise<void> {
     const outcome = await this.#payment(journey)
     this.outcomes[outcome] = (this.outcomes[outcome] ?? 0) + 1

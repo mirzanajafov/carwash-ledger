@@ -163,15 +163,16 @@ enum IdempotencyState {
 }
 
 model ApiClient {
-  id        BigInt           @id @default(autoincrement())
+  id        BigInt             @id @default(autoincrement())
   name      String
-  keyHash   Bytes            @unique @map("key_hash")
+  keyHash   Bytes              @unique @map("key_hash")
   scope     ClientScope
-  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  revokedAt DateTime?        @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt DateTime?          @map("revoked_at") @db.Timestamptz(6)
   payments  Payment[]
   keys      IdempotencyKey[]
   sessions  DashboardSession[]
+  resolved  Anomaly[]
 
   @@map("api_clients")
 }
@@ -303,12 +304,16 @@ model IdempotencyKey {
 }
 
 model Anomaly {
-  id        BigInt   @id @default(autoincrement())
-  attemptId String?  @map("attempt_id") @db.Uuid
-  kind      String
-  details   Json
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  attempt   Attempt? @relation(fields: [attemptId], references: [id])
+  id         BigInt     @id @default(autoincrement())
+  attemptId  String?    @map("attempt_id") @db.Uuid
+  kind       String
+  details    Json
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt DateTime?  @map("resolved_at") @db.Timestamptz(6)
+  resolution String?
+  resolvedBy BigInt?    @map("resolved_by")
+  attempt    Attempt?   @relation(fields: [attemptId], references: [id])
+  resolver   ApiClient? @relation(fields: [resolvedBy], references: [id])
 
   @@unique([attemptId, kind])
   @@map("anomalies")
