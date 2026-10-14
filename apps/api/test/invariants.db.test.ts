@@ -98,7 +98,11 @@ async function postJournal(client: pg.ClientBase, ref: string, entries: [string,
     [id ?? null, ref],
   )
   for (const [account, amount] of entries) {
-    await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [rows[0]!.id, account, amount])
+    await client.query('INSERT INTO entries (journal_id, account_id, amount, currency) SELECT $1, id, $3, currency FROM accounts WHERE id = $2', [
+      rows[0]!.id,
+      account,
+      amount,
+    ])
   }
   return rows[0]!.id
 }

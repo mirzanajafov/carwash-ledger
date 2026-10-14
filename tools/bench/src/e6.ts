@@ -25,6 +25,7 @@ import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
+import { createSeedAccounts, MERCHANTS, seedJournals, type SeedAccounts } from './ledger-seed.ts'
 import { mulberry32, runOpenLoop } from './loadgen.ts'
 
 const { values } = parseArgs({
@@ -46,15 +47,13 @@ const { values } = parseArgs({
   },
 })
 
-const MERCHANTS = 50
-const SEED_BATCH = 50_000
 
 interface Lab {
   db: TestDatabase
   admin: pg.Pool
   app: pg.Pool
   audit: pg.Pool
-  accounts: { receivable: string; fees: string; pspFees: string; merchants: string[] }
+  accounts: SeedAccounts
   witness: Witness
   checkpointer: Checkpointer
   close(): Promise<void>
@@ -97,20 +96,7 @@ async function openLab(): Promise<Lab> {
   const admin = db.pool('admin', 2)
   const app = db.pool('ledger_app', 12)
   const audit = db.pool('ledger_audit', 2)
-  const create = async (code: string, type: string) => {
-    const { rows } = await app.query<{ id: string }>(
-      `INSERT INTO accounts (code, type, currency, balance_mode, shards) VALUES ($1, $2::account_type, 'EUR', 'derived', 1) RETURNING id::text`,
-      [code, type],
-    )
-    return rows[0]!.id
-  }
-  const accounts = {
-    receivable: await create('psp_receivable', 'asset'),
-    fees: await create('platform_fees', 'revenue'),
-    pspFees: await create('psp_fees', 'expense'),
-    merchants: [] as string[],
-  }
-  for (let i = 0; i < MERCHANTS; i++) accounts.merchants.push(await create(`merchant:wash_${i}`, 'liability'))
+  const accounts = await createSeedAccounts(app)
   const dir = mkdtempSync(join(tmpdir(), 'e6-witness-'))
   const witness = new Witness(dir, 'carwash-ledger')
   const server: Server = createWitnessServer(witness, 'e6')
@@ -138,40 +124,8 @@ function roots(lab: Lab): WitnessedRoots {
   return { origin: lab.witness.origin, publicKey: lab.witness.publicKey, checkpoints: lab.witness.history() }
 }
 
-async function seed(lab: Lab, from: number, to: number): Promise<number> {
-  const started = performance.now()
-  for (let start = from; start < to; start += SEED_BATCH) {
-    const end = Math.min(start + SEED_BATCH, to) - 1
-    const client = await lab.admin.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query('SET LOCAL session_replication_role = replica')
-      await client.query(
-        `WITH j AS (
-           INSERT INTO journals (external_ref) SELECT 'seed:' || g FROM generate_series($1::bigint, $2::bigint) g RETURNING id, external_ref
-         ), n AS (
-           SELECT id, substr(external_ref, 6)::bigint AS g, (ARRAY[900, 1500, 2400, 3500, 4900])[1 + substr(external_ref, 6)::bigint % 5]::bigint AS gross FROM j
-         ), q AS (
-           INSERT INTO audit_queue (journal_id) SELECT id FROM n
-         )
-         INSERT INTO entries (journal_id, account_id, amount)
-         SELECT n.id, x.account_id, x.amount
-         FROM n CROSS JOIN LATERAL (VALUES
-           ($3::bigint, n.gross),
-           (($6::bigint[])[1 + n.g % ${MERCHANTS}], -(n.gross - (n.gross * 2 / 100 + 10))),
-           ($4::bigint, -(n.gross * 2 / 100 + 10) + CASE WHEN n.g % 3 = 0 THEN 8 ELSE 0 END),
-           (CASE WHEN n.g % 3 = 0 THEN $5::bigint END, -8::bigint)
-         ) AS x(account_id, amount)
-         WHERE x.account_id IS NOT NULL`,
-        [start, end, lab.accounts.receivable, lab.accounts.fees, lab.accounts.pspFees, lab.accounts.merchants],
-      )
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
-  }
-  await lab.admin.query('ANALYZE journals, entries, audit_queue')
-  return performance.now() - started
+function seed(lab: Lab, from: number, to: number): Promise<number> {
+  return seedJournals(lab.admin, lab.accounts, from, to, { queueAudit: true })
 }
 
 async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoint = true) {

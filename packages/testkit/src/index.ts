@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createPool } from '@carwash/pg'
 import pg from 'pg'
@@ -10,6 +12,7 @@ export const ADMIN_URL = process.env.LEDGER_ADMIN_URL ?? 'postgresql://carwash:c
 export const TEMPLATE_DATABASE = 'ledger_template'
 
 const DB_PACKAGE = fileURLToPath(new URL('../../db', import.meta.url))
+const MIGRATIONS = join(DB_PACKAGE, 'prisma', 'migrations')
 const PRISMA_CLI = fileURLToPath(new URL('../../db/node_modules/prisma/build/index.js', import.meta.url))
 
 const PASSWORDS: Record<Exclude<Role, 'admin'>, string> = {
@@ -67,14 +70,41 @@ export interface TestDatabase {
   readonly name: string
   url(role: Role): string
   pool(role: Role, max?: number): pg.Pool
+  close(): Promise<void>
   drop(): Promise<void>
 }
 
-export async function createTestDatabase(): Promise<TestDatabase> {
+export function migrationNames(): string[] {
+  return readdirSync(MIGRATIONS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+}
+
+export function migrationSql(name: string): string {
+  return readFileSync(join(MIGRATIONS, name, 'migration.sql'), 'utf8')
+}
+
+export async function applyMigration(url: string, name: string): Promise<void> {
+  const client = new pg.Client({ connectionString: url })
+  client.on('error', () => undefined)
+  await client.connect()
+  try {
+    await client.query(migrationSql(name))
+  } finally {
+    await client.end()
+  }
+}
+
+export async function createTestDatabase(options: { template?: string; through?: string } = {}): Promise<TestDatabase> {
   const name = `test_${process.pid}_${randomBytes(4).toString('hex')}`
-  await withAdmin((admin) =>
-    admin.query(`CREATE DATABASE ${quoteIdent(name)} TEMPLATE ${quoteIdent(TEMPLATE_DATABASE)} OWNER ledger_owner`),
-  )
+  const template = options.through === undefined ? quoteIdent(options.template ?? TEMPLATE_DATABASE) : 'template0'
+  await withAdmin((admin) => admin.query(`CREATE DATABASE ${quoteIdent(name)} TEMPLATE ${template} OWNER ledger_owner`))
+  if (options.through !== undefined) {
+    const names = migrationNames()
+    if (!names.includes(options.through)) throw new Error(`there is no migration ${options.through}`)
+    for (const migration of names.slice(0, names.indexOf(options.through) + 1)) await applyMigration(databaseUrl('ledger_owner', name), migration)
+  }
   const pools: pg.Pool[] = []
   return {
     name,
@@ -84,8 +114,11 @@ export async function createTestDatabase(): Promise<TestDatabase> {
       pools.push(pool)
       return pool
     },
+    close: async () => {
+      await Promise.all(pools.splice(0).map((pool) => pool.end()))
+    },
     drop: async () => {
-      await Promise.all(pools.map((pool) => pool.end()))
+      await Promise.all(pools.splice(0).map((pool) => pool.end()))
       await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
     },
   }
