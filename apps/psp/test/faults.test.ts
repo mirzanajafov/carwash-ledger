@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Faults, NO_FAULTS, parseFaultPlan, parseToken } from '../src/faults.ts'
+import { Faults, NO_FAULTS, parseFaultPlan, parseToken, parseWeather } from '../src/faults.ts'
 
 describe('parseToken', () => {
   it('reads every kind of test token and rejects anything else', () => {
@@ -82,5 +82,45 @@ describe('parseFaultPlan', () => {
     expect(() => parseFaultPlan({ webhook: { lose: 0.1 } })).toThrow('unknown webhook fault lose')
     expect(() => parseFaultPlan({ slowMs: [3000, 500] })).toThrow('slowMs')
     expect(() => parseFaultPlan(null)).toThrow('object')
+  })
+})
+
+describe('the weather', () => {
+  it('lays a temporary plan over the base one and goes back on its own', () => {
+    let now = 1_000_000
+    const base = parseFaultPlan({ fail: 0.01 })
+    const faults = new Faults(base, () => now)
+    const storm = parseFaultPlan({ decline: 1 })
+    faults.setWeather('storm', storm, 60)
+    expect(faults.plan).toBe(storm)
+    expect(faults.behaviour('a', 'authorize', { kind: 'ok' }).decline).toBe(true)
+    now += 59_999
+    expect(faults.weather?.label).toBe('storm')
+    now += 1
+    expect(faults.weather).toBeUndefined()
+    expect(faults.plan).toBe(base)
+    expect(faults.behaviour('b', 'authorize', { kind: 'ok' }).decline).toBe(false)
+  })
+
+  it('is cleared by a new base plan and by an explicit clear', () => {
+    const faults = new Faults(NO_FAULTS, () => 0)
+    faults.setWeather('flaky', parseFaultPlan({ fail: 0.5 }), 300)
+    const next = parseFaultPlan({ slow: 0.1 })
+    faults.plan = next
+    expect(faults.weather).toBeUndefined()
+    expect(faults.plan).toBe(next)
+    faults.setWeather('flaky', parseFaultPlan({ fail: 0.5 }), 300)
+    faults.clearWeather()
+    expect(faults.plan).toBe(next)
+  })
+
+  it('takes a label, a plan and a bounded number of seconds, and nothing else', () => {
+    expect(parseWeather({ label: 'storm', plan: { fail: 0.2 }, seconds: 300 })).toEqual({ label: 'storm', plan: { ...NO_FAULTS, fail: 0.2 }, seconds: 300 })
+    expect(() => parseWeather({ label: 'storm', plan: {}, seconds: 0 })).toThrow('seconds')
+    expect(() => parseWeather({ label: 'storm', plan: {}, seconds: 3601 })).toThrow('seconds')
+    expect(() => parseWeather({ label: 'storm', plan: {}, seconds: 1.5 })).toThrow('seconds')
+    expect(() => parseWeather({ label: '<b>', plan: {}, seconds: 60 })).toThrow('label')
+    expect(() => parseWeather({ label: 'storm', plan: { fail: 2 }, seconds: 60 })).toThrow('fail must be a probability')
+    expect(() => parseWeather({ label: 'storm', plan: {}, seconds: 60, forever: true })).toThrow('unknown weather field forever')
   })
 })

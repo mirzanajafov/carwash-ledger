@@ -4,7 +4,7 @@ In Breaking Bad, Saul and Skyler push money through a car wash, and the hard par
 
 A payment that is retried, cut off by a crash or reported twice by the bank still moves each cent exactly once. The books always balance, and the database refuses anything that doesn't. Anyone who edits history behind the ledger's back gets caught, by a witness that lives outside the database and by your own browser. Most of my working life has been payment pipelines, Stripe and Kafka, and none of that is public. This takes the hardest part of that work and proves it with numbers instead of claims.
 
-It runs at **[carwash.najafov.dev](https://carwash.najafov.dev)**: money moving through T-accounts as customers pay at the bays, a button that kills the API in the middle of a payment, three ways to tamper with the books, and the measurements behind all of it.
+It runs at **[carwash.najafov.dev](https://carwash.najafov.dev)**: money moving through T-accounts as customers pay at the bays, a button that kills the API in the middle of a payment, a bank you can make flaky for five minutes, three ways to tamper with the books, and the measurements behind all of it.
 
 What's real and what isn't: the payment provider and the bank are a simulator I wrote, the money and the customers are fake, and on the demo a settlement "day" lasts ten minutes. The ledger, its rules, the invariant checker and the audit log are the real thing. The witness that signs the audit log runs on the same server as the ledger, so on the demo it shows the mechanism, not a real separation of trust.
 

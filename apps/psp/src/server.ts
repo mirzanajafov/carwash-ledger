@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { parseFaultPlan, parseToken, type Faults, type TokenEffect } from './faults.ts'
+import { parseFaultPlan, parseToken, parseWeather, type Faults, type TokenEffect } from './faults.ts'
 import {
   amountField,
   badRequest,
@@ -43,6 +43,14 @@ function tokenEffect(token: string): TokenEffect {
   const effect = parseToken(token)
   if (!effect) throw new HttpError(400, 'invalid_token', `unknown test token ${token}`)
   return effect
+}
+
+function weatherView(faults: Faults) {
+  const weather = faults.weather
+  return {
+    base: faults.base,
+    weather: weather ? { label: weather.label, plan: weather.plan, until: new Date(weather.until).toISOString() } : null,
+  }
 }
 
 export function createPspServer(psp: Psp, faults: Faults, settlements: Settlements, options: ServerOptions): Server {
@@ -101,6 +109,23 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
       if (close && method === 'PUT') {
         await settlements.close(Number(close[1]))
         return sendJson(response, 200, { day: Number(close[1]), closed: true })
+      }
+      if (path === '/admin/weather') {
+        if (method === 'PUT') {
+          let weather
+          try {
+            weather = parseWeather(await readJson(request))
+          } catch (error) {
+            if (error instanceof HttpError) throw error
+            throw badRequest((error as Error).message)
+          }
+          faults.setWeather(weather.label, weather.plan, weather.seconds)
+        } else if (method === 'DELETE') {
+          faults.clearWeather()
+        } else if (method !== 'GET') {
+          throw new HttpError(405, 'method_not_allowed', `${method} is not allowed on ${path}`)
+        }
+        return sendJson(response, 200, weatherView(faults))
       }
       if (path !== '/admin/faults') throw new HttpError(404, 'not_found', `no route ${method} ${path}`)
       if (method === 'PUT') {
