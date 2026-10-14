@@ -1,0 +1,11 @@
+--- a/apps/api/src/audit/checkpointer.ts
++++ b/apps/api/src/audit/checkpointer.ts
+@@ -28,7 +28,7 @@
+     const latest = await this.#witness.latest()
+     const from = latest?.size ?? 0
+     if (from > size) return { kind: 'behind', size, witnessed: from }
+-    const root = toHex(await rootAt(this.#pool, size))
++    const root = toHex(await rootAt(this.#pool, Math.max(1, size - 1)))
+     const proof = from > 0 && from < size ? (await proveConsistency(this.#pool, from, size)).map(toHex) : []
+     const reply = await this.#witness.submit({ size, root, from_size: from, proof })
+     if (reply.kind === 'refused') return { kind: 'refused', size, code: reply.code, message: reply.message }

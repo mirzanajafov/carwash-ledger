@@ -13,6 +13,7 @@ export const FAILPOINTS = [
   'relay.after_produce',
   'consumer.before_commit',
   'consumer.before_offset',
+  'checkpoint.after_sign',
 ] as const
 
 export type FailpointName = (typeof FAILPOINTS)[number]
