@@ -93,6 +93,7 @@ export interface PaymentsReport {
   kafka: { kills: number; recoveryMs: number[] }
   events: Record<string, number>
   settlement: { days: number[]; outcomes: string[]; breaks: Record<string, number> }
+  anomalies: { open: number; accepted: number; failed: string[] }
   toxics: Record<string, number>
   toxicsByProxy: Record<string, number>
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
@@ -207,6 +208,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     kafka: { kills: 0, recoveryMs: [] },
     events: {},
     settlement: { days: [], outcomes: [], breaks: {} },
+    anomalies: { open: 0, accepted: 0, failed: [] },
     toxics: Object.fromEntries(TOXIC_KINDS.map((k) => [k, 0])),
     toxicsByProxy: Object.fromEntries(PROXIES.map((p) => [p, 0])),
     ledger: { anomalies: {}, webhooks: {} },
@@ -492,6 +494,12 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       await sleep(5)
     }
     report.settleMs = Math.round(now() - settleStarted!)
+    try {
+      report.anomalies = await acceptAnomalies(keys.admin!, journeys)
+      log(`anomalies: ${report.anomalies.open} open, ${report.anomalies.accepted} accepted${report.anomalies.failed.length ? `, refused ${report.anomalies.failed.join('; ')}` : ''}`)
+    } catch (error) {
+      report.harnessErrors.push(`accepting anomalies: ${String(error)}`)
+    }
     const firstDay = Math.floor(Date.parse(report.startedAt) / 1000 / SETTLEMENT_DAY_SECONDS)
     const lastDay = Math.floor(Date.now() / 1000 / SETTLEMENT_DAY_SECONDS)
     for (let day = firstDay; day <= lastDay; day++) {
@@ -581,6 +589,26 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     await keepLogs(logs, join(lab.dir, 'logs'), seed).catch((error) => log(`could not keep the service logs: ${String(error)}`))
     await pspDb.drop().catch((error) => log(`psp drop failed: ${String(error)}`))
     await ledgerDb.drop().catch((error) => log(`drop failed: ${String(error)}`))
+  }
+
+  async function acceptAnomalies(adminKey: string, journeys: Journeys): Promise<PaymentsReport['anomalies']> {
+    const base = `http://127.0.0.1:${API_PORTS[0]}/v1/admin/anomalies`
+    const headers = { authorization: `Bearer ${adminKey}` }
+    const listed = await fetch(`${base}?state=open&limit=200`, { headers })
+    if (listed.status !== 200) throw new Error(`listing anomalies: status ${listed.status}`)
+    const open = (await listed.json()).data as { id: string; acceptable: boolean }[]
+    const result: PaymentsReport['anomalies'] = { open: open.length, accepted: 0, failed: [] }
+    for (const anomaly of open.filter((a) => a.acceptable)) {
+      const response = await fetch(`${base}/${anomaly.id}/accept`, { method: 'POST', headers })
+      const body = await response.json().catch(() => null)
+      if (response.status !== 200) {
+        result.failed.push(`${anomaly.id}: ${response.status} ${body?.error?.message ?? ''}`)
+        continue
+      }
+      result.accepted++
+      journeys.learnAccepted(body)
+    }
+    return result
   }
 
   async function settleDay(day: number, adminKey: string): Promise<{ outcome: string; reconciliation?: { breaks: Record<string, number> } }> {
@@ -735,6 +763,8 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     toxics: merged((r) => r.toxics),
     toxicsByProxy: merged((r) => r.toxicsByProxy),
     anomalies: merged((r) => r.ledger.anomalies),
+    anomaliesAccepted: sum((r) => r.anomalies.accepted),
+    anomaliesNotAccepted: sum((r) => r.anomalies.failed.length),
     webhooks: merged((r) => r.ledger.webhooks),
     pspOperations: merged((r) => r.pspOperations),
     settleMsMedian: median(reports.map((r) => r.settleMs)),

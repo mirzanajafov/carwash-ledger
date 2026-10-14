@@ -13,6 +13,7 @@ import { IdempotencyService } from './idempotency/idempotency.service.ts'
 import { Chart } from './ledger/chart.service.ts'
 import { LiveController } from './live/live.controller.ts'
 import { LiveFeed } from './live/live-feed.ts'
+import { AnomaliesController } from './payments/anomalies.controller.ts'
 import { AttemptsService } from './payments/attempts.service.ts'
 import { PaymentsController } from './payments/payments.controller.ts'
 import { PaymentsService } from './payments/payments.service.ts'
@@ -58,6 +59,7 @@ export class AppModule {
         LiveController,
         DashboardController,
         SessionsController,
+        AnomaliesController,
       ],
       providers: [
         { provide: API_CONFIG, useValue: config },
