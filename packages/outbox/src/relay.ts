@@ -23,11 +23,17 @@ export interface RelayOptions {
   workers: number
   batch: number
   pollMs: number
+  idleMaxMs: number
   pauseMs: number
   lockClass: number
 }
 
-export const RELAY_DEFAULTS: RelayOptions = { workers: 4, batch: 500, pollMs: 50, pauseMs: 10, lockClass: 0x0b0c }
+export const RELAY_DEFAULTS: RelayOptions = { workers: 4, batch: 500, pollMs: 50, idleMaxMs: 1000, pauseMs: 10, lockClass: 0x0b0c }
+
+export function nextWait(idleMs: number, relayed: Relayed | null, options: Pick<RelayOptions, 'batch' | 'pollMs' | 'idleMaxMs' | 'pauseMs'>): { waitMs: number; idleMs: number } {
+  if (!relayed) return { waitMs: idleMs, idleMs: Math.min(idleMs * 2, Math.max(options.idleMaxMs, options.pollMs)) }
+  return { waitMs: relayed.published < options.batch ? options.pauseMs : 0, idleMs: options.pollMs }
+}
 
 export interface Relayed {
   lanes: number[]
@@ -109,13 +115,15 @@ export class Relay {
   async #loop(): Promise<void> {
     const signal = this.#stop.signal
     let failures = 0
+    let idleMs = this.#options.pollMs
     while (!signal.aborted) {
       try {
         const relayed = await this.#cycle()
         failures = 0
         if (relayed) this.published += relayed.published
-        if (!relayed) await sleep(this.#options.pollMs, undefined, { signal }).catch(() => undefined)
-        else if (relayed.published < this.#options.batch) await sleep(this.#options.pauseMs, undefined, { signal }).catch(() => undefined)
+        const next = nextWait(idleMs, relayed, this.#options)
+        idleMs = next.idleMs
+        if (next.waitMs > 0) await sleep(next.waitMs, undefined, { signal }).catch(() => undefined)
       } catch (error) {
         failures++
         if (failures === 1 || failures % 50 === 0) this.#log(`relay: ${(error as Error).message}`)

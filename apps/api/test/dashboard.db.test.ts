@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { sequenceBatch } from '@carwash/audit-pg'
+import { PgCtePoster } from '@carwash/ledger'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Database } from '../src/db/database.ts'
+import { Chart } from '../src/ledger/chart.service.ts'
 import { startApi, startStack, type Stack } from './support.ts'
 
 let stack: Stack
@@ -102,6 +104,30 @@ describe('the live feed', () => {
       } finally {
         await late.close()
       }
+    } finally {
+      await live.close()
+    }
+  })
+
+  it('keeps up when the log holds more than a batch of journals, and never replays old ones as new', async () => {
+    const pool = stack.app.get(Database).pool
+    const chart = stack.app.get(Chart)
+    const accounts = chart.accounts('EUR')
+    const poster = new PgCtePoster(pool, chart.registry)
+    const before = BigInt((await pool.query<{ id: string }>('SELECT coalesce(max(id), 0)::text AS id FROM journals')).rows[0]!.id)
+    for (let i = 0; i < 700; i++) {
+      await poster.post({ externalRef: `live-backlog:${i}`, entries: [{ accountId: accounts.receivable.id, amount: 1n }, { accountId: accounts.fees.id, amount: -1n }] })
+    }
+    const live = await watch(`${stack.url}/v1/live`)
+    try {
+      await live.until((events) => events.some((e) => e.type === 'balances'))
+      await sleep(2500)
+      const old = live.events.filter((e) => e.type === 'journal' && BigInt(e.data.id) > before)
+      expect(old.length).toBeLessThanOrEqual(20)
+      const created = await stack.call('POST', '/v1/payments', { body: pay(1500) })
+      await live.until((events) => events.some((e) => e.type === 'journal' && e.data.external_ref === `capture:${created.body.id}`), 5000)
+      const replayed = live.events.filter((e) => e.type === 'journal' && e.data.external_ref.startsWith('live-backlog:'))
+      expect(replayed.length).toBeLessThanOrEqual(20)
     } finally {
       await live.close()
     }
