@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker compose up -d --wait postgres kafka
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @carwash/db generate
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: pnpm test:db
+      - run: pnpm --filter @carwash/web build
+      - if: failure()
+        run: docker compose logs --no-color --tail 200
+
+  chaos:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v5
+      - run: sh tools/chaos/run.sh --runs 3 --duration 30
