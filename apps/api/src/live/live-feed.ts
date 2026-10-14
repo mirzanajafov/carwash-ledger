@@ -9,8 +9,11 @@ export type LiveEvent =
   | { type: 'payment'; data: { id: string; merchant: string; amount: string; currency: string; status: string; captured_amount: string; refunded_amount: string; updated_at: string } }
 
 type Listener = (event: LiveEvent) => void
+type JournalEvent = Extract<LiveEvent, { type: 'journal' }>
+type PaymentEvent = Extract<LiveEvent, { type: 'payment' }>
 
 const LOOK_BACK = 1000n
+const RECENT_JOURNALS = 20
 
 const JOURNALS = `
   SELECT j.id::text, j.external_ref, j.created_at AS posted_at,
@@ -22,6 +25,17 @@ const JOURNALS = `
   GROUP BY j.id
   ORDER BY j.id
   LIMIT 500`
+
+const LATEST_JOURNALS = `
+  SELECT * FROM (
+    SELECT j.id::text, j.external_ref, j.created_at AS posted_at,
+           json_agg(json_build_object('account', a.code, 'amount', e.amount::text) ORDER BY e.id) AS entries
+    FROM (SELECT * FROM journals ORDER BY id DESC LIMIT ${RECENT_JOURNALS}) j
+    JOIN entries e ON e.journal_id = j.id
+    JOIN accounts a ON a.id = e.account_id
+    GROUP BY j.id, j.external_ref, j.created_at
+  ) latest
+  ORDER BY id::bigint`
 
 const PAYMENTS = `
   SELECT p.id::text, m.code AS merchant, p.amount::text, p.currency, p.status::text,
@@ -38,7 +52,8 @@ export class LiveFeed implements OnModuleDestroy {
   readonly #logger = new Logger('live')
   readonly #listeners = new Set<Listener>()
   readonly #seen = new Set<bigint>()
-  readonly #payments = new Map<string, string>()
+  readonly #payments = new Map<string, PaymentEvent>()
+  readonly #journals: JournalEvent[] = []
   #cursor: bigint | undefined
   #balances = ''
   #last: LiveEvent | undefined
@@ -58,6 +73,8 @@ export class LiveFeed implements OnModuleDestroy {
   subscribe(listener: Listener): () => void {
     this.#listeners.add(listener)
     if (this.#last) listener(this.#last)
+    for (const journal of this.#journals) listener(journal)
+    for (const payment of this.#payments.values()) listener(payment)
     if (!this.#timer) {
       this.#timer = setInterval(() => void this.#poll(), this.#config.liveEveryMs)
       void this.#poll()
@@ -79,6 +96,7 @@ export class LiveFeed implements OnModuleDestroy {
     this.#cursor = undefined
     this.#seen.clear()
     this.#payments.clear()
+    this.#journals.length = 0
     this.#balances = ''
     this.#last = undefined
   }
@@ -99,29 +117,33 @@ export class LiveFeed implements OnModuleDestroy {
         this.#last = { type: 'balances', data: balances }
         this.#emit(this.#last)
       }
-      if (this.#cursor === undefined) {
-        const { rows } = await pool.query<{ id: string }>('SELECT coalesce(max(id), 0)::text AS id FROM journals')
-        this.#cursor = BigInt(rows[0]!.id)
-      } else {
-        const from = this.#cursor > LOOK_BACK ? this.#cursor - LOOK_BACK : 0n
-        const { rows } = await pool.query<{ id: string; external_ref: string; posted_at: Date; entries: { account: string; amount: string }[] }>(JOURNALS, [from.toString()])
-        for (const row of rows) {
-          const id = BigInt(row.id)
-          if (id <= this.#cursor - LOOK_BACK || this.#seen.has(id)) continue
-          this.#seen.add(id)
-          if (id > this.#cursor) this.#cursor = id
-          this.#emit({ type: 'journal', data: { ...row, posted_at: row.posted_at.toISOString() } })
-        }
-        for (const id of this.#seen) if (id <= this.#cursor - LOOK_BACK) this.#seen.delete(id)
+      const first = this.#cursor === undefined
+      const from = first ? undefined : this.#cursor! > LOOK_BACK ? this.#cursor! - LOOK_BACK : 0n
+      const { rows } = await pool.query<{ id: string; external_ref: string; posted_at: Date; entries: { account: string; amount: string }[] }>(
+        first ? LATEST_JOURNALS : JOURNALS,
+        first ? [] : [from!.toString()],
+      )
+      if (first) this.#cursor = 0n
+      for (const row of rows) {
+        const id = BigInt(row.id)
+        if ((!first && id <= this.#cursor! - LOOK_BACK) || this.#seen.has(id)) continue
+        this.#seen.add(id)
+        if (id > this.#cursor!) this.#cursor = id
+        const event: JournalEvent = { type: 'journal', data: { ...row, posted_at: row.posted_at.toISOString() } }
+        this.#journals.push(event)
+        if (this.#journals.length > RECENT_JOURNALS) this.#journals.shift()
+        this.#emit(event)
       }
+      for (const id of this.#seen) if (id <= this.#cursor! - LOOK_BACK) this.#seen.delete(id)
       const { rows: payments } = await pool.query<{ id: string; merchant: string; amount: string; currency: string; status: string; captured_amount: string; refunded_amount: string; updated_at: Date }>(PAYMENTS)
       const current = new Set<string>()
       for (const row of payments) {
         current.add(row.id)
-        const version = `${row.status}:${row.updated_at.toISOString()}`
-        if (this.#payments.get(row.id) === version) continue
-        this.#payments.set(row.id, version)
-        this.#emit({ type: 'payment', data: { ...row, updated_at: row.updated_at.toISOString() } })
+        const known = this.#payments.get(row.id)
+        if (known && known.data.status === row.status && known.data.updated_at === row.updated_at.toISOString()) continue
+        const event: PaymentEvent = { type: 'payment', data: { ...row, updated_at: row.updated_at.toISOString() } }
+        this.#payments.set(row.id, event)
+        this.#emit(event)
       }
       for (const id of this.#payments.keys()) if (!current.has(id)) this.#payments.delete(id)
       this.#failures = 0
