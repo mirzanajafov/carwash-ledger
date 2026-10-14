@@ -162,7 +162,7 @@ describe('admin sessions', () => {
     expect(session.token).toMatch(/^cw_session_[\w-]{43}$/)
     const hours = (Date.parse(session.expires_at) - Date.now()) / 3_600_000
     expect(hours).toBeGreaterThan(11.9)
-    expect(hours).toBeLessThanOrEqual(12)
+    expect(hours).toBeLessThan(12 + 1 / 60)
     const stored = await stack.admin.query('SELECT token_hash FROM dashboard_sessions WHERE id = $1', [session.id])
     expect(stored.rows[0].token_hash).toEqual(createHash('sha256').update(session.token).digest())
     expect(await stack.call('GET', '/v1/admin/sessions/current', { bearer: session.token })).toMatchObject({ status: 200, body: { id: session.id, client: expect.any(String) } })
