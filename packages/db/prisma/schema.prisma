@@ -471,3 +471,10 @@ model AuditCheckpoint {
 
   @@map("audit_checkpoints")
 }
+
+model DemoLimit {
+  name   String   @id
+  lastAt DateTime @map("last_at") @db.Timestamptz(6)
+
+  @@map("demo_limits")
+}

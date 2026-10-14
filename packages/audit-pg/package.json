@@ -23,6 +23,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@carwash/invariants": "workspace:*",
     "@carwash/ledger": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "@carwash/witness": "workspace:*",

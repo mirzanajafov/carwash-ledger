@@ -22,6 +22,8 @@ import { Settlements } from './settlement/settlements.service.ts'
 import { WebhooksController } from './webhooks/webhooks.controller.ts'
 import { WebhooksService } from './webhooks/webhooks.service.ts'
 
+const STARTED_AT = new Date().toISOString()
+
 @Public()
 @Controller('health')
 export class HealthController {
@@ -34,7 +36,7 @@ export class HealthController {
   @Get()
   async check() {
     await this.#db.pool.query('SELECT 1')
-    return { ok: true }
+    return { ok: true, pid: process.pid, started_at: STARTED_AT }
   }
 }
 

@@ -245,6 +245,9 @@ importers:
         specifier: ^8.23.0
         version: 8.23.1
     devDependencies:
+      '@carwash/invariants':
+        specifier: workspace:*
+        version: link:../invariants
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../ledger

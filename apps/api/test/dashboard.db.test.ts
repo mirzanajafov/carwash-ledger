@@ -2,7 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { sequenceBatch } from '@carwash/audit-pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Database } from '../src/db/database.ts'
-import { startStack, type Stack } from './support.ts'
+import { startApi, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 
@@ -122,7 +122,13 @@ describe('the admin side of the dashboard', () => {
       expect(kill).toHaveBeenCalledTimes(1)
       const again = await stack.call('POST', '/v1/admin/plug', { as: 'admin', body: { failpoint: 'post.after_lock' }, key: null })
       expect(again.status).toBe(429)
-      expect(again.retryAfter).not.toBeNull()
+      expect(Number(again.retryAfter)).toBeGreaterThan(50)
+      const restarted = await startApi(stack.config)
+      try {
+        expect((await stack.call('POST', '/v1/admin/plug', { as: 'admin', body: { failpoint: 'post.after_lock' }, key: null, base: restarted.url })).status).toBe(429)
+      } finally {
+        await restarted.app.close()
+      }
     } finally {
       kill.mockRestore()
     }
