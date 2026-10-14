@@ -43,6 +43,11 @@ export interface ApiConfig {
   witnessTimeoutMs: number
   checkpointEveryMs: number
   checkpointEveryLeaves: number
+  auditDatabaseUrl: string | undefined
+  liveEveryMs: number
+  liveMaxConnections: number
+  plugEveryMs: number
+  checksEveryMs: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -70,7 +75,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     throw new Error('HOT_ACCOUNT_MODE must be sharded, derived or locked')
   }
   const witnessUrl = env.WITNESS_URL || undefined
-  if (witnessUrl && !env.WITNESS_TOKEN) throw new Error('WITNESS_TOKEN is required when WITNESS_URL is set')
   const currencies = (env.CURRENCIES ?? 'EUR').split(',').map((c) => c.trim())
   if (!currencies.every((c) => /^[A-Z]{3}$/.test(c))) throw new Error('CURRENCIES must be a comma-separated list of currency codes')
   return {
@@ -114,5 +118,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     witnessTimeoutMs: integer(env, 'WITNESS_TIMEOUT_MS', 5000),
     checkpointEveryMs: integer(env, 'CHECKPOINT_EVERY_MS', 10_000),
     checkpointEveryLeaves: integer(env, 'CHECKPOINT_EVERY_LEAVES', 10_000) || 10_000,
+    auditDatabaseUrl: env.AUDIT_DATABASE_URL || undefined,
+    liveEveryMs: integer(env, 'LIVE_EVERY_MS', 1000) || 1000,
+    liveMaxConnections: integer(env, 'LIVE_MAX_CONNECTIONS', 100),
+    plugEveryMs: integer(env, 'PLUG_EVERY_MS', 60_000),
+    checksEveryMs: integer(env, 'CHECKS_EVERY_MS', 10_000),
   }
 }
