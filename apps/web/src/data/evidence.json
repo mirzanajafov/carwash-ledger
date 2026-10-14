@@ -1,0 +1,1419 @@
+{
+ "e1": {
+  "source": [
+   "20261009-110802",
+   "20261009-132846"
+  ],
+  "modes": [
+   "locked",
+   "locked-async",
+   "serializable",
+   "derived",
+   "sharded-16"
+  ],
+  "connections": [
+   8,
+   32,
+   128
+  ],
+  "points": [
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 16
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 18.9
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 18.2
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 17.5
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 300,
+    "achieved": 306.3,
+    "p99": 16.7
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 15.6
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 800,
+    "achieved": 801.6,
+    "p99": 235.6
+   },
+   {
+    "mode": "derived",
+    "connections": 8,
+    "rate": 1200,
+    "achieved": 824.9,
+    "p99": 3570.6
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 16.1
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 16.1
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 17.4
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 18.4
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 19.4
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 19.9
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 800,
+    "achieved": 801.5,
+    "p99": 81.4
+   },
+   {
+    "mode": "derived",
+    "connections": 32,
+    "rate": 1200,
+    "achieved": 915.1,
+    "p99": 2706.6
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 15.5
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 17.7
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 18.7
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 18.3
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 23
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 19.8
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 800,
+    "achieved": 799.7,
+    "p99": 480.4
+   },
+   {
+    "mode": "derived",
+    "connections": 128,
+    "rate": 1200,
+    "achieved": 867.5,
+    "p99": 3057.8
+   },
+   {
+    "mode": "locked",
+    "connections": 8,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 26.7
+   },
+   {
+    "mode": "locked",
+    "connections": 8,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 46.8
+   },
+   {
+    "mode": "locked",
+    "connections": 8,
+    "rate": 150,
+    "achieved": 148.5,
+    "p99": 882.1
+   },
+   {
+    "mode": "locked",
+    "connections": 8,
+    "rate": 200,
+    "achieved": 173.8,
+    "p99": 2548.2
+   },
+   {
+    "mode": "locked",
+    "connections": 32,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 30.7
+   },
+   {
+    "mode": "locked",
+    "connections": 32,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 59.4
+   },
+   {
+    "mode": "locked",
+    "connections": 32,
+    "rate": 150,
+    "achieved": 148.5,
+    "p99": 1458.4
+   },
+   {
+    "mode": "locked",
+    "connections": 32,
+    "rate": 200,
+    "achieved": 148.5,
+    "p99": 5225.3
+   },
+   {
+    "mode": "locked",
+    "connections": 128,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 28.9
+   },
+   {
+    "mode": "locked",
+    "connections": 128,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 49.3
+   },
+   {
+    "mode": "locked",
+    "connections": 128,
+    "rate": 150,
+    "achieved": 148.7,
+    "p99": 3075.9
+   },
+   {
+    "mode": "locked",
+    "connections": 128,
+    "rate": 200,
+    "achieved": 179.7,
+    "p99": 3489.5
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 14.7
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 16.9
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 28.8
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 24.4
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 73.6
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 45
+   },
+   {
+    "mode": "locked-async",
+    "connections": 8,
+    "rate": 800,
+    "achieved": 503.5,
+    "p99": 5653.9
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 14.9
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 18.2
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 25.2
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 35.8
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 68
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 56.9
+   },
+   {
+    "mode": "locked-async",
+    "connections": 32,
+    "rate": 800,
+    "achieved": 529.5,
+    "p99": 4292.7
+   },
+   {
+    "mode": "locked-async",
+    "connections": 128,
+    "rate": 50,
+    "achieved": 50.9,
+    "p99": 13.8
+   },
+   {
+    "mode": "locked-async",
+    "connections": 128,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 17.2
+   },
+   {
+    "mode": "locked-async",
+    "connections": 128,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 25.3
+   },
+   {
+    "mode": "locked-async",
+    "connections": 128,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 30.4
+   },
+   {
+    "mode": "locked-async",
+    "connections": 128,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 105.4
+   },
+   {
+    "mode": "locked-async",
+    "connections": 128,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 1149
+   },
+   {
+    "mode": "serializable",
+    "connections": 8,
+    "rate": 50,
+    "achieved": 50.7,
+    "p99": 67.7
+   },
+   {
+    "mode": "serializable",
+    "connections": 8,
+    "rate": 100,
+    "achieved": 86.5,
+    "p99": 272.5
+   },
+   {
+    "mode": "serializable",
+    "connections": 8,
+    "rate": 150,
+    "achieved": 130.9,
+    "p99": 74
+   },
+   {
+    "mode": "serializable",
+    "connections": 32,
+    "rate": 50,
+    "achieved": 50.5,
+    "p99": 59.6
+   },
+   {
+    "mode": "serializable",
+    "connections": 32,
+    "rate": 100,
+    "achieved": 95.3,
+    "p99": 76.6
+   },
+   {
+    "mode": "serializable",
+    "connections": 32,
+    "rate": 150,
+    "achieved": 132.7,
+    "p99": 72.3
+   },
+   {
+    "mode": "serializable",
+    "connections": 128,
+    "rate": 50,
+    "achieved": 50.3,
+    "p99": 59.3
+   },
+   {
+    "mode": "serializable",
+    "connections": 128,
+    "rate": 100,
+    "achieved": 95.3,
+    "p99": 71.5
+   },
+   {
+    "mode": "serializable",
+    "connections": 128,
+    "rate": 150,
+    "achieved": 136.5,
+    "p99": 69.6
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 16.2
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 17.5
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 18.7
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 15.7
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 18.3
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 400,
+    "achieved": 406,
+    "p99": 16.4
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 800,
+    "achieved": 774.4,
+    "p99": 580.8
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 8,
+    "rate": 1200,
+    "achieved": 786.6,
+    "p99": 3352
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 17.4
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 19.4
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 18.1
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 18.6
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 17.3
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 400,
+    "achieved": 406.1,
+    "p99": 15
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 800,
+    "achieved": 788.2,
+    "p99": 285.4
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 32,
+    "rate": 1200,
+    "achieved": 742.9,
+    "p99": 3928.6
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 50,
+    "achieved": 50.8,
+    "p99": 15.2
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 100,
+    "achieved": 101.5,
+    "p99": 18.2
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 150,
+    "achieved": 151.1,
+    "p99": 18.6
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 200,
+    "achieved": 200.3,
+    "p99": 16.9
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 300,
+    "achieved": 306.5,
+    "p99": 18.5
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 400,
+    "achieved": 406,
+    "p99": 17.2
+   },
+   {
+    "mode": "sharded-16",
+    "connections": 128,
+    "rate": 800,
+    "achieved": 761.8,
+    "p99": 2436.2
+   }
+  ]
+ },
+ "e2": {
+  "source": "20261009-090531",
+  "rows": [
+   {
+    "variant": "prisma-api",
+    "mode": "locked",
+    "concurrency": 1,
+    "perSecond": 60.6,
+    "p50": 17.37,
+    "p99": 30.35,
+    "roundTrips": 8
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "locked",
+    "concurrency": 1,
+    "perSecond": 76.6,
+    "p50": 13.9,
+    "p99": 21.07,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "locked",
+    "concurrency": 1,
+    "perSecond": 91.7,
+    "p50": 10.81,
+    "p99": 21.69,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "locked",
+    "concurrency": 1,
+    "perSecond": 100.6,
+    "p50": 10.11,
+    "p99": 24.78,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "locked",
+    "concurrency": 4,
+    "perSecond": 61.6,
+    "p50": 68.65,
+    "p99": 127.57,
+    "roundTrips": 8
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "locked",
+    "concurrency": 4,
+    "perSecond": 92.6,
+    "p50": 39.75,
+    "p99": 71.52,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "locked",
+    "concurrency": 4,
+    "perSecond": 121.8,
+    "p50": 30.68,
+    "p99": 62.11,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "locked",
+    "concurrency": 4,
+    "perSecond": 132.5,
+    "p50": 27.91,
+    "p99": 61.77,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "locked",
+    "concurrency": 16,
+    "perSecond": 64.6,
+    "p50": 241.59,
+    "p99": 416.19,
+    "roundTrips": 8
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "locked",
+    "concurrency": 16,
+    "perSecond": 96.2,
+    "p50": 156.21,
+    "p99": 256.31,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "locked",
+    "concurrency": 16,
+    "perSecond": 115,
+    "p50": 84.26,
+    "p99": 434.85,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "locked",
+    "concurrency": 16,
+    "perSecond": 129.3,
+    "p50": 95.18,
+    "p99": 365.37,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "locked",
+    "concurrency": 32,
+    "perSecond": 61.6,
+    "p50": 482.7,
+    "p99": 940.31,
+    "roundTrips": 8
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "locked",
+    "concurrency": 32,
+    "perSecond": 96.4,
+    "p50": 314.58,
+    "p99": 581.07,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "locked",
+    "concurrency": 32,
+    "perSecond": 107.4,
+    "p50": 65.22,
+    "p99": 2393.99,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "locked",
+    "concurrency": 32,
+    "perSecond": 131.3,
+    "p50": 114.41,
+    "p99": 1363.52,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "derived",
+    "concurrency": 1,
+    "perSecond": 77.3,
+    "p50": 14.41,
+    "p99": 26.62,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "derived",
+    "concurrency": 1,
+    "perSecond": 73.2,
+    "p50": 14.08,
+    "p99": 24.8,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "derived",
+    "concurrency": 1,
+    "perSecond": 90.5,
+    "p50": 11.25,
+    "p99": 20.53,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "derived",
+    "concurrency": 1,
+    "perSecond": 102.5,
+    "p50": 9.98,
+    "p99": 16.01,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "derived",
+    "concurrency": 4,
+    "perSecond": 252.8,
+    "p50": 12.52,
+    "p99": 45.49,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "derived",
+    "concurrency": 4,
+    "perSecond": 287.6,
+    "p50": 10.16,
+    "p99": 36.85,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "derived",
+    "concurrency": 4,
+    "perSecond": 397.2,
+    "p50": 8.84,
+    "p99": 21.03,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "derived",
+    "concurrency": 4,
+    "perSecond": 436.9,
+    "p50": 8.21,
+    "p99": 18.21,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "derived",
+    "concurrency": 16,
+    "perSecond": 394.7,
+    "p50": 31.94,
+    "p99": 131.57,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "derived",
+    "concurrency": 16,
+    "perSecond": 274.4,
+    "p50": 45.28,
+    "p99": 111.1,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "derived",
+    "concurrency": 16,
+    "perSecond": 458.5,
+    "p50": 29.35,
+    "p99": 74.56,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "derived",
+    "concurrency": 16,
+    "perSecond": 650.4,
+    "p50": 23.96,
+    "p99": 48.71,
+    "roundTrips": 4
+   },
+   {
+    "variant": "prisma-api",
+    "mode": "derived",
+    "concurrency": 32,
+    "perSecond": 255.1,
+    "p50": 106.76,
+    "p99": 256.64,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-sql",
+    "mode": "derived",
+    "concurrency": 32,
+    "perSecond": 279.7,
+    "p50": 94.94,
+    "p99": 210.84,
+    "roundTrips": 6
+   },
+   {
+    "variant": "prisma-cte",
+    "mode": "derived",
+    "concurrency": 32,
+    "perSecond": 423.4,
+    "p50": 65.21,
+    "p99": 145.12,
+    "roundTrips": 4
+   },
+   {
+    "variant": "pg-cte",
+    "mode": "derived",
+    "concurrency": 32,
+    "perSecond": 797.1,
+    "p50": 36.7,
+    "p99": 84.75,
+    "roundTrips": 4
+   }
+  ]
+ },
+ "e5": {
+  "source": "20261013-122123",
+  "rows": [
+   {
+    "perDay": 50,
+    "fallback": "unique",
+    "lines": 4704,
+    "falseBreaks": 0,
+    "detection": {
+     "nextDay": 100,
+     "feeDifference": 100,
+     "wrongAmount": 100,
+     "missingLine": 100,
+     "duplicateLine": 100,
+     "droppedReference": 100
+    },
+    "dropped": {
+     "right": 36,
+     "wrong": 0,
+     "unplaced": 10
+    }
+   },
+   {
+    "perDay": 50,
+    "fallback": "oldest",
+    "lines": 4704,
+    "falseBreaks": 0,
+    "detection": {
+     "nextDay": 100,
+     "feeDifference": 100,
+     "wrongAmount": 100,
+     "missingLine": 95.1,
+     "duplicateLine": 100,
+     "droppedReference": 87
+    },
+    "dropped": {
+     "right": 40,
+     "wrong": 6,
+     "unplaced": 0
+    }
+   },
+   {
+    "perDay": 500,
+    "fallback": "unique",
+    "lines": 47310,
+    "falseBreaks": 0,
+    "detection": {
+     "nextDay": 100,
+     "feeDifference": 100,
+     "wrongAmount": 100,
+     "missingLine": 100,
+     "duplicateLine": 100,
+     "droppedReference": 100
+    },
+    "dropped": {
+     "right": 84,
+     "wrong": 0,
+     "unplaced": 380
+    }
+   },
+   {
+    "perDay": 500,
+    "fallback": "oldest",
+    "lines": 47310,
+    "falseBreaks": 0,
+    "detection": {
+     "nextDay": 100,
+     "feeDifference": 100,
+     "wrongAmount": 100,
+     "missingLine": 63.9,
+     "duplicateLine": 100,
+     "droppedReference": 51.3
+    },
+    "dropped": {
+     "right": 238,
+     "wrong": 226,
+     "unplaced": 0
+    }
+   },
+   {
+    "perDay": 2000,
+    "fallback": "unique",
+    "lines": 189104,
+    "falseBreaks": 0,
+    "detection": {
+     "nextDay": 100,
+     "feeDifference": 100,
+     "wrongAmount": 100,
+     "missingLine": 100,
+     "duplicateLine": 100,
+     "droppedReference": 100
+    },
+    "dropped": {
+     "right": 194,
+     "wrong": 0,
+     "unplaced": 1578
+    }
+   },
+   {
+    "perDay": 2000,
+    "fallback": "oldest",
+    "lines": 189104,
+    "falseBreaks": 0,
+    "detection": {
+     "nextDay": 100,
+     "feeDifference": 100,
+     "wrongAmount": 100,
+     "missingLine": 53.9,
+     "duplicateLine": 100,
+     "droppedReference": 23.5
+    },
+    "dropped": {
+     "right": 416,
+     "wrong": 1356,
+     "unplaced": 0
+    }
+   }
+  ]
+ },
+ "chaos": {
+  "runs": [
+   {
+    "dir": "20261010-101704-M9",
+    "mode": "ledger",
+    "mutant": "M9",
+    "runs": 1,
+    "journeys": 5430,
+    "kills": 17,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S2"
+    ]
+   },
+   {
+    "dir": "20261010-101808-M7",
+    "mode": "ledger",
+    "mutant": "M7",
+    "runs": 1,
+    "journeys": 5430,
+    "kills": 18,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S2"
+    ]
+   },
+   {
+    "dir": "20261011-000212",
+    "mode": "ledger",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 54484,
+    "kills": 221,
+    "postgresKills": 14,
+    "kafkaKills": 0,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261011-000810-M7a",
+    "mode": "ledger",
+    "mutant": "M7a",
+    "runs": 3,
+    "journeys": 32723,
+    "kills": 126,
+    "postgresKills": 8,
+    "kafkaKills": 0,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261012-121037",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 63,
+    "postgresKills": 8,
+    "kafkaKills": 0,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261013-060438-M8",
+    "mode": "payments",
+    "mutant": "M8",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 16,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S4"
+    ]
+   },
+   {
+    "dir": "20261013-060638-M6",
+    "mode": "payments",
+    "mutant": "M6",
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 68,
+    "postgresKills": 8,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 5,
+    "caughtBy": [
+     "S4"
+    ]
+   },
+   {
+    "dir": "20261013-061256-M5",
+    "mode": "payments",
+    "mutant": "M5",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 13,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S5"
+    ]
+   },
+   {
+    "dir": "20261013-061448-M1",
+    "mode": "payments",
+    "mutant": "M1",
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 69,
+    "postgresKills": 8,
+    "kafkaKills": 0,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261013-061936-M2",
+    "mode": "payments",
+    "mutant": "M2",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 17,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S3",
+     "S8"
+    ]
+   },
+   {
+    "dir": "20261013-062122-M1+M2",
+    "mode": "payments",
+    "mutant": "M1+M2",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 12,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S3",
+     "S4",
+     "S8"
+    ]
+   },
+   {
+    "dir": "20261013-062311-M7a",
+    "mode": "payments",
+    "mutant": "M7a",
+    "runs": 2,
+    "journeys": 928,
+    "kills": 26,
+    "postgresKills": 4,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 2,
+    "caughtBy": [
+     "S6"
+    ]
+   },
+   {
+    "dir": "20261013-062538-M7",
+    "mode": "payments",
+    "mutant": "M7",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 16,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S2",
+     "S6"
+    ]
+   },
+   {
+    "dir": "20261013-063024-M7",
+    "mode": "ledger",
+    "mutant": "M7",
+    "runs": 1,
+    "journeys": 5430,
+    "kills": 22,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S2"
+    ]
+   },
+   {
+    "dir": "20261013-063152-M9",
+    "mode": "ledger",
+    "mutant": "M9",
+    "runs": 1,
+    "journeys": 5430,
+    "kills": 26,
+    "postgresKills": 2,
+    "kafkaKills": 0,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S2"
+    ]
+   },
+   {
+    "dir": "20261013-063305",
+    "mode": "ledger",
+    "mutant": null,
+    "runs": 2,
+    "journeys": 10908,
+    "kills": 40,
+    "postgresKills": 3,
+    "kafkaKills": 0,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261013-063507-M6",
+    "mode": "payments",
+    "mutant": "M6",
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 68,
+    "postgresKills": 8,
+    "kafkaKills": 0,
+    "runsWithViolations": 5,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S4"
+    ]
+   },
+   {
+    "dir": "20261013-064026",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 74,
+    "postgresKills": 8,
+    "kafkaKills": 0,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261013-090634-M4",
+    "mode": "payments",
+    "mutant": "M4",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 12,
+    "postgresKills": 2,
+    "kafkaKills": 1,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "L2",
+     "L3"
+    ]
+   },
+   {
+    "dir": "20261013-091040-M3",
+    "mode": "payments",
+    "mutant": "M3",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 12,
+    "postgresKills": 2,
+    "kafkaKills": 1,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "L3"
+    ]
+   },
+   {
+    "dir": "20261013-091325",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 73,
+    "postgresKills": 8,
+    "kafkaKills": 5,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261013-123810-M10",
+    "mode": "payments",
+    "mutant": "M10",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 14,
+    "postgresKills": 2,
+    "kafkaKills": 1,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "L5"
+    ]
+   },
+   {
+    "dir": "20261013-125835-M11",
+    "mode": "payments",
+    "mutant": "M11",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 15,
+    "postgresKills": 2,
+    "kafkaKills": 1,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S7"
+    ]
+   },
+   {
+    "dir": "20261013-132623",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 2249,
+    "kills": 86,
+    "postgresKills": 8,
+    "kafkaKills": 5,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261013-133213-M12",
+    "mode": "payments",
+    "mutant": "M12",
+    "runs": 1,
+    "journeys": 464,
+    "kills": 15,
+    "postgresKills": 2,
+    "kafkaKills": 1,
+    "runsWithViolations": 1,
+    "firstViolatingRun": 1,
+    "caughtBy": [
+     "S7",
+     "L4"
+    ]
+   }
+  ]
+ }
+}
