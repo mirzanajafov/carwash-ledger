@@ -44,6 +44,12 @@ export class WitnessClient {
     return body as SignedCheckpoint
   }
 
+  async history(): Promise<SignedCheckpoint[]> {
+    const { status, body } = await this.#request('GET', '/v1/checkpoints')
+    if (status !== 200) throw new Error(`the witness answered ${status} for its checkpoints`)
+    return (body as { data: SignedCheckpoint[] }).data
+  }
+
   async submit(request: CheckpointRequest): Promise<SubmitReply> {
     const { status, body } = await this.#request('POST', '/v1/checkpoints', request)
     if (status === 200 || status === 201) return { kind: 'signed', checkpoint: body as SignedCheckpoint, fresh: status === 201 }

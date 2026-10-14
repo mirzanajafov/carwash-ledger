@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ORIGIN, toHex } from '@carwash/audit'
 import { Database } from '../db/database.ts'
 import { badRequest, notFound } from '../http/api-error.ts'
-import { head, proveConsistency, proveInclusion, rootAt, treeSize } from './audit-log.ts'
+import { head, proveConsistency, proveInclusion, rootAt, treeSize } from '@carwash/audit-pg'
 
 function size(value: string | undefined, name: string): number | undefined {
   if (value === undefined) return undefined

@@ -1,16 +1,18 @@
+import { execFile } from 'node:child_process'
 import { createPublicKey, verify } from 'node:crypto'
 import { once } from 'node:events'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, readWitness, violations, type WitnessView } from '@carwash/invariants'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { sequenceBatch } from '../src/audit/audit-log.ts'
+import { sequenceBatch } from '@carwash/audit-pg'
 import { Sequencer } from '../src/audit/sequencer.service.ts'
 import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
@@ -20,6 +22,24 @@ let dir: string
 let server: Server
 let witnessUrl: string
 let sequencer: Sequencer
+let stateFile: string
+
+const VERIFY = fileURLToPath(new URL('../src/cli/verify.ts', import.meta.url))
+
+function runVerify(args: string[]): Promise<{ code: number; report: any }> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      process.execPath,
+      ['--conditions=source', VERIFY, ...args],
+      { env: { ...process.env, DATABASE_URL: stack.ledgerDb.url('ledger_audit'), WITNESS_URL: witnessUrl } },
+      (error, stdout, stderr) => {
+        const code = error ? (typeof error.code === 'number' ? error.code : -1) : 0
+        if (code !== 0 && code !== 1) return reject(new Error(`verify exited with ${code}: ${stderr}`))
+        resolve({ code, report: JSON.parse(stdout) })
+      },
+    )
+  })
+}
 
 function pay(amount: number) {
   return { amount, currency: 'EUR', merchant: 'wash_1', token: 'tok_ok' }
@@ -61,6 +81,7 @@ beforeAll(async () => {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   witnessUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  stateFile = join(dir, 'verifier.json')
   sequencer = new Sequencer(stack.app.get(Database), { ...stack.config, witnessUrl, witnessToken: 'witness-token' })
 })
 
@@ -101,6 +122,11 @@ describe('checkpoints and the witness', () => {
     expect(verifyInclusion(fromHex(proof.leaf), proof.seq, proof.tree_size, proof.proof.map(fromHex), fromHex(checkpoint.root))).toBe(true)
 
     expect(violations([await checkAudit(stack.admin, witness)])).toEqual([])
+
+    const full = await runVerify(['--state', stateFile])
+    expect(full).toMatchObject({ code: 0, report: { mode: 'full', size: second.size, witnessed: 2, findings: 0 } })
+    expect(existsSync(stateFile)).toBe(true)
+    expect(await runVerify(['--state', stateFile])).toMatchObject({ code: 0, report: { mode: 'incremental', from: second.size, journals: 0, findings: 0 } })
   })
 
   it('catches a history whose hashes were all rewritten to match only through the witness, and the witness refuses to go on', async () => {
@@ -125,6 +151,12 @@ describe('checkpoints and the witness', () => {
     } finally {
       client.release()
     }
+    const incremental = await runVerify(['--state', stateFile])
+    expect(incremental.code).toBe(1)
+    expect(incremental.report.examples).toContainEqual({ kind: 'history', size: signed.at(-1), what: 'chain' })
+    const full = await runVerify(['--full'])
+    expect(full.code).toBe(1)
+    expect(full.report.examples.every((f: { kind: string }) => f.kind === 'root')).toBe(true)
     expect((await sequencer.checkpoint())?.kind).toBe('refused')
     await stack.call('POST', '/v1/payments', { body: pay(1200) })
     await sequencer.drain()

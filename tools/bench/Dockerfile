@@ -2,6 +2,8 @@ FROM node:24-slim AS deps
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/audit/package.json packages/audit/
+COPY packages/audit-pg/package.json packages/audit-pg/
 COPY packages/db/package.json packages/db/
 COPY packages/failpoints/package.json packages/failpoints/
 COPY packages/ledger/package.json packages/ledger/
@@ -9,9 +11,11 @@ COPY packages/outbox/package.json packages/outbox/
 COPY packages/pg/package.json packages/pg/
 COPY packages/invariants/package.json packages/invariants/
 COPY packages/testkit/package.json packages/testkit/
+COPY apps/witness/package.json apps/witness/
 COPY tools/bench/package.json tools/bench/
 RUN pnpm install --frozen-lockfile --filter @carwash/bench...
 COPY packages packages
+COPY apps/witness apps/witness
 COPY tools/bench tools/bench
 RUN pnpm --filter @carwash/db generate
 

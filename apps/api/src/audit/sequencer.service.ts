@@ -2,9 +2,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleD
 import { setTimeout as sleep } from 'node:timers/promises'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { sequenceBatch } from './audit-log.ts'
-import { Checkpointer, type CheckpointOutcome } from './checkpointer.ts'
-import { WitnessClient } from './witness.client.ts'
+import { Checkpointer, sequenceBatch, WitnessClient, type CheckpointOutcome } from '@carwash/audit-pg'
 
 @Injectable()
 export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {

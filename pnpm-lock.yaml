@@ -13,6 +13,9 @@ importers:
       '@carwash/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@carwash/audit-pg':
+        specifier: workspace:*
+        version: link:../../packages/audit-pg
       '@carwash/failpoints':
         specifier: workspace:*
         version: link:../../packages/failpoints
@@ -137,6 +140,43 @@ importers:
       fast-check:
         specifier: ^4.3.0
         version: 4.10.2
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
+  packages/audit-pg:
+    dependencies:
+      '@carwash/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@carwash/failpoints':
+        specifier: workspace:*
+        version: link:../failpoints
+      '@carwash/pg':
+        specifier: workspace:*
+        version: link:../pg
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.1
+    devDependencies:
+      '@carwash/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@carwash/testkit':
+        specifier: workspace:*
+        version: link:../testkit
+      '@carwash/witness':
+        specifier: workspace:*
+        version: link:../../apps/witness
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.1
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -332,9 +372,15 @@ importers:
 
   tools/bench:
     dependencies:
+      '@carwash/audit-pg':
+        specifier: workspace:*
+        version: link:../../packages/audit-pg
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@carwash/invariants':
+        specifier: workspace:*
+        version: link:../../packages/invariants
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
@@ -347,6 +393,9 @@ importers:
       '@carwash/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
+      '@carwash/witness':
+        specifier: workspace:*
+        version: link:../../apps/witness
       pg:
         specifier: ^8.23.0
         version: 8.23.1

@@ -2,8 +2,8 @@ import { createPublicKey, verify, type KeyObject } from 'node:crypto'
 import { checkpointBody, fromHex, ORIGIN, toHex } from '@carwash/audit'
 import { failpoint } from '@carwash/failpoints'
 import type pg from 'pg'
-import { proveConsistency, rootAt, treeSize } from './audit-log.ts'
-import type { WitnessClient } from './witness.client.ts'
+import { proveConsistency, rootAt, treeSize } from './log.ts'
+import type { WitnessClient } from './witness-client.ts'
 
 export type CheckpointOutcome =
   | { kind: 'empty' }
