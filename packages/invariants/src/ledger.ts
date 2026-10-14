@@ -35,6 +35,14 @@ const JOURNALS_BALANCE: readonly Check[] = [
   },
 ]
 
+const ENTRY_CURRENCY: Check = {
+  sql: `
+    SELECT 'entry ' || e.id || ' says ' || coalesce(e.currency, 'nothing') || ', its account holds ' || a.currency AS detail
+    FROM entries e
+    JOIN accounts a ON a.id = e.account_id
+    WHERE e.currency IS DISTINCT FROM a.currency`,
+}
+
 const STORED_BALANCES: readonly Check[] = [
   {
     sql: `
@@ -80,8 +88,15 @@ const STORED_BALANCES: readonly Check[] = [
   },
 ]
 
+async function hasEntryCurrency(client: pg.ClientBase): Promise<boolean> {
+  const { rows } = await client.query<{ present: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'entries'::regclass AND attname = 'currency' AND NOT attisdropped) AS present`,
+  )
+  return rows[0]!.present
+}
+
 export async function checkLedgerIn(client: pg.ClientBase): Promise<InvariantResult[]> {
-  const s1 = await collect(client, JOURNALS_BALANCE)
+  const s1 = await collect(client, (await hasEntryCurrency(client)) ? [...JOURNALS_BALANCE, ENTRY_CURRENCY] : JOURNALS_BALANCE)
   const s2 = await collect(client, STORED_BALANCES)
   return [
     { id: 'S1', description: 'every journal sums to zero per currency and has at least two entries', ...s1 },

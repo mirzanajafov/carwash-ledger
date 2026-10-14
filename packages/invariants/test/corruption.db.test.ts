@@ -119,10 +119,15 @@ describe('the invariant checker', () => {
     const { receivable, fees } = fixture.accounts.get('locked')!
     await asSuperuser(
       `WITH j AS (INSERT INTO journals (external_ref) VALUES ('forged') RETURNING id)
-       INSERT INTO entries (journal_id, account_id, amount)
-       SELECT j.id, a, m FROM j, (VALUES (${id(receivable)}, 100), (${id(fees)}, -99)) AS v(a, m)`,
+       INSERT INTO entries (journal_id, account_id, amount, currency)
+       SELECT j.id, a, m, 'EUR' FROM j, (VALUES (${id(receivable)}, 100), (${id(fees)}, -99)) AS v(a, m)`,
     )
     expect((await counts()).S1).toBeGreaterThan(0)
+  })
+
+  it('catches an entry whose currency differs from its account', async () => {
+    await asSuperuser(`UPDATE entries SET currency = 'USD' WHERE id = (SELECT min(id) FROM entries)`)
+    expect(await counts()).toEqual({ S1: 1, S2: 0 })
   })
 
   it('catches a journal without entries', async () => {

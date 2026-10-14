@@ -10,7 +10,8 @@
     "validate": "node --conditions=source src/validate.ts",
     "floor": "node --conditions=source src/floor.ts",
     "e4": "node --conditions=source src/e4.ts",
-    "e6": "node --conditions=source src/e6.ts"
+    "e6": "node --conditions=source src/e6.ts",
+    "e7": "node --conditions=source src/e7.ts"
   },
   "dependencies": {
     "@carwash/audit-pg": "workspace:*",

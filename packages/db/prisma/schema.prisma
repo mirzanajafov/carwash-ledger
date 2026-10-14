@@ -66,6 +66,7 @@ model Entry {
   accountId  BigInt              @map("account_id")
   amount     BigInt
   createdXid Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()")) @map("created_xid")
+  currency   String              @default(dbgenerated()) @db.Char(3)
   journal    Journal             @relation(fields: [journalId], references: [id])
   account    Account             @relation(fields: [accountId], references: [id])
 
