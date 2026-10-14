@@ -122,7 +122,7 @@ export default function EvidencePage() {
 
       <Section
         title="The hot account"
-        note="Every payment touches the same fee and receivable accounts, so a plain balance row becomes a lock every payment waits on. Five ways to keep that balance, offered from 50 to 3,200 journals a second for 60 s each."
+        note="Every payment touches the same fee and receivable accounts, so a plain balance row becomes a lock every payment waits on. Five ways to keep that balance, offered from 50 to 3,200 journals a second, each rate measured for 15 s, three times."
       >
         <E1Explorer points={evidence.e1.points} connections={evidence.e1.connections} />
         <p className="text-sm text-muted">
