@@ -38,3 +38,40 @@ export async function callApi(method: string, path: string, key: string | null, 
   const retryAfter = Number(response.headers.get('retry-after'))
   return { status: response.status, body: await response.json().catch(() => null), retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null }
 }
+
+export function witnessUrl(): string | null {
+  return process.env.WITNESS_URL ? process.env.WITNESS_URL.replace(/\/+$/, '') : null
+}
+
+export async function callTamper(method: string, path: string, body?: unknown): Promise<Reply> {
+  const url = process.env.TAMPER_URL
+  if (!url) return { status: 503, body: { error: { code: 'not_configured', message: 'the tamper service is not configured on this web server' } }, retryAfter: null }
+  const response = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
+    method,
+    cache: 'no-store',
+    headers: { authorization: `Bearer ${secret('TAMPER_TOKEN')}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
+  })
+  return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }
+}
+
+export async function witnessKey(): Promise<string | null> {
+  const url = witnessUrl()
+  if (!url) return null
+  try {
+    const response = await fetch(`${url}/v1/key`, { cache: 'no-store', signal: AbortSignal.timeout(3000) })
+    if (!response.ok) return null
+    return ((await response.json()) as { public_key: string }).public_key
+  } catch {
+    return null
+  }
+}
+
+export function relay(reply: Reply): Response {
+  return Response.json(reply.body, { status: reply.status, headers: reply.retryAfter ? { 'retry-after': String(reply.retryAfter) } : {} })
+}
+
+export function unreachable(): Response {
+  return Response.json({ error: { code: 'unreachable', message: 'a service behind the dashboard is not answering' } }, { status: 502 })
+}

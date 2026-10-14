@@ -41,6 +41,18 @@ export class ReconciliationController {
     this.#settlements = settlements
   }
 
+  @Get('days')
+  async days(@Query('currency') currency?: string, @Query('limit') limit?: string) {
+    const count = limit === undefined ? 7 : Number(limit)
+    if (!Number.isInteger(count) || count < 1 || count > 60) throw badRequest('limit must be between 1 and 60')
+    return { object: 'list', ...(await this.#settlements.days(currencyCode(currency), count)) }
+  }
+
+  @Get('days/:day')
+  async day(@Param('day') day: string, @Query('currency') currency?: string) {
+    return this.#settlements.day(currencyCode(currency), dayNumber(day, 'day'), 200)
+  }
+
   @Get('breaks')
   async breaks(@Query('from') from?: string, @Query('through') through?: string, @Query('currency') currency?: string) {
     const first = dayNumber(from, 'from')

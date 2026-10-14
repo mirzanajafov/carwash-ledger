@@ -42,6 +42,46 @@ export class AuditController {
     }
   }
 
+  @Get('audit/checkpoints')
+  async checkpoints() {
+    const { rows } = await this.#db.pool.query<{ size: string; root: Buffer; signed_at: Date }>(
+      'SELECT size::text, root, signed_at FROM audit_checkpoints ORDER BY size DESC LIMIT 20',
+    )
+    return { object: 'list', data: rows.map((r) => ({ tree_size: Number(r.size), root: toHex(new Uint8Array(r.root)), signed_at: r.signed_at.toISOString() })) }
+  }
+
+  @Get('audit/leaves/:seq')
+  async leaf(@Param('seq') seq: string) {
+    const at = size(seq, 'seq')!
+    const { rows } = await this.#db.pool.query<{ journal_id: string; leaf: Buffer }>('SELECT journal_id::text, leaf FROM audit_log WHERE seq = $1', [at])
+    if (!rows[0]) throw notFound(`seq ${at} in the audit log`)
+    return { object: 'leaf', seq: at, journal_id: rows[0].journal_id, leaf: toHex(new Uint8Array(rows[0].leaf)) }
+  }
+
+  @Get('journals/:id')
+  async journal(@Param('id') id: string) {
+    if (!/^\d{1,18}$/.test(id)) throw badRequest('the journal id must be a number')
+    const { rows } = await this.#db.pool.query<{ id: string; external_ref: string; micros: string; created_at: Date; seq: string | null; entries: { id: string; account_id: string; account: string; amount: string }[] }>(
+      `SELECT j.id::text, j.external_ref, (extract(epoch FROM j.created_at) * 1000000)::bigint::text AS micros, j.created_at,
+              (SELECT a.seq::text FROM audit_log a WHERE a.journal_id = j.id) AS seq,
+              json_agg(json_build_object('id', e.id::text, 'account_id', e.account_id::text, 'account', acc.code, 'amount', e.amount::text) ORDER BY e.id) AS entries
+       FROM journals j JOIN entries e ON e.journal_id = j.id JOIN accounts acc ON acc.id = e.account_id
+       WHERE j.id = $1 GROUP BY j.id`,
+      [id],
+    )
+    const journal = rows[0]
+    if (!journal) throw notFound(`journal ${id}`)
+    return {
+      object: 'journal',
+      id: journal.id,
+      external_ref: journal.external_ref,
+      created_at: journal.created_at.toISOString(),
+      created_at_micros: journal.micros,
+      seq: journal.seq === null ? null : Number(journal.seq),
+      entries: journal.entries,
+    }
+  }
+
   @Get('journals/:id/proof')
   async inclusion(@Param('id') id: string, @Query('tree_size') requested?: string) {
     if (!/^\d{1,18}$/.test(id)) throw badRequest('the journal id must be a number')

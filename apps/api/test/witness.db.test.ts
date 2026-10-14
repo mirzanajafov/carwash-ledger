@@ -111,6 +111,7 @@ describe('checkpoints and the witness', () => {
     const { rows } = await stack.admin.query<{ size: string }>('SELECT size::text FROM audit_checkpoints ORDER BY size')
     expect(rows.map((r) => Number(r.size))).toEqual([first.size, second.size])
 
+    expect((await stack.call('GET', '/v1/audit/checkpoints')).body.data.map((c: { tree_size: number }) => c.tree_size)).toEqual([second.size, first.size])
     const checkpoint = (await stack.call('GET', '/v1/audit/checkpoint')).body
     expect(checkpoint).toMatchObject({ tree_size: second.size, witness_key: witness.publicKey })
     const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: checkpoint.witness_key }, format: 'jwk' })
