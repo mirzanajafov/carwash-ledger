@@ -37,8 +37,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-4 pb-10 text-xs text-muted">
-          The bank and the payment provider are simulated. The ledger, its invariants and its audit log are not.
+        <footer className="mx-auto flex max-w-6xl flex-wrap justify-between gap-2 px-4 pb-10 text-xs text-muted">
+          <span>The bank and the payment provider are simulated. The ledger, its invariants and its audit log are not.</span>
+          <Link href="/admin" className="hover:text-ink">
+            Admin
+          </Link>
         </footer>
       </body>
     </html>
