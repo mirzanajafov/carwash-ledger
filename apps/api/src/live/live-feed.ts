@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common'
 import { readAllBalances } from '@carwash/ledger'
+import type pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 
@@ -15,16 +16,26 @@ type PaymentEvent = Extract<LiveEvent, { type: 'payment' }>
 const LOOK_BACK = 1000n
 const RECENT_JOURNALS = 20
 
+const BATCH = 500
+
+interface JournalRow {
+  id: string
+  external_ref: string
+  posted_at: Date
+  entries: { account: string; amount: string }[]
+}
+
+const WINDOW = `SELECT id::text FROM journals WHERE id > $1 ORDER BY id LIMIT ${Number(LOOK_BACK) + BATCH}`
+
 const JOURNALS = `
   SELECT j.id::text, j.external_ref, j.created_at AS posted_at,
          json_agg(json_build_object('account', a.code, 'amount', e.amount::text) ORDER BY e.id) AS entries
   FROM journals j
   JOIN entries e ON e.journal_id = j.id
   JOIN accounts a ON a.id = e.account_id
-  WHERE j.id > $1
+  WHERE j.id = ANY($1::bigint[])
   GROUP BY j.id
-  ORDER BY j.id
-  LIMIT 500`
+  ORDER BY j.id`
 
 const LATEST_JOURNALS = `
   SELECT * FROM (
@@ -101,6 +112,18 @@ export class LiveFeed implements OnModuleDestroy {
     this.#last = undefined
   }
 
+  async #window(pool: pg.Pool, cursor: bigint): Promise<bigint[]> {
+    const from = cursor > LOOK_BACK ? cursor - LOOK_BACK : 0n
+    const { rows } = await pool.query<{ id: string }>(WINDOW, [from.toString()])
+    return rows.map((row) => BigInt(row.id))
+  }
+
+  async #fresh(pool: pg.Pool, cursor: bigint): Promise<JournalRow[]> {
+    const unseen = (await this.#window(pool, cursor)).filter((id) => !this.#seen.has(id)).slice(0, BATCH)
+    if (unseen.length === 0) return []
+    return (await pool.query<JournalRow>(JOURNALS, [unseen.map(String)])).rows
+  }
+
   #emit(event: LiveEvent): void {
     for (const listener of this.#listeners) listener(event)
   }
@@ -118,15 +141,15 @@ export class LiveFeed implements OnModuleDestroy {
         this.#emit(this.#last)
       }
       const first = this.#cursor === undefined
-      const from = first ? undefined : this.#cursor! > LOOK_BACK ? this.#cursor! - LOOK_BACK : 0n
-      const { rows } = await pool.query<{ id: string; external_ref: string; posted_at: Date; entries: { account: string; amount: string }[] }>(
-        first ? LATEST_JOURNALS : JOURNALS,
-        first ? [] : [from!.toString()],
-      )
-      if (first) this.#cursor = 0n
+      const rows = first ? (await pool.query<JournalRow>(LATEST_JOURNALS)).rows : await this.#fresh(pool, this.#cursor!)
+      if (first) {
+        this.#cursor = rows.reduce((max, row) => (BigInt(row.id) > max ? BigInt(row.id) : max), 0n)
+        const shown = new Set(rows.map((row) => BigInt(row.id)))
+        for (const id of await this.#window(pool, this.#cursor)) if (!shown.has(id) && id <= this.#cursor) this.#seen.add(id)
+      }
       for (const row of rows) {
         const id = BigInt(row.id)
-        if ((!first && id <= this.#cursor! - LOOK_BACK) || this.#seen.has(id)) continue
+        if (this.#seen.has(id)) continue
         this.#seen.add(id)
         if (id > this.#cursor!) this.#cursor = id
         const event: JournalEvent = { type: 'journal', data: { ...row, posted_at: row.posted_at.toISOString() } }

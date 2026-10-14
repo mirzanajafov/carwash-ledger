@@ -76,6 +76,7 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     webhookRetentionDays: 7,
     kafkaBrokers: [],
     relayWorkers: 4,
+    relayIdleMaxMs: 1000,
     outboxRetentionHours: 24,
     kafkaTopicPrefix: '',
     inboxRetentionDays: 7,

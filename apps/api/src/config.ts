@@ -28,6 +28,7 @@ export interface ApiConfig {
   webhookRetentionDays: number
   kafkaBrokers: readonly string[]
   relayWorkers: number
+  relayIdleMaxMs: number
   outboxRetentionHours: number
   kafkaTopicPrefix: string
   inboxRetentionDays: number
@@ -104,6 +105,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     webhookRetentionDays: integer(env, 'WEBHOOK_RETENTION_DAYS', 7),
     kafkaBrokers: (env.KAFKA_BROKERS ?? '').split(',').map((b) => b.trim()).filter((b) => b.length > 0),
     relayWorkers: integer(env, 'RELAY_WORKERS', 4),
+    relayIdleMaxMs: integer(env, 'RELAY_IDLE_MAX_MS', 1000) || 1000,
     outboxRetentionHours: integer(env, 'OUTBOX_RETENTION_HOURS', 24),
     kafkaTopicPrefix: env.KAFKA_TOPIC_PREFIX ?? '',
     inboxRetentionDays: integer(env, 'INBOX_RETENTION_DAYS', 7),
