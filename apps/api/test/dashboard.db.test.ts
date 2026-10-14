@@ -88,6 +88,19 @@ describe('the live feed', () => {
       const balances = live.events.filter((e) => e.type === 'balances').at(-1)!.data as { code: string; amount: string }[]
       expect(balances.reduce((sum, b) => sum + BigInt(b.amount), 0n)).toBe(0n)
       expect(balances.some((b) => b.amount !== '0')).toBe(true)
+
+      const late = await watch(`${stack.url}/v1/live`)
+      try {
+        await late.until(
+          (events) =>
+            events.some((e) => e.type === 'balances') &&
+            events.some((e) => e.type === 'journal' && e.data.id === journal.data.id) &&
+            events.some((e) => e.type === 'payment' && e.data.id === created.body.id),
+          3000,
+        )
+      } finally {
+        await late.close()
+      }
     } finally {
       await live.close()
     }
