@@ -32,6 +32,7 @@
     "@carwash/invariants": "workspace:*",
     "@carwash/psp": "workspace:*",
     "@carwash/testkit": "workspace:*",
+    "@carwash/witness": "workspace:*",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",

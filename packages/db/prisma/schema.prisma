@@ -459,3 +459,14 @@ model AuditNode {
   @@id([level, idx])
   @@map("audit_nodes")
 }
+
+model AuditCheckpoint {
+  size       BigInt   @id
+  root       Bytes
+  signature  Bytes
+  witnessKey String   @map("witness_key")
+  signedAt   DateTime @map("signed_at") @db.Timestamptz(6)
+  storedAt   DateTime @default(now()) @map("stored_at") @db.Timestamptz(6)
+
+  @@map("audit_checkpoints")
+}

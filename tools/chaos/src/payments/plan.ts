@@ -1,13 +1,21 @@
 import { arrivals, TOXIC_KINDS, type ToxicKind } from '../plan.ts'
 import { between, mulberry32, pick, type Random } from '../random.ts'
 
-export const SERVICES = ['api-0', 'api-1', 'worker'] as const
+export const SERVICES = ['api-0', 'api-1', 'worker', 'witness'] as const
 export type ServiceName = (typeof SERVICES)[number]
 
-export const PROXIES = ['api-0-db', 'api-1-db', 'worker-db', 'psp', 'webhooks', 'worker-kafka'] as const
+export const PROXIES = ['api-0-db', 'api-1-db', 'worker-db', 'psp', 'webhooks', 'worker-kafka', 'witness'] as const
 export type ProxyName = (typeof PROXIES)[number]
 
-const PROXY_WEIGHTS: Record<ProxyName, number> = { 'api-0-db': 0.2, 'api-1-db': 0.2, 'worker-db': 0.15, psp: 0.3, webhooks: 0.15, 'worker-kafka': 0.15 }
+const PROXY_WEIGHTS: Record<ProxyName, number> = {
+  'api-0-db': 0.2,
+  'api-1-db': 0.2,
+  'worker-db': 0.15,
+  psp: 0.3,
+  webhooks: 0.15,
+  'worker-kafka': 0.15,
+  witness: 0.1,
+}
 
 export const PRICES = [900, 1500, 2400, 3500, 4900] as const
 

@@ -38,6 +38,11 @@ export interface ApiConfig {
   settlementEveryMs: number
   auditEveryMs: number
   auditBatch: number
+  witnessUrl: string | undefined
+  witnessToken: string | undefined
+  witnessTimeoutMs: number
+  checkpointEveryMs: number
+  checkpointEveryLeaves: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -64,6 +69,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
   if (hotAccountMode !== 'sharded' && hotAccountMode !== 'derived' && hotAccountMode !== 'locked') {
     throw new Error('HOT_ACCOUNT_MODE must be sharded, derived or locked')
   }
+  const witnessUrl = env.WITNESS_URL || undefined
+  if (witnessUrl && !env.WITNESS_TOKEN) throw new Error('WITNESS_TOKEN is required when WITNESS_URL is set')
   const currencies = (env.CURRENCIES ?? 'EUR').split(',').map((c) => c.trim())
   if (!currencies.every((c) => /^[A-Z]{3}$/.test(c))) throw new Error('CURRENCIES must be a comma-separated list of currency codes')
   return {
@@ -102,5 +109,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     settlementEveryMs: integer(env, 'SETTLEMENT_EVERY_MS', 60_000),
     auditEveryMs: integer(env, 'AUDIT_EVERY_MS', 1000),
     auditBatch: integer(env, 'AUDIT_BATCH', 1000) || 1000,
+    witnessUrl,
+    witnessToken: env.WITNESS_TOKEN || undefined,
+    witnessTimeoutMs: integer(env, 'WITNESS_TIMEOUT_MS', 5000),
+    checkpointEveryMs: integer(env, 'CHECKPOINT_EVERY_MS', 10_000),
+    checkpointEveryLeaves: integer(env, 'CHECKPOINT_EVERY_LEAVES', 10_000) || 10_000,
   }
 }

@@ -16,14 +16,15 @@ COPY packages/invariants/package.json packages/invariants/
 COPY packages/testkit/package.json packages/testkit/
 COPY apps/api/package.json apps/api/
 COPY apps/psp/package.json apps/psp/
+COPY apps/witness/package.json apps/witness/
 COPY tools/chaos/package.json tools/chaos/
-RUN pnpm install --frozen-lockfile --filter @carwash/chaos... --filter @carwash/api... --filter @carwash/psp...
+RUN pnpm install --frozen-lockfile --filter @carwash/chaos... --filter @carwash/api... --filter @carwash/psp... --filter @carwash/witness...
 COPY packages packages
 COPY apps apps
 COPY tools/chaos tools/chaos
 ARG MUTANT=
 RUN for m in $(echo "$MUTANT" | tr '+' ' '); do patch -p1 --forward < "tools/chaos/mutants/$m.patch"; done
-RUN pnpm --filter @carwash/db generate && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." build
+RUN pnpm --filter @carwash/db generate && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." build
 
 FROM postgres:18
 COPY --from=ghcr.io/shopify/toxiproxy:2.12.0 /toxiproxy /usr/local/bin/toxiproxy-server

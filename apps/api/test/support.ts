@@ -85,6 +85,11 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     settlementEveryMs: 0,
     auditEveryMs: 0,
     auditBatch: 1000,
+    witnessUrl: undefined,
+    witnessToken: undefined,
+    witnessTimeoutMs: 2000,
+    checkpointEveryMs: 10_000,
+    checkpointEveryLeaves: 10_000,
     ...overrides,
   }
 }

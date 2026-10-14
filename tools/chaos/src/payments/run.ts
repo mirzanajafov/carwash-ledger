@@ -7,7 +7,17 @@ import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool } from '@carwash/pg'
-import { checkAgainstPsp, checkAudit, checkEvents, checkLedger, checkPayments, checkSequenced, checkSettled, checkSettlement } from '@carwash/invariants'
+import {
+  checkAgainstPsp,
+  checkAudit,
+  checkEvents,
+  checkLedger,
+  checkPayments,
+  checkSequenced,
+  checkSettled,
+  checkSettlement,
+  readWitness,
+} from '@carwash/invariants'
 import { kafkaClient } from '@carwash/outbox'
 import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
 import pg from 'pg'
@@ -88,6 +98,7 @@ export interface PaymentsReport {
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
   pspOperations: Record<string, number>
   checks: { periodic: number; skipped: number }
+  witness: { checkpoints: number; size: number }
   harnessErrors: string[]
   violations: Violation[]
 }
@@ -96,13 +107,24 @@ const ROOT = new URL('../../../../', import.meta.url)
 const API_MAIN = fileURLToPath(new URL('apps/api/dist/main.js', ROOT))
 const WORKER_MAIN = fileURLToPath(new URL('apps/api/dist/worker.js', ROOT))
 const PSP_MAIN = fileURLToPath(new URL('apps/psp/src/main.ts', ROOT))
+const WITNESS_MAIN = fileURLToPath(new URL('apps/witness/src/main.ts', ROOT))
 
 const POSTGRES_PORT = 5432
 const PSP_PORT = 3142
 const API_PORTS = [3140, 3141]
 const WORKER_PORT = 3144
+const WITNESS_PORT = 3145
+const WITNESS_URL = `http://127.0.0.1:${WITNESS_PORT}`
 const KAFKA_PROXY_UPSTREAM = 9092
-const PROXY_PORTS: Record<ProxyName, number> = { 'api-0-db': 6432, 'api-1-db': 6433, 'worker-db': 6434, psp: 6440, webhooks: 6441, 'worker-kafka': 6450 }
+const PROXY_PORTS: Record<ProxyName, number> = {
+  'api-0-db': 6432,
+  'api-1-db': 6433,
+  'worker-db': 6434,
+  psp: 6440,
+  webhooks: 6441,
+  'worker-kafka': 6450,
+  witness: 6451,
+}
 const PROXY_UPSTREAMS: Record<ProxyName, number> = {
   'api-0-db': POSTGRES_PORT,
   'api-1-db': POSTGRES_PORT,
@@ -110,16 +132,18 @@ const PROXY_UPSTREAMS: Record<ProxyName, number> = {
   psp: PSP_PORT,
   webhooks: API_PORTS[0]!,
   'worker-kafka': KAFKA_PROXY_UPSTREAM,
+  witness: WITNESS_PORT,
 }
 
 const SETTLEMENT_DAY_SECONDS = 86_400
 const PSP_API_KEY = 'sk_chaos_api'
 const PSP_ADMIN_KEY = 'sk_chaos_admin'
 const WEBHOOK_SECRET = 'whsec_chaos'
+const WITNESS_TOKEN = 'witness_chaos'
 const NO_FAULTS = { seed: 0, decline: 0, fail: 0, timeoutAfterCommit: 0, slow: 0, wrongAmount: 0, webhook: {} }
 
 const API_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'request.', 'webhook.']
-const WORKER_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'recovery.', 'webhook.', 'relay.', 'consumer.']
+const WORKER_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'recovery.', 'webhook.', 'relay.', 'consumer.', 'checkpoint.']
 
 function withPort(url: string, port: number): string {
   const parsed = new URL(url)
@@ -127,9 +151,15 @@ function withPort(url: string, port: number): string {
   return parsed.toString()
 }
 
+function failpointRate(name: string, probability: number): number {
+  if (name.startsWith('transaction.')) return probability
+  if (name.startsWith('checkpoint.')) return Math.min(1, probability * 200)
+  return Math.min(1, probability * 4)
+}
+
 function failpointSpec(prefixes: readonly string[], probability: number): string {
   return FAILPOINTS.filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
-    .map((name) => `${name}=${name.startsWith('transaction.') ? probability : Math.min(1, probability * 4)}`)
+    .map((name) => `${name}=${failpointRate(name, probability)}`)
     .join(',')
 }
 
@@ -182,6 +212,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     ledger: { anomalies: {}, webhooks: {} },
     pspOperations: {},
     checks: { periodic: 0, skipped: 0 },
+    witness: { checkpoints: 0, size: 0 },
     harnessErrors: [],
     violations: found.list,
   }
@@ -193,6 +224,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
   const logs = `/tmp/chaos-logs/seed-${seed}`
   mkdirSync(logs, { recursive: true })
   const logFile = (name: string) => join(logs, `${name}.log`)
+  const witnessDir = `/tmp/chaos-witness/seed-${seed}`
+  rmSync(witnessDir, { recursive: true, force: true })
   let stopping = false
   try {
     const owner = ledgerDb.pool('ledger_owner', 1)
@@ -267,6 +300,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         events,
       ),
     )
+    services.set(
+      'witness',
+      new Service('witness', WITNESS_MAIN, { WITNESS_DIR: witnessDir, WITNESS_TOKEN, WITNESS_PORT: String(WITNESS_PORT) }, logFile('witness'), events),
+    )
     API_PORTS.forEach((port, i) => {
       services.set(
         `api-${i}`,
@@ -295,6 +332,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           DATABASE_URL: ledgerUrl('worker-db'),
           KAFKA_BROKERS: `127.0.0.1:${PROXY_PORTS['worker-kafka']}`,
           RELAY_WORKERS: '4',
+          WITNESS_URL: `http://127.0.0.1:${PROXY_PORTS.witness}`,
+          WITNESS_TOKEN,
+          CHECKPOINT_EVERY_MS: '2000',
           CHAOS_FAILPOINTS: failpointSpec(WORKER_FAILPOINTS, options.failpointProbability),
         },
         logFile('worker'),
@@ -302,7 +342,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       ),
     )
     const service = (name: string) => services.get(name)!
-    for (const name of ['psp', 'api-0']) {
+    for (const name of ['psp', 'witness', 'api-0']) {
       service(name).start()
       await until(() => service(name).ready, 60_000, name)
     }
@@ -373,7 +413,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         found.addResults(await checkLedger(audit), 'during')
         found.addResults(await checkPayments(audit), 'during')
         found.addResults([await checkAgainstPsp(audit, psp)], 'during')
-        found.addResults([await checkAudit(audit)], 'during')
+        found.addResults([await checkAudit(audit, await readWitness(WITNESS_URL).catch(() => undefined))], 'during')
         report.checks.periodic++
       } catch {
         report.checks.skipped++
@@ -475,8 +515,18 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       if (delivered) break
       await sleep(250)
     }
+    const witnessedBy = performance.now() + 30_000
+    while (performance.now() < witnessedBy) {
+      const current = await readWitness(WITNESS_URL)
+        .then(async (witness) => (await checkSequenced(audit, witness)).count === 0)
+        .catch(() => false)
+      if (current) break
+      await sleep(250)
+    }
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
+    const witness = await readWitness(WITNESS_URL)
+    report.witness = { checkpoints: witness.checkpoints.length, size: witness.checkpoints.at(-1)?.size ?? 0 }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))
@@ -486,7 +536,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(await checkPayments(audit), 'final')
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
     found.addResults(await checkEvents(audit), 'final')
-    found.addResults([await checkAudit(audit), await checkSequenced(audit)], 'final')
+    found.addResults([await checkAudit(audit, witness), await checkSequenced(audit, witness)], 'final')
     found.addResults(
       [await checkSettlement(audit, { daySeconds: SETTLEMENT_DAY_SECONDS, feeBps: 120, feeFixed: 8, completeThrough: Math.max(...report.settlement.days, -1) })],
       'final',
@@ -605,7 +655,7 @@ async function activity(adminUrl: string, database: string): Promise<string> {
 
 async function keepLogs(from: string, to: string, seed: number): Promise<void> {
   mkdirSync(to, { recursive: true })
-  for (const name of ['psp', 'api-0', 'api-1', 'worker', 'kafka']) {
+  for (const name of ['psp', 'witness', 'api-0', 'api-1', 'worker', 'kafka']) {
     await pipeline(createReadStream(join(from, `${name}.log`)), createGzip(), createWriteStream(join(to, `seed-${seed}-${name}.log.gz`)))
   }
   rmSync(from, { recursive: true, force: true })
@@ -680,6 +730,7 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     kafkaKills: sum((r) => r.kafka.kills),
     settlementBreaks: merged((r) => r.settlement.breaks),
     kafkaRecoveryMsMedian: median(reports.flatMap((r) => r.kafka.recoveryMs)),
+    witnessCheckpoints: sum((r) => r.witness.checkpoints),
     events: merged((r) => r.events),
     toxics: merged((r) => r.toxics),
     toxicsByProxy: merged((r) => r.toxicsByProxy),
@@ -702,6 +753,7 @@ export function describePaymentsRun(index: number, r: PaymentsReport): string {
     `run ${index} seed ${r.seed}: ${r.journeys} journeys, ${r.payouts} payouts, ${r.requests} requests, ${r.sends} sends, ` +
     `kills ${total(r.kills.random)} random + ${total(r.kills.failpoints)} at failpoints, crashes ${r.exits.crash}, ` +
     `postgres ${r.postgres.kills}, kafka ${r.kafka.kills}, toxics ${total(r.toxics)}, surprises ${r.surprises.count}, ` +
+    `witnessed ${r.witness.size} leaves in ${r.witness.checkpoints} checkpoints, ` +
     `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}`
   )
 }
