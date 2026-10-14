@@ -15,7 +15,7 @@ export async function POST(request: Request): Promise<Response> {
       pay: (key, payment) => callApi('POST', '/v1/payments', clientKey(), payment, key, 12_000),
       health: async () => {
         const reply = await callApi('GET', '/health', null, undefined, undefined, 1000)
-        return reply.status === 200 ? { pid: Number(reply.body.pid) } : null
+        return reply.status === 200 ? { pid: Number(reply.body.pid), startedAt: String(reply.body.started_at) } : null
       },
       checks: () => callApi('POST', '/v1/admin/checks', adminKey(), undefined, undefined, 30_000),
       key: () => randomUUID(),

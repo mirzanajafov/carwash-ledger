@@ -10,3 +10,4 @@ packages/db/src/generated/
 tools/chaos/results/*/logs/
 .next/
 next-env.d.ts
+backups/

@@ -91,7 +91,7 @@ export function canonicalOf(journal: JournalRow): Uint8Array {
 export async function sequenceBatch(client: pg.ClientBase, limit: number): Promise<number> {
   const { rows: locked } = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SEQUENCER_LOCK])
   if (!locked[0]!.locked) return 0
-  const { rows: queued } = await client.query<{ journal_id: string }>('SELECT journal_id::text FROM audit_queue ORDER BY journal_id LIMIT $1', [limit])
+  const { rows: queued } = await client.query<{ journal_id: string }>('SELECT q.journal_id::text FROM audit_queue q ORDER BY q.journal_id LIMIT $1', [limit])
   if (queued.length === 0) return 0
   const ids = queued.map((q) => q.journal_id)
   const { rows: journals } = await client.query<JournalRow>(

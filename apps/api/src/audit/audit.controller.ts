@@ -27,7 +27,7 @@ export class AuditController {
   @Get('audit/checkpoint')
   async checkpoint() {
     const { rows } = await this.#db.pool.query<{ size: string; root: Buffer; signature: Buffer; witness_key: string; signed_at: Date }>(
-      'SELECT size::text, root, signature, witness_key, signed_at FROM audit_checkpoints ORDER BY size DESC LIMIT 1',
+      'SELECT size::text, root, signature, witness_key, signed_at FROM audit_checkpoints c ORDER BY c.size DESC LIMIT 1',
     )
     const latest = rows[0]
     if (!latest) throw notFound('a witnessed checkpoint')
@@ -45,7 +45,7 @@ export class AuditController {
   @Get('audit/checkpoints')
   async checkpoints() {
     const { rows } = await this.#db.pool.query<{ size: string; root: Buffer; signed_at: Date }>(
-      'SELECT size::text, root, signed_at FROM audit_checkpoints ORDER BY size DESC LIMIT 20',
+      'SELECT size::text, root, signed_at FROM audit_checkpoints c ORDER BY c.size DESC LIMIT 20',
     )
     return { object: 'list', data: rows.map((r) => ({ tree_size: Number(r.size), root: toHex(new Uint8Array(r.root)), signed_at: r.signed_at.toISOString() })) }
   }
