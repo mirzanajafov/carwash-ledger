@@ -1,0 +1,1248 @@
+{
+  "startedAt": "2026-10-14T17:58:08.984Z",
+  "rate": 500,
+  "valid": true,
+  "drained": true,
+  "writer": {
+    "achievedPerSecond": 503.73333333333335,
+    "lagMs": {
+      "p50": 0.0012242689881531987,
+      "p90": 0.009669601376117498,
+      "p99": 0.2298963202847517,
+      "p999": 1.3464092701324262,
+      "max": 5.804186108332942
+    },
+    "dropped": 0,
+    "errors": 0
+  },
+  "steadyAckP99Ms": 35.1240234375,
+  "killedAtMs": 30012,
+  "kafkaAcceptsAfterMs": 43817,
+  "firstPublishAfterKillMs": 50535,
+  "firstPublishAfterKafkaMs": 6719,
+  "peakBacklog": 24912,
+  "backlogAtFirstPublish": 25188,
+  "drainSeconds": 1.89327685546875,
+  "drainPerSecond": 13303.917980745498,
+  "consumedDrainSeconds": 2.00135693359375,
+  "maxPublishedInOneSecond": 13500,
+  "recoveredAfterKafkaMs": 57171,
+  "series": [
+    {
+      "second": 0,
+      "created": 507,
+      "published": 491,
+      "consumed": 489,
+      "backlog": 16,
+      "ackP99": 456.3759765625
+    },
+    {
+      "second": 1,
+      "created": 487,
+      "published": 499,
+      "consumed": 475,
+      "backlog": 4,
+      "ackP99": 33.261962890625
+    },
+    {
+      "second": 2,
+      "created": 518,
+      "published": 511,
+      "consumed": 530,
+      "backlog": 11,
+      "ackP99": 34.888916015625
+    },
+    {
+      "second": 3,
+      "created": 447,
+      "published": 452,
+      "consumed": 444,
+      "backlog": 6,
+      "ackP99": 33.02587890625
+    },
+    {
+      "second": 4,
+      "created": 521,
+      "published": 511,
+      "consumed": 518,
+      "backlog": 16,
+      "ackP99": 35.572998046875
+    },
+    {
+      "second": 5,
+      "created": 540,
+      "published": 545,
+      "consumed": 543,
+      "backlog": 11,
+      "ackP99": 31.60302734375
+    },
+    {
+      "second": 6,
+      "created": 499,
+      "published": 505,
+      "consumed": 505,
+      "backlog": 5,
+      "ackP99": 53.567138671875
+    },
+    {
+      "second": 7,
+      "created": 533,
+      "published": 529,
+      "consumed": 529,
+      "backlog": 9,
+      "ackP99": 30.876953125
+    },
+    {
+      "second": 8,
+      "created": 532,
+      "published": 535,
+      "consumed": 527,
+      "backlog": 6,
+      "ackP99": 34.404052734375
+    },
+    {
+      "second": 9,
+      "created": 523,
+      "published": 518,
+      "consumed": 523,
+      "backlog": 11,
+      "ackP99": 32.60302734375
+    },
+    {
+      "second": 10,
+      "created": 536,
+      "published": 539,
+      "consumed": 545,
+      "backlog": 8,
+      "ackP99": 32.648193359375
+    },
+    {
+      "second": 11,
+      "created": 488,
+      "published": 492,
+      "consumed": 489,
+      "backlog": 4,
+      "ackP99": 30.406982421875
+    },
+    {
+      "second": 12,
+      "created": 487,
+      "published": 486,
+      "consumed": 482,
+      "backlog": 5,
+      "ackP99": 30.041015625
+    },
+    {
+      "second": 13,
+      "created": 507,
+      "published": 505,
+      "consumed": 504,
+      "backlog": 7,
+      "ackP99": 32.51513671875
+    },
+    {
+      "second": 14,
+      "created": 462,
+      "published": 454,
+      "consumed": 462,
+      "backlog": 15,
+      "ackP99": 31.887939453125
+    },
+    {
+      "second": 15,
+      "created": 502,
+      "published": 510,
+      "consumed": 504,
+      "backlog": 7,
+      "ackP99": 32.611083984375
+    },
+    {
+      "second": 16,
+      "created": 501,
+      "published": 502,
+      "consumed": 508,
+      "backlog": 6,
+      "ackP99": 42.233154296875
+    },
+    {
+      "second": 17,
+      "created": 463,
+      "published": 467,
+      "consumed": 463,
+      "backlog": 2,
+      "ackP99": 30.164794921875
+    },
+    {
+      "second": 18,
+      "created": 514,
+      "published": 501,
+      "consumed": 505,
+      "backlog": 15,
+      "ackP99": 35.632080078125
+    },
+    {
+      "second": 19,
+      "created": 463,
+      "published": 457,
+      "consumed": 449,
+      "backlog": 21,
+      "ackP99": 36.0439453125
+    },
+    {
+      "second": 20,
+      "created": 507,
+      "published": 520,
+      "consumed": 512,
+      "backlog": 8,
+      "ackP99": 32.3671875
+    },
+    {
+      "second": 21,
+      "created": 540,
+      "published": 536,
+      "consumed": 548,
+      "backlog": 12,
+      "ackP99": 32.2060546875
+    },
+    {
+      "second": 22,
+      "created": 539,
+      "published": 544,
+      "consumed": 547,
+      "backlog": 7,
+      "ackP99": 30.8701171875
+    },
+    {
+      "second": 23,
+      "created": 531,
+      "published": 530,
+      "consumed": 528,
+      "backlog": 8,
+      "ackP99": 32.23388671875
+    },
+    {
+      "second": 24,
+      "created": 485,
+      "published": 491,
+      "consumed": 490,
+      "backlog": 2,
+      "ackP99": 35.3330078125
+    },
+    {
+      "second": 25,
+      "created": 487,
+      "published": 486,
+      "consumed": 484,
+      "backlog": 3,
+      "ackP99": 30.4580078125
+    },
+    {
+      "second": 26,
+      "created": 495,
+      "published": 493,
+      "consumed": 493,
+      "backlog": 5,
+      "ackP99": 54.388916015625
+    },
+    {
+      "second": 27,
+      "created": 497,
+      "published": 496,
+      "consumed": 503,
+      "backlog": 6,
+      "ackP99": 31.070068359375
+    },
+    {
+      "second": 28,
+      "created": 511,
+      "published": 514,
+      "consumed": 493,
+      "backlog": 3,
+      "ackP99": 31.0830078125
+    },
+    {
+      "second": 29,
+      "created": 503,
+      "published": 499,
+      "consumed": 514,
+      "backlog": 7,
+      "ackP99": 30.005126953125
+    },
+    {
+      "second": 30,
+      "created": 503,
+      "published": 127,
+      "consumed": 139,
+      "backlog": 383,
+      "ackP99": 50331.7509765625
+    },
+    {
+      "second": 31,
+      "created": 518,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 901,
+      "ackP99": 49538.81298828125
+    },
+    {
+      "second": 32,
+      "created": 538,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 1439,
+      "ackP99": 48585.14208984375
+    },
+    {
+      "second": 33,
+      "created": 539,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 1978,
+      "ackP99": 47634.39697265625
+    },
+    {
+      "second": 34,
+      "created": 462,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 2440,
+      "ackP99": 46681.635009765625
+    },
+    {
+      "second": 35,
+      "created": 506,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 2946,
+      "ackP99": 45714.5322265625
+    },
+    {
+      "second": 36,
+      "created": 506,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 3452,
+      "ackP99": 44752.75
+    },
+    {
+      "second": 37,
+      "created": 471,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 3923,
+      "ackP99": 43798.669921875
+    },
+    {
+      "second": 38,
+      "created": 523,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 4446,
+      "ackP99": 42839.23486328125
+    },
+    {
+      "second": 39,
+      "created": 497,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 4943,
+      "ackP99": 41873.386962890625
+    },
+    {
+      "second": 40,
+      "created": 525,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 5468,
+      "ackP99": 40892.697021484375
+    },
+    {
+      "second": 41,
+      "created": 483,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 5951,
+      "ackP99": 39950.305908203125
+    },
+    {
+      "second": 42,
+      "created": 494,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 6445,
+      "ackP99": 38993.7900390625
+    },
+    {
+      "second": 43,
+      "created": 493,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 6938,
+      "ackP99": 38040.44091796875
+    },
+    {
+      "second": 44,
+      "created": 513,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 7451,
+      "ackP99": 37072.991943359375
+    },
+    {
+      "second": 45,
+      "created": 497,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 7948,
+      "ackP99": 36103.879150390625
+    },
+    {
+      "second": 46,
+      "created": 506,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 8454,
+      "ackP99": 35151.85791015625
+    },
+    {
+      "second": 47,
+      "created": 501,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 8955,
+      "ackP99": 34191.08203125
+    },
+    {
+      "second": 48,
+      "created": 493,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 9448,
+      "ackP99": 33223.841064453125
+    },
+    {
+      "second": 49,
+      "created": 503,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 9951,
+      "ackP99": 32266.35498046875
+    },
+    {
+      "second": 50,
+      "created": 515,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 10466,
+      "ackP99": 31304.732177734375
+    },
+    {
+      "second": 51,
+      "created": 517,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 10983,
+      "ackP99": 30331.572998046875
+    },
+    {
+      "second": 52,
+      "created": 470,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 11453,
+      "ackP99": 29381.888916015625
+    },
+    {
+      "second": 53,
+      "created": 493,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 11946,
+      "ackP99": 28407.498046875
+    },
+    {
+      "second": 54,
+      "created": 514,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 12460,
+      "ackP99": 27439.6279296875
+    },
+    {
+      "second": 55,
+      "created": 474,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 12934,
+      "ackP99": 26472.60009765625
+    },
+    {
+      "second": 56,
+      "created": 529,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 13463,
+      "ackP99": 25508.701904296875
+    },
+    {
+      "second": 57,
+      "created": 537,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 14000,
+      "ackP99": 24553.034912109375
+    },
+    {
+      "second": 58,
+      "created": 510,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 14510,
+      "ackP99": 23622.926025390625
+    },
+    {
+      "second": 59,
+      "created": 499,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 15009,
+      "ackP99": 22653.55908203125
+    },
+    {
+      "second": 60,
+      "created": 512,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 15521,
+      "ackP99": 21683.9169921875
+    },
+    {
+      "second": 61,
+      "created": 488,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 16009,
+      "ackP99": 20716.890869140625
+    },
+    {
+      "second": 62,
+      "created": 477,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 16486,
+      "ackP99": 19756.685791015625
+    },
+    {
+      "second": 63,
+      "created": 503,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 16989,
+      "ackP99": 18744.64794921875
+    },
+    {
+      "second": 64,
+      "created": 500,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 17489,
+      "ackP99": 17805.848876953125
+    },
+    {
+      "second": 65,
+      "created": 506,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 17995,
+      "ackP99": 16847.976806640625
+    },
+    {
+      "second": 66,
+      "created": 547,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 18542,
+      "ackP99": 15894.343017578125
+    },
+    {
+      "second": 67,
+      "created": 461,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 19003,
+      "ackP99": 14948.7099609375
+    },
+    {
+      "second": 68,
+      "created": 491,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 19494,
+      "ackP99": 13983.5380859375
+    },
+    {
+      "second": 69,
+      "created": 498,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 19992,
+      "ackP99": 13006.868896484375
+    },
+    {
+      "second": 70,
+      "created": 481,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 20473,
+      "ackP99": 12036.85205078125
+    },
+    {
+      "second": 71,
+      "created": 482,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 20955,
+      "ackP99": 11055.635009765625
+    },
+    {
+      "second": 72,
+      "created": 507,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 21462,
+      "ackP99": 10087.932861328125
+    },
+    {
+      "second": 73,
+      "created": 498,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 21960,
+      "ackP99": 9133.10107421875
+    },
+    {
+      "second": 74,
+      "created": 479,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 22439,
+      "ackP99": 8167.150146484375
+    },
+    {
+      "second": 75,
+      "created": 497,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 22936,
+      "ackP99": 7200.657958984375
+    },
+    {
+      "second": 76,
+      "created": 467,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 23403,
+      "ackP99": 6237.383056640625
+    },
+    {
+      "second": 77,
+      "created": 492,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 23895,
+      "ackP99": 5278.431884765625
+    },
+    {
+      "second": 78,
+      "created": 509,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 24404,
+      "ackP99": 4316.655029296875
+    },
+    {
+      "second": 79,
+      "created": 508,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 24912,
+      "ackP99": 3357.197998046875
+    },
+    {
+      "second": 80,
+      "created": 512,
+      "published": 6000,
+      "consumed": 5000,
+      "backlog": 19424,
+      "ackP99": 2390.2021484375
+    },
+    {
+      "second": 81,
+      "created": 499,
+      "published": 13500,
+      "consumed": 13500,
+      "backlog": 6423,
+      "ackP99": 1422.617919921875
+    },
+    {
+      "second": 82,
+      "created": 472,
+      "published": 6873,
+      "consumed": 7865,
+      "backlog": 22,
+      "ackP99": 457.150146484375
+    },
+    {
+      "second": 83,
+      "created": 505,
+      "published": 509,
+      "consumed": 500,
+      "backlog": 18,
+      "ackP99": 73.541015625
+    },
+    {
+      "second": 84,
+      "created": 510,
+      "published": 506,
+      "consumed": 506,
+      "backlog": 22,
+      "ackP99": 70.326171875
+    },
+    {
+      "second": 85,
+      "created": 499,
+      "published": 501,
+      "consumed": 506,
+      "backlog": 20,
+      "ackP99": 66.781982421875
+    },
+    {
+      "second": 86,
+      "created": 559,
+      "published": 563,
+      "consumed": 547,
+      "backlog": 16,
+      "ackP99": 123.756103515625
+    },
+    {
+      "second": 87,
+      "created": 558,
+      "published": 558,
+      "consumed": 553,
+      "backlog": 16,
+      "ackP99": 74.45703125
+    },
+    {
+      "second": 88,
+      "created": 469,
+      "published": 451,
+      "consumed": 479,
+      "backlog": 34,
+      "ackP99": 80.903076171875
+    },
+    {
+      "second": 89,
+      "created": 471,
+      "published": 486,
+      "consumed": 473,
+      "backlog": 19,
+      "ackP99": 69.0400390625
+    },
+    {
+      "second": 90,
+      "created": 480,
+      "published": 460,
+      "consumed": 477,
+      "backlog": 39,
+      "ackP99": 85.8349609375
+    },
+    {
+      "second": 91,
+      "created": 501,
+      "published": 518,
+      "consumed": 503,
+      "backlog": 22,
+      "ackP99": 93.631103515625
+    },
+    {
+      "second": 92,
+      "created": 494,
+      "published": 508,
+      "consumed": 509,
+      "backlog": 8,
+      "ackP99": 71.193115234375
+    },
+    {
+      "second": 93,
+      "created": 490,
+      "published": 479,
+      "consumed": 490,
+      "backlog": 19,
+      "ackP99": 71.5419921875
+    },
+    {
+      "second": 94,
+      "created": 517,
+      "published": 521,
+      "consumed": 512,
+      "backlog": 15,
+      "ackP99": 65.300048828125
+    },
+    {
+      "second": 95,
+      "created": 529,
+      "published": 524,
+      "consumed": 501,
+      "backlog": 20,
+      "ackP99": 82.361083984375
+    },
+    {
+      "second": 96,
+      "created": 478,
+      "published": 478,
+      "consumed": 506,
+      "backlog": 20,
+      "ackP99": 109.22509765625
+    },
+    {
+      "second": 97,
+      "created": 523,
+      "published": 509,
+      "consumed": 505,
+      "backlog": 34,
+      "ackP99": 77.612060546875
+    },
+    {
+      "second": 98,
+      "created": 500,
+      "published": 516,
+      "consumed": 500,
+      "backlog": 18,
+      "ackP99": 87.64404296875
+    },
+    {
+      "second": 99,
+      "created": 465,
+      "published": 466,
+      "consumed": 488,
+      "backlog": 17,
+      "ackP99": 74.651123046875
+    },
+    {
+      "second": 100,
+      "created": 511,
+      "published": 508,
+      "consumed": 491,
+      "backlog": 20,
+      "ackP99": 73.30908203125
+    },
+    {
+      "second": 101,
+      "created": 504,
+      "published": 500,
+      "consumed": 514,
+      "backlog": 24,
+      "ackP99": 75.76513671875
+    },
+    {
+      "second": 102,
+      "created": 499,
+      "published": 495,
+      "consumed": 488,
+      "backlog": 28,
+      "ackP99": 79.72802734375
+    },
+    {
+      "second": 103,
+      "created": 482,
+      "published": 480,
+      "consumed": 483,
+      "backlog": 30,
+      "ackP99": 90.6201171875
+    },
+    {
+      "second": 104,
+      "created": 527,
+      "published": 525,
+      "consumed": 516,
+      "backlog": 32,
+      "ackP99": 70.7880859375
+    },
+    {
+      "second": 105,
+      "created": 468,
+      "published": 478,
+      "consumed": 473,
+      "backlog": 22,
+      "ackP99": 75.310791015625
+    },
+    {
+      "second": 106,
+      "created": 562,
+      "published": 555,
+      "consumed": 561,
+      "backlog": 29,
+      "ackP99": 129.39794921875
+    },
+    {
+      "second": 107,
+      "created": 428,
+      "published": 429,
+      "consumed": 440,
+      "backlog": 28,
+      "ackP99": 82.472900390625
+    },
+    {
+      "second": 108,
+      "created": 468,
+      "published": 474,
+      "consumed": 471,
+      "backlog": 22,
+      "ackP99": 113.1630859375
+    },
+    {
+      "second": 109,
+      "created": 536,
+      "published": 538,
+      "consumed": 541,
+      "backlog": 20,
+      "ackP99": 72.56689453125
+    },
+    {
+      "second": 110,
+      "created": 548,
+      "published": 540,
+      "consumed": 514,
+      "backlog": 28,
+      "ackP99": 85.6240234375
+    },
+    {
+      "second": 111,
+      "created": 504,
+      "published": 516,
+      "consumed": 523,
+      "backlog": 16,
+      "ackP99": 80.2919921875
+    },
+    {
+      "second": 112,
+      "created": 513,
+      "published": 488,
+      "consumed": 511,
+      "backlog": 41,
+      "ackP99": 75.469970703125
+    },
+    {
+      "second": 113,
+      "created": 477,
+      "published": 489,
+      "consumed": 465,
+      "backlog": 29,
+      "ackP99": 79.08203125
+    },
+    {
+      "second": 114,
+      "created": 511,
+      "published": 522,
+      "consumed": 538,
+      "backlog": 18,
+      "ackP99": 70.114013671875
+    },
+    {
+      "second": 115,
+      "created": 512,
+      "published": 501,
+      "consumed": 503,
+      "backlog": 29,
+      "ackP99": 83.47216796875
+    },
+    {
+      "second": 116,
+      "created": 530,
+      "published": 535,
+      "consumed": 512,
+      "backlog": 24,
+      "ackP99": 119.81201171875
+    },
+    {
+      "second": 117,
+      "created": 486,
+      "published": 494,
+      "consumed": 508,
+      "backlog": 16,
+      "ackP99": 107.130126953125
+    },
+    {
+      "second": 118,
+      "created": 504,
+      "published": 502,
+      "consumed": 507,
+      "backlog": 18,
+      "ackP99": 90.9990234375
+    },
+    {
+      "second": 119,
+      "created": 523,
+      "published": 513,
+      "consumed": 517,
+      "backlog": 28,
+      "ackP99": 78.824951171875
+    },
+    {
+      "second": 120,
+      "created": 505,
+      "published": 510,
+      "consumed": 506,
+      "backlog": 23,
+      "ackP99": 96.85400390625
+    },
+    {
+      "second": 121,
+      "created": 518,
+      "published": 517,
+      "consumed": 511,
+      "backlog": 24,
+      "ackP99": 80.4990234375
+    },
+    {
+      "second": 122,
+      "created": 519,
+      "published": 528,
+      "consumed": 516,
+      "backlog": 15,
+      "ackP99": 105.346923828125
+    },
+    {
+      "second": 123,
+      "created": 474,
+      "published": 470,
+      "consumed": 493,
+      "backlog": 19,
+      "ackP99": 82.982177734375
+    },
+    {
+      "second": 124,
+      "created": 532,
+      "published": 540,
+      "consumed": 516,
+      "backlog": 11,
+      "ackP99": 73.988037109375
+    },
+    {
+      "second": 125,
+      "created": 509,
+      "published": 499,
+      "consumed": 528,
+      "backlog": 21,
+      "ackP99": 82.47607421875
+    },
+    {
+      "second": 126,
+      "created": 505,
+      "published": 506,
+      "consumed": 473,
+      "backlog": 20,
+      "ackP99": 131.426025390625
+    },
+    {
+      "second": 127,
+      "created": 509,
+      "published": 509,
+      "consumed": 532,
+      "backlog": 20,
+      "ackP99": 80.52490234375
+    },
+    {
+      "second": 128,
+      "created": 518,
+      "published": 518,
+      "consumed": 515,
+      "backlog": 20,
+      "ackP99": 79.633056640625
+    },
+    {
+      "second": 129,
+      "created": 517,
+      "published": 506,
+      "consumed": 514,
+      "backlog": 31,
+      "ackP99": 76.39208984375
+    },
+    {
+      "second": 130,
+      "created": 498,
+      "published": 487,
+      "consumed": 477,
+      "backlog": 42,
+      "ackP99": 90.10498046875
+    },
+    {
+      "second": 131,
+      "created": 499,
+      "published": 532,
+      "consumed": 513,
+      "backlog": 9,
+      "ackP99": 77.757080078125
+    },
+    {
+      "second": 132,
+      "created": 472,
+      "published": 472,
+      "consumed": 484,
+      "backlog": 9,
+      "ackP99": 43.2568359375
+    },
+    {
+      "second": 133,
+      "created": 466,
+      "published": 461,
+      "consumed": 462,
+      "backlog": 14,
+      "ackP99": 43.985107421875
+    },
+    {
+      "second": 134,
+      "created": 513,
+      "published": 507,
+      "consumed": 525,
+      "backlog": 20,
+      "ackP99": 40.258056640625
+    },
+    {
+      "second": 135,
+      "created": 513,
+      "published": 517,
+      "consumed": 511,
+      "backlog": 16,
+      "ackP99": 50.97802734375
+    },
+    {
+      "second": 136,
+      "created": 519,
+      "published": 520,
+      "consumed": 526,
+      "backlog": 15,
+      "ackP99": 41.060791015625
+    },
+    {
+      "second": 137,
+      "created": 511,
+      "published": 516,
+      "consumed": 515,
+      "backlog": 10,
+      "ackP99": 33.77294921875
+    },
+    {
+      "second": 138,
+      "created": 512,
+      "published": 508,
+      "consumed": 510,
+      "backlog": 14,
+      "ackP99": 35.536865234375
+    },
+    {
+      "second": 139,
+      "created": 504,
+      "published": 510,
+      "consumed": 507,
+      "backlog": 8,
+      "ackP99": 31.2451171875
+    },
+    {
+      "second": 140,
+      "created": 504,
+      "published": 507,
+      "consumed": 502,
+      "backlog": 5,
+      "ackP99": 49.159912109375
+    },
+    {
+      "second": 141,
+      "created": 521,
+      "published": 506,
+      "consumed": 515,
+      "backlog": 20,
+      "ackP99": 30.118896484375
+    },
+    {
+      "second": 142,
+      "created": 502,
+      "published": 510,
+      "consumed": 503,
+      "backlog": 12,
+      "ackP99": 32.5380859375
+    },
+    {
+      "second": 143,
+      "created": 513,
+      "published": 514,
+      "consumed": 519,
+      "backlog": 11,
+      "ackP99": 33.408935546875
+    },
+    {
+      "second": 144,
+      "created": 560,
+      "published": 563,
+      "consumed": 564,
+      "backlog": 8,
+      "ackP99": 33.14404296875
+    },
+    {
+      "second": 145,
+      "created": 506,
+      "published": 507,
+      "consumed": 504,
+      "backlog": 7,
+      "ackP99": 33.37890625
+    },
+    {
+      "second": 146,
+      "created": 527,
+      "published": 524,
+      "consumed": 520,
+      "backlog": 10,
+      "ackP99": 53.69091796875
+    },
+    {
+      "second": 147,
+      "created": 521,
+      "published": 517,
+      "consumed": 520,
+      "backlog": 14,
+      "ackP99": 33.575927734375
+    },
+    {
+      "second": 148,
+      "created": 524,
+      "published": 528,
+      "consumed": 525,
+      "backlog": 10,
+      "ackP99": 43.343994140625
+    },
+    {
+      "second": 149,
+      "created": 488,
+      "published": 491,
+      "consumed": 498,
+      "backlog": 7,
+      "ackP99": 30.120849609375
+    },
+    {
+      "second": 150,
+      "created": 0,
+      "published": 7,
+      "consumed": 15,
+      "backlog": 0,
+      "ackP99": null
+    },
+    {
+      "second": 151,
+      "created": 0,
+      "published": 0,
+      "consumed": 0,
+      "backlog": 0,
+      "ackP99": null
+    }
+  ]
+}

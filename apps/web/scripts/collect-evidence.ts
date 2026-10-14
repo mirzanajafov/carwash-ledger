@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -82,9 +83,95 @@ function e5() {
   return { source: dir, rows }
 }
 
+function e4() {
+  const dirs = existsSync(join(BENCH, 'e4')) ? readdirSync(join(BENCH, 'e4')).sort() : []
+  const mode = (dir: string) => json(join(BENCH, 'e4', dir, 'run.json')).mode as string
+  const steadyDir = dirs.filter((d) => existsSync(join(BENCH, 'e4', d, 'summary.json')) && mode(d) === 'steady').at(-1)
+  const range = (r: { median: number; min: number; max: number } | null, digits = 1) =>
+    r ? { median: round(r.median, digits), min: round(r.min, digits), max: round(r.max, digits) } : null
+  const steady = steadyDir
+    ? (json(join(BENCH, 'e4', steadyDir, 'summary.json')) as any[]).map((r) => ({
+        rate: r.rate,
+        cells: r.validCells,
+        ackP50: range(r.ackP50),
+        ackP99: range(r.ackP99),
+        consumedP50: range(r.consumedP50),
+        consumedP99: range(r.consumedP99),
+        transactionsPerEvent: range(r.transactionsPerEvent, 2),
+        walSyncsPerEvent: range(r.walSyncsPerEvent, 2),
+      }))
+    : []
+  const outages = dirs
+    .filter((d) => existsSync(join(BENCH, 'e4', d, 'outage.json')))
+    .slice(-3)
+    .map((d) => {
+      const o = json(join(BENCH, 'e4', d, 'outage.json'))
+      return {
+        dir: d,
+        valid: o.valid,
+        kafkaBackS: round(o.kafkaAcceptsAfterMs / 1000),
+        firstPublishS: round(o.firstPublishAfterKafkaMs / 1000),
+        peakBacklog: o.peakBacklog,
+        drainPerSecond: Math.round(o.drainPerSecond),
+        drainS: round(o.drainSeconds),
+        settledS: o.recoveredAfterKafkaMs === null ? null : round(o.recoveredAfterKafkaMs / 1000),
+      }
+    })
+  return { source: steadyDir ?? null, steady, outages }
+}
+
+function e6() {
+  const root = join(BENCH, 'e6')
+  const dirs = existsSync(root) ? readdirSync(root).sort() : []
+  const latest = (file: string) => dirs.filter((d) => existsSync(join(root, d, file))).at(-1)
+  const scaleDir = latest('scale.json')
+  const lagDir = latest('lag.json')
+  const trialsDir = latest('trials.json')
+  const scale = scaleDir
+    ? (json(join(root, scaleDir, 'scale.json')) as any[])
+        .filter((step) => step.size)
+        .map((step) => ({
+          size: step.size,
+          sequencerPerSecond: step.sequencer.perSecond,
+          verifyS: round(step.verifyMedianMs / 1000, 2),
+          proofBytes: step.proofs.bytes,
+          proofP50Ms: round(step.proofs.ms.p50, 2),
+          auditBytesPerJournal: Math.round((step.bytes.audit_log + step.bytes.audit_nodes) / step.size),
+        }))
+    : []
+  const incremental = scaleDir
+    ? (json(join(root, scaleDir, 'scale.json')) as any[]).filter((step) => step.incremental).map((step) => ({ journals: step.incremental, ms: step.verifyMedianMs }))
+    : []
+  const lag = lagDir ? json(join(root, lagDir, 'lag.json')).lagMs : null
+  const trials = trialsDir ? json(join(root, trialsDir, 'trials.json')) : null
+  return {
+    source: [scaleDir, lagDir, trialsDir].filter(Boolean),
+    scale,
+    incremental,
+    lag: lag ? { rate: 200, p50: Math.round(lag.p50), p99: Math.round(lag.p99), max: Math.round(lag.max) } : null,
+    trials: trials
+      ? Object.entries(trials.result as Record<string, any>).map(([key, row]) => ({
+          key,
+          trials: row.trials,
+          caught: row.caught,
+          named: row.named,
+          caughtWithoutWitness: row.caughtWithoutWitness,
+        }))
+          .sort((a, b) => a.key.slice(0, 7).localeCompare(b.key.slice(0, 7)) || Number(b.key.endsWith('covered')) - Number(a.key.endsWith('covered')))
+      : [],
+  }
+}
+
+function tracked(dir: string): Set<string> {
+  const files = execFileSync('git', ['ls-files', '--', dir], { cwd: ROOT, encoding: 'utf8' }).split('\n')
+  return new Set(files.filter(Boolean).map((file) => file.slice(dir.length + 1).split('/')[0]!))
+}
+
 function chaos() {
   const runs = []
+  const committed = tracked('tools/chaos/results')
   for (const dir of readdirSync(CHAOS).sort()) {
+    if (!committed.has(dir)) continue
     const file = join(CHAOS, dir, 'summary.json')
     if (!existsSync(file)) continue
     const s = json(file)
@@ -106,6 +193,6 @@ function chaos() {
   return { runs }
 }
 
-const evidence = { e1: e1(), e2: e2(), e5: e5(), chaos: chaos() }
+const evidence = { e1: e1(), e2: e2(), e4: e4(), e5: e5(), e6: e6(), chaos: chaos() }
 writeFileSync(OUT, `${JSON.stringify(evidence, null, 1)}\n`)
-console.log(`wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e5.rows.length} E5 rows, ${evidence.chaos.runs.length} chaos campaigns`)
+console.log(`wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e4.steady.length} E4 rates and ${evidence.e4.outages.length} outages, ${evidence.e5.rows.length} E5 rows, ${evidence.e6.scale.length} E6 sizes and ${evidence.e6.trials.length} trial rows, ${evidence.chaos.runs.length} chaos campaigns`)
