@@ -16,11 +16,11 @@ export interface Check {
 }
 
 export type Step =
-  | { kind: 'armed'; at: number; failpoint: string; pid: number }
+  | { kind: 'armed'; at: number; failpoint: string; pid: number; startedAt: string }
   | { kind: 'refused'; at: number; status: number; message: string }
   | { kind: 'sent'; at: number; key: string; amount: number; merchant: string }
   | { kind: 'lost'; at: number; error: string }
-  | { kind: 'back'; at: number; pid: number; downMs: number }
+  | { kind: 'back'; at: number; pid: number; startedAt: string; downMs: number }
   | { kind: 'retry'; at: number; attempt: number; status: number; code: string; waitMs: number }
   | { kind: 'answered'; at: number; attempt: number; status: number; paymentId: string | null; paymentStatus: string | null }
   | { kind: 'checks'; at: number; ms: number; results: Check[] }
@@ -35,7 +35,7 @@ export interface Reply {
 export interface PlugDeps {
   arm(failpoint: CrashPoint): Promise<Reply>
   pay(key: string, body: { amount: number; currency: string; merchant: string; token: string }): Promise<Reply>
-  health(): Promise<{ pid: number } | null>
+  health(): Promise<{ pid: number; startedAt: string } | null>
   checks(): Promise<Reply>
   key(): string
   sleep(ms: number): Promise<void>
@@ -52,8 +52,8 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
     yield { kind: 'refused', at: at(), status: armed.status, message: armed.body?.error?.message ?? `the API answered ${armed.status}` }
     return
   }
-  const deadPid = Number(armed.body.pid)
-  yield { kind: 'armed', at: at(), failpoint, pid: deadPid }
+  const dead = String(armed.body.started_at)
+  yield { kind: 'armed', at: at(), failpoint, pid: Number(armed.body.pid), startedAt: dead }
 
   const key = deps.key()
   const body = { amount: 2400, currency: 'EUR', merchant, token: 'tok_ok' }
@@ -71,8 +71,8 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
         return
       }
       const health = await deps.health().catch(() => null)
-      if (health && health.pid !== deadPid) {
-        yield { kind: 'back', at: at(), pid: health.pid, downMs: at() - lostAt }
+      if (health && health.startedAt !== dead) {
+        yield { kind: 'back', at: at(), pid: health.pid, startedAt: health.startedAt, downMs: at() - lostAt }
         break
       }
       await deps.sleep(200)

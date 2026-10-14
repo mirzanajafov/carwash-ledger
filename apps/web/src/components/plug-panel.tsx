@@ -40,7 +40,7 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
     case 'lost':
       return { text: `The connection dropped (${step.error}). The process died at the crash point.`, tone: 'text-bad' }
     case 'back':
-      return { text: `A new API process, ${step.pid}, answers ${(step.downMs / 1000).toFixed(1)} s later.`, tone: 'text-ok' }
+      return { text: `A new API process, started at ${new Date(step.startedAt).toLocaleTimeString('en-GB')}, answers ${(step.downMs / 1000).toFixed(1)} s later.`, tone: 'text-ok' }
     case 'retry': {
       const which = tries > 1 ? `Tries ${step.attempt} to ${step.attempt + tries - 1}` : `Try ${step.attempt}`
       const over = tries > 1 ? ` for ${((until - step.at) / 1000 + step.waitMs / 1000).toFixed(0)} s` : ''

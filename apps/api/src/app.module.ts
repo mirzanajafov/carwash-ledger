@@ -7,6 +7,7 @@ import { API_CONFIG, type ApiConfig } from './config.ts'
 import { AuditDatabase, DashboardController } from './dashboard/dashboard.controller.ts'
 import { Database } from './db/database.ts'
 import { ErrorFilter } from './http/api-error.ts'
+import { INSTANCE } from './http/instance.ts'
 import { IdempotencyService } from './idempotency/idempotency.service.ts'
 import { Chart } from './ledger/chart.service.ts'
 import { LiveController } from './live/live.controller.ts'
@@ -22,8 +23,6 @@ import { Settlements } from './settlement/settlements.service.ts'
 import { WebhooksController } from './webhooks/webhooks.controller.ts'
 import { WebhooksService } from './webhooks/webhooks.service.ts'
 
-const STARTED_AT = new Date().toISOString()
-
 @Public()
 @Controller('health')
 export class HealthController {
@@ -36,7 +35,7 @@ export class HealthController {
   @Get()
   async check() {
     await this.#db.pool.query('SELECT 1')
-    return { ok: true, pid: process.pid, started_at: STARTED_AT }
+    return { ok: true, ...INSTANCE }
   }
 }
 

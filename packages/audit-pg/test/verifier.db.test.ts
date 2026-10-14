@@ -106,6 +106,13 @@ afterAll(async () => {
 })
 
 describe('full verification', () => {
+  it('sequences queued journals in the order of their ids, not the order of their ids as text', async () => {
+    const { rows } = await admin.query<{ id: string }>('SELECT a.journal_id::text AS id FROM audit_log a ORDER BY a.seq')
+    const ids = rows.map((r) => BigInt(r.id))
+    expect(ids.length).toBe(40)
+    expect(ids.every((id, i) => i === 0 || id > ids[i - 1]!)).toBe(true)
+  })
+
   it('finds nothing in an honest log, compares every signed root and ends where the log ends', async () => {
     const report = await verifyLog(app, { witness: witnessed, batch: 6 })
     expect(report).toMatchObject({ mode: 'full', from: 0, size: 40, journals: 40, witnessed: 2, findings: 0, firstSeq: null })

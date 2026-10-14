@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { pullThePlug, type PlugDeps, type Reply, type Step } from './plug'
 
-function fakeApi(script: { pay: (Reply | Error)[]; health: (number | null)[]; checks?: Reply[] }) {
+function fakeApi(script: { pay: (Reply | Error)[]; health: (string | null)[]; checks?: Reply[] }) {
   let clock = 0
   const sent: string[] = []
   const deps: PlugDeps = {
-    arm: async () => ({ status: 202, body: { pid: 100 }, retryAfter: null }),
+    arm: async () => ({ status: 202, body: { pid: 7, started_at: 'first' }, retryAfter: null }),
     pay: async (key) => {
       sent.push(key)
       const next = script.pay.shift()
@@ -14,8 +14,8 @@ function fakeApi(script: { pay: (Reply | Error)[]; health: (number | null)[]; ch
       return next
     },
     health: async () => {
-      const pid = script.health.shift()
-      return pid === undefined || pid === null ? null : { pid }
+      const started = script.health.shift()
+      return started === undefined || started === null ? null : { pid: 7, startedAt: started }
     },
     checks: async () => script.checks?.shift() ?? { status: 200, body: { ms: 12, results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }] }, retryAfter: null },
     key: () => 'key-1',
@@ -34,7 +34,7 @@ async function run(deps: PlugDeps): Promise<Step[]> {
 }
 
 describe('pulling the plug', () => {
-  it('waits for a new process, retries the same key past the dead request\'s lease, and ends with the checks', async () => {
+  it('waits for a new process, even one with the same pid, retries the same key past the dead request\'s lease, and ends with the checks', async () => {
     const { deps, sent } = fakeApi({
       pay: [
         new Error('socket hang up'),
@@ -42,11 +42,11 @@ describe('pulling the plug', () => {
         { status: 409, body: { error: { code: 'request_in_progress' } }, retryAfter: 5 },
         { status: 200, body: { id: 'pay_1', status: 'captured' }, retryAfter: null },
       ],
-      health: [null, null, 100, 101],
+      health: [null, null, 'first', 'second'],
     })
     const steps = await run(deps)
     expect(steps.map((s) => s.kind)).toEqual(['armed', 'sent', 'lost', 'back', 'retry', 'retry', 'answered', 'checks'])
-    expect(steps.find((s) => s.kind === 'back')).toMatchObject({ pid: 101 })
+    expect(steps.find((s) => s.kind === 'back')).toMatchObject({ pid: 7, startedAt: 'second' })
     expect(steps.find((s) => s.kind === 'answered')).toMatchObject({ attempt: 4, status: 200, paymentId: 'pay_1', paymentStatus: 'captured' })
     expect(new Set(sent)).toEqual(new Set(['key-1']))
   })

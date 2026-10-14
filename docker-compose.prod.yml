@@ -1,0 +1,272 @@
+name: carwash
+
+x-server: &server
+  image: carwash-server:latest
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+x-ledger: &ledger
+  DATABASE_URL: postgresql://ledger_app:${LEDGER_APP_PASSWORD}@postgres:5432/ledger
+  PSP_URL: http://psp:3142
+  PSP_API_KEY: ${PSP_API_KEY:?set PSP_API_KEY}
+  PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:?set PSP_WEBHOOK_SECRET}
+  WITNESS_URL: http://witness:3145
+  HOT_ACCOUNT_MODE: sharded
+  HOT_ACCOUNT_SHARDS: "16"
+  IDEMPOTENCY_LEASE_SECONDS: "10"
+  DATABASE_POOL_SIZE: "8"
+  TRUST_PROXY: "false"
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: carwash-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: carwash
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      LEDGER_OWNER_PASSWORD: ${LEDGER_OWNER_PASSWORD:?set LEDGER_OWNER_PASSWORD}
+      LEDGER_APP_PASSWORD: ${LEDGER_APP_PASSWORD:?set LEDGER_APP_PASSWORD}
+      LEDGER_AUDIT_PASSWORD: ${LEDGER_AUDIT_PASSWORD:?set LEDGER_AUDIT_PASSWORD}
+      PSP_DB_PASSWORD: ${PSP_DB_PASSWORD:?set PSP_DB_PASSWORD}
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=60", "-c", "work_mem=4MB", "-c", "shared_preload_libraries=pg_stat_statements"]
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "carwash", "-d", "ledger"]
+      interval: 5s
+      retries: 20
+    cpus: 1.0
+    mem_limit: 448m
+    pids_limit: 200
+
+  kafka:
+    image: apache/kafka:4.3.1
+    container_name: carwash-kafka
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: 7Rw-RRluI0GVb4OrwYRvkA
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: DOCKER://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: DOCKER://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_HEAP_OPTS: -Xms320m -Xmx320m
+    cpus: 1.0
+    mem_limit: 640m
+    pids_limit: 300
+
+  migrate:
+    <<: *server
+    container_name: carwash-migrate
+    restart: "no"
+    working_dir: /app/packages/db
+    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && cd /app/apps/api && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin"]
+    environment:
+      DATABASE_URL: postgresql://ledger_owner:${LEDGER_OWNER_PASSWORD}@postgres:5432/ledger
+      TRAFFIC_KEY: ${TRAFFIC_KEY:?set TRAFFIC_KEY}
+      DASHBOARD_CLIENT_KEY: ${DASHBOARD_CLIENT_KEY:?set DASHBOARD_CLIENT_KEY}
+      DASHBOARD_ADMIN_KEY: ${DASHBOARD_ADMIN_KEY:?set DASHBOARD_ADMIN_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 100
+
+  psp:
+    <<: *server
+    container_name: carwash-psp
+    command: ["node", "apps/psp/dist/main.js"]
+    environment:
+      PSP_DATABASE_URL: postgresql://psp:${PSP_DB_PASSWORD}@postgres:5432/psp
+      PSP_API_KEY: ${PSP_API_KEY}
+      PSP_ADMIN_KEY: ${PSP_ADMIN_KEY:?set PSP_ADMIN_KEY}
+      PSP_WEBHOOK_URL: http://api:3140/webhooks/psp
+      PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET}
+      PSP_SETTLEMENT_DAY_SECONDS: ${PSP_SETTLEMENT_DAY_SECONDS:-600}
+      PSP_FAULT_PLAN: '{"fail":0.01,"timeoutAfterCommit":0.01,"slow":0.02,"webhook":{"duplicate":0.05,"delay":0.02,"reorder":0.05,"drop":0.02},"settlement":{"nextDay":0.02,"feeDifference":0.01,"missingLine":0.005,"duplicateLine":0.005}}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3142/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      retries: 10
+    cpus: 0.25
+    mem_limit: 128m
+    pids_limit: 64
+
+  witness:
+    <<: *server
+    container_name: carwash-witness
+    command: ["node", "apps/witness/dist/main.js"]
+    environment:
+      WITNESS_TOKEN: ${WITNESS_TOKEN:?set WITNESS_TOKEN}
+      WITNESS_DIR: /var/lib/witness
+    volumes:
+      - witness:/var/lib/witness
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3145/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      retries: 10
+    cpus: 0.1
+    mem_limit: 64m
+    pids_limit: 32
+
+  api:
+    <<: *server
+    container_name: carwash-api
+    command: ["node", "apps/api/dist/main.js"]
+    environment:
+      <<: *ledger
+      AUDIT_DATABASE_URL: postgresql://ledger_audit:${LEDGER_AUDIT_PASSWORD}@postgres:5432/ledger
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      psp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3140/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 20
+    cpus: 0.75
+    mem_limit: 224m
+    pids_limit: 100
+
+  worker:
+    <<: *server
+    container_name: carwash-worker
+    command: ["node", "apps/api/dist/worker.js"]
+    environment:
+      <<: *ledger
+      KAFKA_BROKERS: kafka:9092
+      WITNESS_TOKEN: ${WITNESS_TOKEN}
+      SETTLEMENT_EVERY_MS: "30000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      witness:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3144/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      retries: 10
+    cpus: 0.5
+    mem_limit: 224m
+    pids_limit: 100
+
+  tamper:
+    <<: *server
+    container_name: carwash-tamper
+    command: ["node", "apps/tamper/dist/main.js"]
+    environment:
+      TAMPER_DATABASE_URL: postgresql://carwash:${POSTGRES_PASSWORD}@postgres:5432/ledger
+      TAMPER_TOKEN: ${TAMPER_TOKEN:?set TAMPER_TOKEN}
+      TAMPER_DIR: /var/lib/tamper
+      TAMPER_AUTO_RESTORE_SECONDS: "120"
+    volumes:
+      - tamper:/var/lib/tamper
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    cpus: 0.1
+    mem_limit: 96m
+    pids_limit: 32
+
+  traffic:
+    <<: *server
+    container_name: carwash-traffic
+    command: ["node", "apps/traffic/dist/main.js"]
+    environment:
+      API_URL: http://api:3140
+      CLIENT_KEY: ${TRAFFIC_KEY}
+      ADMIN_KEY: ${DASHBOARD_ADMIN_KEY}
+      PER_MINUTE: ${TRAFFIC_PER_MINUTE:-12}
+      PAYOUT_EVERY_MINUTES: "5"
+    depends_on:
+      api:
+        condition: service_healthy
+    cpus: 0.1
+    mem_limit: 96m
+    pids_limit: 32
+
+  web:
+    image: carwash-web:latest
+    container_name: carwash-web
+    init: true
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:3140
+      DASHBOARD_CLIENT_KEY: ${DASHBOARD_CLIENT_KEY}
+      DASHBOARD_ADMIN_KEY: ${DASHBOARD_ADMIN_KEY}
+      DASHBOARD_MERCHANT: wash_north
+      TAMPER_URL: http://tamper:3146
+      TAMPER_TOKEN: ${TAMPER_TOKEN}
+      WITNESS_URL: http://witness:3145
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3147/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      retries: 10
+    networks:
+      - default
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    cpus: 0.5
+    mem_limit: 192m
+    pids_limit: 100
+
+  backup:
+    build: ./deploy/backup
+    container_name: carwash-backup
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: carwash
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      RUN_AT: ${BACKUP_AT:-03:30}
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+      - witness:/witness:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cpus: 0.1
+    mem_limit: 64m
+    pids_limit: 32
+
+volumes:
+  pgdata:
+  witness:
+  tamper:
+
+networks:
+  edge:
+    name: ${EDGE_NETWORK:-edge}
+    external: true

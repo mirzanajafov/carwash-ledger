@@ -1,0 +1,39 @@
+FROM node:24-slim AS build
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/audit/package.json packages/audit/
+COPY packages/audit-pg/package.json packages/audit-pg/
+COPY packages/db/package.json packages/db/
+COPY packages/failpoints/package.json packages/failpoints/
+COPY packages/invariants/package.json packages/invariants/
+COPY packages/ledger/package.json packages/ledger/
+COPY packages/outbox/package.json packages/outbox/
+COPY packages/pg/package.json packages/pg/
+COPY packages/recon/package.json packages/recon/
+COPY packages/testkit/package.json packages/testkit/
+COPY apps/api/package.json apps/api/
+COPY apps/psp/package.json apps/psp/
+COPY apps/witness/package.json apps/witness/
+COPY apps/tamper/package.json apps/tamper/
+COPY apps/traffic/package.json apps/traffic/
+RUN pnpm install --frozen-lockfile --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..."
+COPY packages packages
+COPY apps/api apps/api
+COPY apps/psp apps/psp
+COPY apps/witness apps/witness
+COPY apps/tamper apps/tamper
+COPY apps/traffic apps/traffic
+RUN pnpm --filter @carwash/db generate \
+  && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..." build
+
+FROM node:24-slim
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /var/lib/witness /var/lib/tamper \
+  && chown node:node /var/lib/witness /var/lib/tamper
+WORKDIR /app
+COPY --from=build --chown=node:node /app /app
+ENV NODE_ENV=production
+USER node

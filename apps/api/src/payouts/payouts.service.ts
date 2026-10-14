@@ -91,7 +91,7 @@ export class PayoutsService {
         }
         const bank = this.#chart.accounts(input.currency).bank
         const locked = await client.query<{ account_id: string; amount: string }>(
-          `SELECT account_id::text, amount::text FROM balances WHERE account_id = ANY($1::bigint[]) ORDER BY account_id, shard FOR UPDATE`,
+          `SELECT b.account_id::text, b.amount::text FROM balances b WHERE b.account_id = ANY($1::bigint[]) ORDER BY b.account_id, b.shard FOR UPDATE`,
           [[merchant.account_id, bank.id.toString()]],
         )
         const payable = -BigInt(locked.rows.find((row) => row.account_id === merchant.account_id)!.amount)

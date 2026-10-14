@@ -9,6 +9,7 @@ import { AdminOnly } from '../auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
+import { INSTANCE } from '../http/instance.ts'
 import { takeTurn } from './limits.ts'
 
 export const PLUGS = ['post.after_lock', 'attempt.after_psp', 'transaction.before_commit', 'transaction.after_commit', 'request.before_finish'] as const
@@ -64,7 +65,7 @@ export class DashboardController {
       this.#logger.warn(`pulling the plug at ${name}`)
       process.kill(process.pid, 'SIGKILL')
     })
-    return { object: 'plug', failpoint: body.failpoint, pid: process.pid, armed_at: new Date().toISOString() }
+    return { object: 'plug', failpoint: body.failpoint, ...INSTANCE, armed_at: new Date().toISOString() }
   }
 
   @Post('checks')
