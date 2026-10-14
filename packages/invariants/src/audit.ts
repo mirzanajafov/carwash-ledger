@@ -64,11 +64,14 @@ const AGREES: readonly Check[] = [
   },
 ]
 
-const QUEUED: readonly Check[] = [
-  {
-    sql: `SELECT 'journal ' || journal_id || ' has waited to be sequenced since ' || queued_at AS detail FROM audit_queue`,
-  },
-]
+function queued(graceSeconds: number): readonly Check[] {
+  return [
+    {
+      sql: `SELECT 'journal ' || journal_id || ' has waited to be sequenced since ' || queued_at AS detail FROM audit_queue
+            WHERE queued_at < now() - make_interval(secs => ${Math.max(0, Math.trunc(graceSeconds))})`,
+    },
+  ]
+}
 
 export async function checkAuditIn(client: pg.ClientBase, witness?: WitnessView): Promise<InvariantResult> {
   const s7 = await collect(client, AGREES)
@@ -86,9 +89,15 @@ export function checkAudit(pool: pg.Pool, witness?: WitnessView): Promise<Invari
   return inSnapshot(pool, (client) => checkAuditIn(client, witness))
 }
 
-export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessView): Promise<InvariantResult> {
-  const l4 = await collect(client, QUEUED)
-  if (!witness) return { id: 'L4', description: 'every journal has been sequenced into the audit log', ...l4 }
+export interface SequencedOptions {
+  graceSeconds?: number
+}
+
+export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessView, options: SequencedOptions = {}): Promise<InvariantResult> {
+  const grace = options.graceSeconds ?? 0
+  const l4 = await collect(client, queued(grace))
+  const description = grace > 0 ? `every journal is sequenced into the audit log within ${grace} s` : 'every journal has been sequenced into the audit log'
+  if (!witness) return { id: 'L4', description, ...l4 }
   const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
   const size = Number(rows[0]!.size)
   const signed = witness.checkpoints.at(-1)?.size ?? 0
@@ -101,6 +110,6 @@ export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessV
   }
 }
 
-export function checkSequenced(pool: pg.Pool, witness?: WitnessView): Promise<InvariantResult> {
-  return inSnapshot(pool, (client) => checkSequencedIn(client, witness))
+export function checkSequenced(pool: pg.Pool, witness?: WitnessView, options: SequencedOptions = {}): Promise<InvariantResult> {
+  return inSnapshot(pool, (client) => checkSequencedIn(client, witness, options))
 }

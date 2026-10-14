@@ -190,7 +190,7 @@ describe('the recovery job', () => {
     await live.listen(0, '127.0.0.1')
     try {
       const health = await fetch(`http://127.0.0.1:${(live.getHttpServer().address() as AddressInfo).port}/health`)
-      expect(await health.json()).toEqual({ ok: true })
+      expect(await health.json()).toMatchObject({ ok: true, pid: process.pid })
       const key = randomUUID()
       expect((await call('POST', '/v1/payments', { key, body: pay('tok_fail_once_capture') })).status).toBe(503)
       const paymentId = await paymentIdForKey(key)
