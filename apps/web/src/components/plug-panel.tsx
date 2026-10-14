@@ -61,7 +61,7 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
   }
 }
 
-export function PlugPanel() {
+export function PlugPanel({ admin = false }: { admin?: boolean }) {
   const [point, setPoint] = useState<CrashPoint>('attempt.after_psp')
   const [steps, setSteps] = useState<Step[]>([])
   const [running, setRunning] = useState(false)
@@ -138,7 +138,7 @@ export function PlugPanel() {
         <button type="button" onClick={check} disabled={checking || running} className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50">
           {checking ? 'Checking…' : 'Just run the checks'}
         </button>
-        <span className="text-xs text-muted">One plug a minute for everyone; the checks at most every 10 s.</span>
+        <span className="text-xs text-muted">{admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone; the checks at most every 10 s.'}</span>
       </div>
 
       {note ? <p className="text-sm text-warn">{note}</p> : null}

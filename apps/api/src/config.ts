@@ -48,6 +48,7 @@ export interface ApiConfig {
   liveMaxConnections: number
   plugEveryMs: number
   checksEveryMs: number
+  sessionHours: number
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -123,5 +124,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): ApiConfig {
     liveMaxConnections: integer(env, 'LIVE_MAX_CONNECTIONS', 100),
     plugEveryMs: integer(env, 'PLUG_EVERY_MS', 60_000),
     checksEveryMs: integer(env, 'CHECKS_EVERY_MS', 10_000),
+    sessionHours: integer(env, 'SESSION_HOURS', 12) || 12,
   }
 }

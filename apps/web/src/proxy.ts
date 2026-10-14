@@ -1,9 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { Buckets, clientIp, RULES, ruleFor } from '@/lib/limits'
+import { Buckets, clientIp, RULES, ruleFor, sameOrigin } from '@/lib/limits'
 
 const buckets = new Buckets()
 
 export function proxy(request: NextRequest) {
+  if (!sameOrigin(request.method, request.headers.get('origin'), request.headers.get('host'))) {
+    return NextResponse.json({ error: { code: 'forbidden', message: 'requests that change something must come from this site' } }, { status: 403 })
+  }
   const rule = ruleFor(request.method, request.nextUrl.pathname)
   if (!rule) return NextResponse.next()
   const ip = clientIp(request.headers.get('x-forwarded-for'))

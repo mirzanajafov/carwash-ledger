@@ -5,6 +5,7 @@ import { AuditController } from './audit/audit.controller.ts'
 import { AccessGuard, Public } from './auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from './config.ts'
 import { AuditDatabase, DashboardController } from './dashboard/dashboard.controller.ts'
+import { SessionsController } from './dashboard/sessions.controller.ts'
 import { Database } from './db/database.ts'
 import { ErrorFilter } from './http/api-error.ts'
 import { INSTANCE } from './http/instance.ts'
@@ -56,6 +57,7 @@ export class AppModule {
         AuditController,
         LiveController,
         DashboardController,
+        SessionsController,
       ],
       providers: [
         { provide: API_CONFIG, useValue: config },

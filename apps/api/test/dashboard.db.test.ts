@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { sequenceBatch } from '@carwash/audit-pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -144,5 +145,65 @@ describe('the admin side of the dashboard', () => {
     const verified = await stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
     expect(verified).toMatchObject({ status: 200, body: { object: 'verification', mode: 'full', findings: 0 } })
     expect(verified.body.journals).toBeGreaterThan(0)
+  })
+})
+
+describe('admin sessions', () => {
+  async function login(): Promise<{ token: string; id: string; expires_at: string }> {
+    const opened = await stack.call('POST', '/v1/admin/sessions', { as: 'admin', key: null })
+    expect(opened.status).toBe(201)
+    return opened.body
+  }
+
+  it('opens a session with an admin key only, and the session works like the key without minting more', async () => {
+    expect((await stack.call('POST', '/v1/admin/sessions', { key: null })).status).toBe(403)
+    expect((await stack.call('POST', '/v1/admin/sessions', { as: 'nobody', key: null })).status).toBe(401)
+    const session = await login()
+    expect(session.token).toMatch(/^cw_session_[\w-]{43}$/)
+    const hours = (Date.parse(session.expires_at) - Date.now()) / 3_600_000
+    expect(hours).toBeGreaterThan(11.9)
+    expect(hours).toBeLessThan(12 + 1 / 60)
+    const stored = await stack.admin.query('SELECT token_hash FROM dashboard_sessions WHERE id = $1', [session.id])
+    expect(stored.rows[0].token_hash).toEqual(createHash('sha256').update(session.token).digest())
+    expect(await stack.call('GET', '/v1/admin/sessions/current', { bearer: session.token })).toMatchObject({ status: 200, body: { id: session.id, client: expect.any(String) } })
+    expect((await stack.call('GET', '/v1/reconciliation/days', { bearer: session.token })).status).toBe(200)
+    expect((await stack.call('POST', '/v1/admin/sessions', { bearer: session.token, key: null })).status).toBe(403)
+    expect((await stack.call('GET', '/v1/admin/sessions/current', { as: 'admin' })).status).toBe(404)
+  })
+
+  it('ends on logout, at expiry, and when its key is revoked', async () => {
+    const out = await login()
+    expect((await stack.call('DELETE', '/v1/admin/sessions/current', { bearer: out.token })).body).toMatchObject({ id: out.id, revoked: true })
+    const after = await stack.call('GET', '/v1/admin/sessions/current', { bearer: out.token })
+    expect(after).toMatchObject({ status: 401, body: { error: { message: 'the session has ended' } } })
+
+    const expired = await login()
+    await stack.admin.query(`UPDATE dashboard_sessions SET expires_at = now() - interval '1 second' WHERE id = $1`, [expired.id])
+    expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: expired.token })).status).toBe(401)
+
+    const { rows } = await stack.admin.query<{ id: string }>(
+      `INSERT INTO api_clients (name, key_hash, scope) VALUES ('short-lived', sha256('cw_admin_short'::bytea), 'admin') RETURNING id::text`,
+    )
+    const opened = await stack.call('POST', '/v1/admin/sessions', { bearer: 'cw_admin_short', key: null })
+    expect(opened.status).toBe(201)
+    await stack.admin.query('UPDATE api_clients SET revoked_at = now() WHERE id = $1', [rows[0]!.id])
+    expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: opened.body.token })).status).toBe(401)
+    expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: 'cw_session_made-up' })).status).toBe(401)
+  })
+
+  it('lets a session skip the global turns that the dashboard key waits for', async () => {
+    const session = await login()
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    try {
+      await stack.call('POST', '/v1/admin/plug', { as: 'admin', body: { failpoint: 'post.after_lock' }, key: null })
+      expect((await stack.call('POST', '/v1/admin/plug', { as: 'admin', body: { failpoint: 'post.after_lock' }, key: null })).status).toBe(429)
+      for (let i = 0; i < 3; i++) {
+        expect((await stack.call('POST', '/v1/admin/plug', { bearer: session.token, body: { failpoint: 'post.after_lock' }, key: null })).status).toBe(202)
+      }
+    } finally {
+      kill.mockRestore()
+      const { disarmFailpoints } = await import('@carwash/failpoints')
+      disarmFailpoints()
+    }
   })
 })

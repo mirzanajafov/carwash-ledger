@@ -127,7 +127,7 @@ dashboard (Next.js) ─────────────┘   │    ▲     
                                                              └─ recovery, reconciliation
 ```
 
-The web app is a backend for the browser: the browser only talks to the Next server, which holds the API keys and limits each visitor by address. The live page is a server-sent event stream that the API fills by polling once a second, and the plug and tamper buttons go through the same server.
+The web app is a backend for the browser: the browser only talks to the Next server, which holds the API keys and limits each visitor by address. The live page is a server-sent event stream that the API fills by polling once a second, and the plug and tamper buttons go through the same server. Visitors take turns on the plug, the checks and the bank's weather. On `/admin`, an admin key opens a session that skips the turns; the key itself is never stored, and the session token lives in an httpOnly, `SameSite=Strict` cookie that dies on logout, after 12 hours, or when the key is revoked.
 
 ## Running it
 
@@ -167,6 +167,7 @@ For the dashboard, start the provider, the API, the worker, the witness, the tam
 | `GET /v1/audit/consistency?first=&second=` | proof that one tree extends another |
 | `GET /v1/live` | the dashboard's event stream |
 | `POST /v1/admin/plug`, `/checks`, `/verify` | the dashboard's demo actions, limited globally |
+| `POST /v1/admin/sessions`, `GET`/`DELETE /v1/admin/sessions/current` | an admin key opens a 12-hour session for the dashboard; sessions skip the global limits |
 
 ## What's where
 

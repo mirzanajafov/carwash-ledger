@@ -31,6 +31,7 @@ export interface CallOptions {
   body?: unknown
   as?: Caller
   base?: string
+  bearer?: string
 }
 
 export interface Stack {
@@ -95,6 +96,7 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     liveMaxConnections: 100,
     plugEveryMs: 60_000,
     checksEveryMs: 0,
+    sessionHours: 12,
     ...overrides,
   }
 }
@@ -115,7 +117,7 @@ export async function call(base: string, method: string, path: string, options: 
   const response = await fetch(`${options.base ?? base}${path}`, {
     method,
     headers: {
-      ...(as === 'nobody' ? {} : { authorization: `Bearer ${KEYS[as]}` }),
+      ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : as === 'nobody' ? {} : { authorization: `Bearer ${KEYS[as]}` }),
       ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(method === 'POST' && options.key !== null ? { 'idempotency-key': options.key ?? randomUUID() } : {}),
     },

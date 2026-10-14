@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
 import { PlugPanel } from '@/components/plug-panel'
 import { WeatherPanel } from '@/components/weather-panel'
+import { adminSession } from '@/lib/session'
 
 export const metadata: Metadata = { title: 'Pull the plug · Car Wash Ledger' }
+export const dynamic = 'force-dynamic'
 
-export default function PlugPage() {
+export default async function PlugPage() {
+  const admin = (await adminSession()) !== null
   return (
     <div className="space-y-8">
       <div className="max-w-2xl space-y-2">
@@ -15,9 +18,9 @@ export default function PlugPage() {
           invariant checker reads the books.
         </p>
       </div>
-      <PlugPanel />
+      <PlugPanel admin={admin} />
       <hr className="border-line" />
-      <WeatherPanel />
+      <WeatherPanel admin={admin} />
     </div>
   )
 }

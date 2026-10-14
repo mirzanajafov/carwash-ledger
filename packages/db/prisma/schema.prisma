@@ -171,6 +171,7 @@ model ApiClient {
   revokedAt DateTime?        @map("revoked_at") @db.Timestamptz(6)
   payments  Payment[]
   keys      IdempotencyKey[]
+  sessions  DashboardSession[]
 
   @@map("api_clients")
 }
@@ -477,4 +478,17 @@ model DemoLimit {
   lastAt DateTime @map("last_at") @db.Timestamptz(6)
 
   @@map("demo_limits")
+}
+
+model DashboardSession {
+  id        BigInt    @id @default(autoincrement())
+  clientId  BigInt    @map("client_id")
+  tokenHash Bytes     @unique @map("token_hash")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  client    ApiClient @relation(fields: [clientId], references: [id])
+
+  @@index([clientId])
+  @@map("dashboard_sessions")
 }
