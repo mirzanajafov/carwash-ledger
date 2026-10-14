@@ -1,11 +1,11 @@
-import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, type OnModuleDestroy } from '@nestjs/common'
+import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, Req, type OnModuleDestroy } from '@nestjs/common'
 import { verifyLog, WitnessClient, type WitnessedRoots } from '@carwash/audit-pg'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
 import { checkAudit, checkLedger, checkPayments, checkSequenced, readWitness } from '@carwash/invariants'
 import { checkout, createPool } from '@carwash/pg'
 import { IsIn } from 'class-validator'
 import type pg from 'pg'
-import { AdminOnly } from '../auth/access.guard.ts'
+import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
@@ -51,15 +51,16 @@ export class DashboardController {
     this.#config = config
   }
 
-  async #turn(name: string, everyMs: number): Promise<void> {
+  async #turn(request: AuthedRequest, name: string, everyMs: number): Promise<void> {
+    if (request.client.session) return
     const wait = await takeTurn(this.#db.pool, name, everyMs)
     if (wait !== null) throw limited(wait)
   }
 
   @Post('plug')
   @HttpCode(202)
-  async plug(@Body() body: PlugBody) {
-    await this.#turn('plug', this.#config.plugEveryMs)
+  async plug(@Req() request: AuthedRequest, @Body() body: PlugBody) {
+    await this.#turn(request, 'plug', this.#config.plugEveryMs)
     armFailpoints(new Map<FailpointName, number>([[body.failpoint, 1]]), (name) => {
       disarmFailpoints()
       this.#logger.warn(`pulling the plug at ${name}`)
@@ -70,9 +71,9 @@ export class DashboardController {
 
   @Post('checks')
   @HttpCode(200)
-  async checks() {
+  async checks(@Req() request: AuthedRequest) {
     const pool = this.#pool()
-    await this.#turn('checks', this.#config.checksEveryMs)
+    await this.#turn(request, 'checks', this.#config.checksEveryMs)
     const started = performance.now()
     const witness = this.#config.witnessUrl ? await readWitness(this.#config.witnessUrl) : undefined
     const results = [
@@ -86,9 +87,9 @@ export class DashboardController {
 
   @Post('verify')
   @HttpCode(200)
-  async verify() {
+  async verify(@Req() request: AuthedRequest) {
     const pool = this.#pool()
-    await this.#turn('verify', this.#config.checksEveryMs)
+    await this.#turn(request, 'verify', this.#config.checksEveryMs)
     let witness: WitnessedRoots | undefined
     if (this.#config.witnessUrl) {
       const client = new WitnessClient(this.#config.witnessUrl, '', 10_000)

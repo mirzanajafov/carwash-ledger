@@ -9,6 +9,7 @@ const LINKS = [
   { href: '/reconciliation', label: 'Reconciliation' },
   { href: '/audit', label: 'Audit' },
   { href: '/evidence', label: 'Evidence' },
+  { href: '/admin', label: 'Admin' },
 ]
 
 export function Nav() {

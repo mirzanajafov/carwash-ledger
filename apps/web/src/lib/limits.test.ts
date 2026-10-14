@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Buckets, clientIp, ruleFor, RULES, Streams } from './limits'
+import { Buckets, clientIp, ruleFor, RULES, sameOrigin, Streams } from './limits'
 
 describe('the web limits', () => {
   it('lets a burst through, then one request per refill, and says how long to wait', () => {
@@ -26,6 +26,16 @@ describe('the web limits', () => {
     expect(ruleFor('GET', '/api/audit/state')).toBe('api')
     expect(ruleFor('GET', '/api/live')).toBe('api')
     expect(ruleFor('GET', '/audit')).toBeNull()
+  })
+
+  it('refuses changes sent from another site, and leaves reads and same-site requests alone', () => {
+    expect(sameOrigin('POST', 'https://carwash.najafov.dev', 'carwash.najafov.dev')).toBe(true)
+    expect(sameOrigin('POST', 'https://evil.example', 'carwash.najafov.dev')).toBe(false)
+    expect(sameOrigin('DELETE', 'null', 'carwash.najafov.dev')).toBe(false)
+    expect(sameOrigin('POST', null, 'carwash.najafov.dev')).toBe(true)
+    expect(sameOrigin('GET', 'https://evil.example', 'carwash.najafov.dev')).toBe(true)
+    expect(sameOrigin('POST', 'http://localhost:3147', 'localhost:3147')).toBe(true)
+    expect(ruleFor('POST', '/api/admin/session')).toBe('heavy')
   })
 
   it('reads the client from the first forwarded address', () => {

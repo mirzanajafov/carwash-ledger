@@ -8,7 +8,7 @@ export const RULES = {
   api: { perSecond: 10, burst: 30 },
 } satisfies Record<string, Rule>
 
-const HEAVY = ['/api/plug', '/api/checks', '/api/audit/verify', '/api/audit/tamper', '/api/audit/restore', '/api/weather']
+const HEAVY = ['/api/plug', '/api/checks', '/api/audit/verify', '/api/audit/tamper', '/api/audit/restore', '/api/weather', '/api/admin/session']
 
 export function ruleFor(method: string, path: string): keyof typeof RULES | null {
   if (!path.startsWith('/api/')) return null
@@ -51,6 +51,15 @@ export class Buckets {
     if (now - this.#swept < this.#idleMs) return
     this.#swept = now
     for (const [key, bucket] of this.#buckets) if (now - bucket.at > this.#idleMs) this.#buckets.delete(key)
+  }
+}
+
+export function sameOrigin(method: string, origin: string | null, host: string | null): boolean {
+  if (method === 'GET' || method === 'HEAD' || origin === null) return true
+  try {
+    return new URL(origin).host === host
+  } catch {
+    return false
   }
 }
 
