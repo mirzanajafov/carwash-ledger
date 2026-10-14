@@ -141,6 +141,8 @@ DATABASE_URL=postgresql://ledger_owner:ledger_owner@localhost:5449/ledger pnpm -
 pnpm -r test && pnpm test:db
 ```
 
+`.github/workflows/ci.yml` runs the same steps on a clean checkout, plus a three-run chaos smoke on every push.
+
 The chaos harness and the benchmarks run in their own containers:
 
 ```bash
