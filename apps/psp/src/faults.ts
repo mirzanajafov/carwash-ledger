@@ -69,24 +69,54 @@ export interface LineFaults {
   draw(name: string): number
 }
 
-export class Faults {
-  #plan: FaultPlan
-  readonly #seen = new Map<string, number>()
+export interface Weather {
+  label: string
+  plan: FaultPlan
+  until: number
+}
 
-  constructor(plan: FaultPlan = NO_FAULTS) {
-    this.#plan = plan
+export const MAX_WEATHER_SECONDS = 3600
+
+export class Faults {
+  #base: FaultPlan
+  #weather: Weather | undefined
+  readonly #seen = new Map<string, number>()
+  readonly #now: () => number
+
+  constructor(plan: FaultPlan = NO_FAULTS, now: () => number = Date.now) {
+    this.#base = plan
+    this.#now = now
   }
 
   get plan(): FaultPlan {
-    return this.#plan
+    return this.weather?.plan ?? this.#base
   }
 
   set plan(plan: FaultPlan) {
-    this.#plan = plan
+    this.#base = plan
+    this.#weather = undefined
+  }
+
+  get base(): FaultPlan {
+    return this.#base
+  }
+
+  get weather(): Weather | undefined {
+    if (this.#weather && this.#weather.until <= this.#now()) this.#weather = undefined
+    return this.#weather
+  }
+
+  setWeather(label: string, plan: FaultPlan, seconds: number): Weather {
+    this.#weather = { label, plan, until: this.#now() + seconds * 1000 }
+    return this.#weather
+  }
+
+  clearWeather(): void {
+    this.#weather = undefined
   }
 
   behaviour(key: string, kind: OperationKind, token: TokenEffect): Behaviour {
-    const plan = this.#plan
+    const plan = this.plan
     const n = this.#count(key)
     const draw = (name: string) => unitHash(`${plan.seed}:${key}:${n}:${name}`)
     const tokenFor = (effect: TokenEffect['kind']) => token.kind === effect && 'operation' in token && token.operation === kind
@@ -111,7 +141,7 @@ export class Faults {
   }
 
   settlement(operationId: string): LineFaults {
-    const plan = this.#plan
+    const plan = this.plan
     const draw = (name: string) => unitHash(`${plan.seed}:${operationId}:settlement.${name}`)
     const faults = new Set<SettlementFault>()
     for (const fault of SETTLEMENT_FAULTS) if (draw(fault) < plan.settlement[fault]) faults.add(fault)
@@ -180,4 +210,18 @@ export function parseFaultPlan(input: unknown): FaultPlan {
       number
     >,
   }
+}
+
+export function parseWeather(input: unknown): { label: string; plan: FaultPlan; seconds: number } {
+  if (typeof input !== 'object' || input === null) throw new Error('the weather must be an object')
+  const source = input as Record<string, unknown>
+  for (const key of Object.keys(source)) {
+    if (!['label', 'plan', 'seconds'].includes(key)) throw new Error(`unknown weather field ${key}`)
+  }
+  const { label, seconds } = source
+  if (typeof label !== 'string' || !/^[a-z][a-z0-9 -]{0,31}$/.test(label)) throw new Error('label must be 1-32 lowercase letters, digits, spaces or dashes')
+  if (!Number.isSafeInteger(seconds) || (seconds as number) < 1 || (seconds as number) > MAX_WEATHER_SECONDS) {
+    throw new Error(`seconds must be an integer from 1 to ${MAX_WEATHER_SECONDS}`)
+  }
+  return { label, plan: parseFaultPlan(source.plan), seconds: seconds as number }
 }

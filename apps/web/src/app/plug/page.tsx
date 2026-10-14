@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { PlugPanel } from '@/components/plug-panel'
+import { WeatherPanel } from '@/components/weather-panel'
 
 export const metadata: Metadata = { title: 'Pull the plug · Car Wash Ledger' }
 
@@ -15,6 +16,8 @@ export default function PlugPage() {
         </p>
       </div>
       <PlugPanel />
+      <hr className="border-line" />
+      <WeatherPanel />
     </div>
   )
 }

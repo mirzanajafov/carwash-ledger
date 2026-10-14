@@ -222,6 +222,8 @@ services:
       TAMPER_URL: http://tamper:3146
       TAMPER_TOKEN: ${TAMPER_TOKEN}
       WITNESS_URL: http://witness:3145
+      PSP_URL: http://psp:3142
+      PSP_ADMIN_KEY: ${PSP_ADMIN_KEY}
     depends_on:
       api:
         condition: service_healthy

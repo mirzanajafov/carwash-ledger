@@ -56,6 +56,19 @@ export async function callTamper(method: string, path: string, body?: unknown): 
   return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }
 }
 
+export async function callPsp(method: string, path: string, body?: unknown): Promise<Reply> {
+  const url = process.env.PSP_URL
+  if (!url) return { status: 503, body: { error: { code: 'not_configured', message: 'the bank is not configured on this web server' } }, retryAfter: null }
+  const response = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
+    method,
+    cache: 'no-store',
+    headers: { authorization: `Bearer ${secret('PSP_ADMIN_KEY')}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(5000),
+  })
+  return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }
+}
+
 export async function witnessKey(): Promise<string | null> {
   const url = witnessUrl()
   if (!url) return null

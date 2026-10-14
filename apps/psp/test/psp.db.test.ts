@@ -277,6 +277,22 @@ describe('PSP simulator', () => {
     expect(payout.body).toMatchObject({ kind: 'payout', status: 'declined', reason: 'payout_rejected', amount: 700 })
   })
 
+  it('sets, shows and drops the weather through the admin endpoint', async () => {
+    expect((await call('PUT', '/admin/weather', { body: { label: 'storm', plan: { decline: 1 }, seconds: 60 } })).status).toBe(401)
+    expect((await call('PUT', '/admin/weather', { auth: ADMIN_KEY, body: { label: 'storm', plan: { decline: 1 }, seconds: 7200 } })).status).toBe(400)
+    const set = await call('PUT', '/admin/weather', { auth: ADMIN_KEY, body: { label: 'storm', plan: { decline: 1 }, seconds: 60 } })
+    expect(set.status).toBe(200)
+    expect(set.body.base).toEqual(NO_FAULTS)
+    expect(set.body.weather).toMatchObject({ label: 'storm', plan: { decline: 1 } })
+    expect(Date.parse(set.body.weather.until) - Date.now()).toBeGreaterThan(55_000)
+    const declined = await call('POST', '/v1/charges', { key: randomUUID(), body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })
+    expect(declined.body).toMatchObject({ status: 'declined' })
+    expect((await call('GET', '/admin/weather', { auth: ADMIN_KEY })).body.weather.label).toBe('storm')
+    expect((await call('DELETE', '/admin/weather', { auth: ADMIN_KEY })).body.weather).toBeNull()
+    const ok = await call('POST', '/v1/charges', { key: randomUUID(), body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })
+    expect(ok.body).toMatchObject({ status: 'succeeded', charge: { status: 'authorized' } })
+  })
+
   it('follows the fault plan set through the admin endpoint', async () => {
     const set = await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { seed: 3, decline: 1 } })
     expect(set.body).toMatchObject({ seed: 3, decline: 1, fail: 0 })
