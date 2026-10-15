@@ -59,7 +59,7 @@ describe('resolving anomalies', () => {
     await clean()
   })
 
-  it('lets a payout only be disputed, and a dispute moves no money', async () => {
+  it('accepts a payout the bank made for less, and gives the difference back to the merchant', async () => {
     await stack.call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2' }) })
     stack.psp.faults.plan = { ...NO_FAULTS, wrongAmount: 1 }
     try {
@@ -68,14 +68,33 @@ describe('resolving anomalies', () => {
       stack.psp.faults.plan = NO_FAULTS
     }
     const [anomaly] = (await openAnomalies()).filter((a) => a.attempt?.kind === 'payout')
-    expect(anomaly).toMatchObject({ acceptable: false, merchant: 'wash_2' })
-    expect((await stack.call('POST', `/v1/admin/anomalies/${anomaly.id}/accept`, { as: 'admin', key: null })).status).toBe(409)
+    expect(anomaly).toMatchObject({ acceptable: true, merchant: 'wash_2' })
+    const asked = Number(anomaly.attempt.amount)
+    expect(Number(anomaly.bank_amount)).toBe(asked - 1)
+    const accepted = await stack.call('POST', `/v1/admin/anomalies/${anomaly.id}/accept`, { as: 'admin', key: null })
+    expect(accepted.body).toMatchObject({ resolution: 'accepted', attempt: { amount: String(asked - 1), status: 'succeeded' } })
+    const payout = await stack.admin.query(
+      `SELECT po.amount::int, po.status::text, j.external_ref FROM payouts po JOIN journals j ON j.id = po.adjustment_journal_id WHERE po.id = $1`,
+      [anomaly.payout_id],
+    )
+    expect(payout.rows[0]).toEqual({ amount: asked - 1, status: 'succeeded', external_ref: `payout-adjustment:${anomaly.payout_id}` })
+    const payable = await stack.admin.query<{ owed: string }>(
+      `SELECT (-sum(b.amount))::text AS owed FROM balances b JOIN merchants m ON m.account_id = b.account_id WHERE m.code = 'wash_2'`,
+    )
+    expect(payable.rows[0]!.owed).toBe('1')
+    await clean()
+  })
+
+  it('disputes without moving any money', async () => {
+    expect((await stack.call('POST', '/v1/payments', { body: pay('tok_wrong_amount_capture') })).status).toBe(502)
+    const [anomaly] = (await openAnomalies()).filter((a) => a.attempt?.kind === 'capture')
     const journals = (await stack.admin.query<{ n: number }>('SELECT count(*)::int AS n FROM journals')).rows[0]!.n
     const disputed = await stack.call('POST', `/v1/admin/anomalies/${anomaly.id}/dispute`, { as: 'admin', key: null })
     expect(disputed.body).toMatchObject({ resolution: 'disputed', attempt: { status: 'pending' } })
     expect((await stack.admin.query<{ n: number }>('SELECT count(*)::int AS n FROM journals')).rows[0]!.n).toBe(journals)
     expect((await openAnomalies()).find((a) => a.id === anomaly.id)).toBeUndefined()
+    expect((await stack.call('POST', `/v1/admin/anomalies/${anomaly.id}/accept`, { as: 'admin', key: null })).status).toBe(409)
     const resolved = (await stack.call('GET', '/v1/admin/anomalies?state=resolved', { as: 'admin' })).body.data as any[]
-    expect(resolved.map((a) => a.resolution).sort()).toEqual(['accepted', 'accepted', 'disputed'])
+    expect(resolved.map((a) => a.resolution).sort()).toEqual(['accepted', 'accepted', 'accepted', 'disputed'])
   })
 })

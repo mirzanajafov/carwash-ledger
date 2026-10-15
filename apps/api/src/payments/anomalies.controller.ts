@@ -1,13 +1,17 @@
 import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
+import { postInTransaction } from '@carwash/ledger'
+import type pg from 'pg'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { Database } from '../db/database.ts'
+import { journalEvents } from '../events/events.ts'
 import { ApiError } from '../http/api-error.ts'
+import { Chart } from '../ledger/chart.service.ts'
 import { checkAnswer } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { AttemptsService, pspUnavailable } from './attempts.service.ts'
-import { ATTEMPT_COLUMNS, type AttemptRecord } from './records.ts'
+import { ATTEMPT_COLUMNS, loadPayout, type AttemptRecord } from './records.ts'
 
-const ACCEPTABLE = new Set(['capture', 'refund'])
+const ACCEPTABLE = new Set(['capture', 'refund', 'payout'])
 
 interface AnomalyRow {
   id: string
@@ -80,11 +84,13 @@ export class AnomaliesController {
   readonly #db: Database
   readonly #attempts: AttemptsService
   readonly #psp: PspClient
+  readonly #chart: Chart
 
-  constructor(db: Database, attempts: AttemptsService, psp: PspClient) {
+  constructor(db: Database, attempts: AttemptsService, psp: PspClient, chart: Chart) {
     this.#db = db
     this.#attempts = attempts
     this.#psp = psp
+    this.#chart = chart
   }
 
   @Get()
@@ -106,7 +112,7 @@ export class AnomaliesController {
       throw refuse(
         row.resolved_at
           ? 'this anomaly is already resolved'
-          : 'only a refused amount on a capture or a refund that is still pending can be accepted; dispute anything else',
+          : 'only a refused amount on a capture, a refund or a payout that is still pending can be accepted; dispute anything else',
       )
     }
     const attempt = await this.#attempt(row.attempt_id!)
@@ -129,6 +135,7 @@ export class AnomaliesController {
       if (attempt.kind === 'refund') {
         await client.query(`UPDATE refunds SET amount = $2 WHERE id = $1 AND status = 'pending'`, [attempt.refund_id, amount])
       }
+      if (attempt.kind === 'payout') await this.#adjustPayout(client, attempt.payout_id!, amount)
       const applied = await this.#attempts.apply(client, attempt.id, check.answer)
       if (applied !== 'applied') throw refuse(`the answer could not be applied (${applied})`)
       await client.query(`UPDATE anomalies SET resolution = 'accepted', resolved_at = now(), resolved_by = $2 WHERE id = $1`, [
@@ -149,6 +156,23 @@ export class AnomaliesController {
     )
     if (rowCount !== 1) throw refuse('this anomaly is already resolved')
     return view(await this.#find(id))
+  }
+
+  async #adjustPayout(client: pg.PoolClient, payoutId: string, amount: bigint): Promise<void> {
+    const payout = (await loadPayout(client, payoutId, true))!
+    if (payout.status !== 'pending') throw refuse('the payout is no longer pending')
+    const difference = BigInt(payout.amount) - amount
+    if (difference <= 0n) return
+    const bank = this.#chart.accounts(payout.currency).bank
+    const journalId = await postInTransaction(client, this.#chart.registry, {
+      externalRef: `payout-adjustment:${payout.id}`,
+      entries: [
+        { accountId: BigInt(payout.merchant_account_id), amount: -difference },
+        { accountId: bank.id, amount: difference },
+      ],
+    })
+    await client.query(`UPDATE payouts SET amount = $2, adjustment_journal_id = $3 WHERE id = $1 AND status = 'pending'`, [payout.id, amount, journalId])
+    await journalEvents(client, journalId)
   }
 
   async #find(id: number): Promise<AnomalyRow> {

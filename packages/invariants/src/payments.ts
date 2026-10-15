@@ -8,7 +8,7 @@ const MONEY = `
     FROM journals j
     JOIN entries e ON e.journal_id = j.id
     WHERE j.external_ref LIKE 'capture:%' OR j.external_ref LIKE 'refund:%'
-       OR j.external_ref LIKE 'payout:%' OR j.external_ref LIKE 'payout-reversal:%'
+       OR j.external_ref LIKE 'payout:%' OR j.external_ref LIKE 'payout-reversal:%' OR j.external_ref LIKE 'payout-adjustment:%'
     GROUP BY j.id
   )`
 
@@ -226,8 +226,10 @@ export function comparePsp(
     const journal = money.get(ref)
     if (attempt.kind === 'payout') {
       const reversal = money.get(`payout-reversal:${attempt.parent}`)
-      if (journal === undefined || journal.gross !== attempt.amount) {
-        found.push(`payout ${attempt.parent} of ${attempt.amount} has ${journal?.gross ?? 'no'} journal`)
+      const adjustment = money.get(`payout-adjustment:${attempt.parent}`)
+      const net = journal === undefined ? undefined : (BigInt(journal.gross) - BigInt(adjustment?.gross ?? 0)).toString()
+      if (net !== attempt.amount) {
+        found.push(`payout ${attempt.parent} of ${attempt.amount} has ${net ?? 'no'} journal${adjustment ? ' after its adjustment' : ''}`)
       }
       if (op.status === 'succeeded' && op.amount !== attempt.amount) {
         found.push(`the PSP paid out ${op.amount} for payout ${attempt.parent}, the ledger moved ${attempt.amount}`)

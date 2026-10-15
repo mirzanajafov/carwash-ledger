@@ -38,10 +38,24 @@ export class Journeys {
     this.#callers = callers
   }
 
-  learnAccepted(anomaly: { attempt: { kind: string; amount: string } | null; payment_id: string | null; refund_id: string | null }): void {
-    const belief = this.payments.find((p) => p.paymentId === anomaly.payment_id)
-    if (!belief || !anomaly.attempt) return
+  learnAccepted(anomaly: {
+    attempt: { kind: string; amount: string } | null
+    payment_id: string | null
+    refund_id: string | null
+    payout_id: string | null
+  }): void {
+    if (!anomaly.attempt) return
     const amount = Number(anomaly.attempt.amount)
+    if (anomaly.attempt.kind === 'payout') {
+      const payout = this.payouts.find((p) => p.payoutId === anomaly.payout_id)
+      if (payout) {
+        payout.status = 'succeeded'
+        payout.amount = amount
+      }
+      return
+    }
+    const belief = this.payments.find((p) => p.paymentId === anomaly.payment_id)
+    if (!belief) return
     if (anomaly.attempt.kind === 'capture') {
       belief.status = 'captured'
       belief.captured = amount
