@@ -162,6 +162,28 @@ function e6() {
   }
 }
 
+function e7() {
+  const root = join(BENCH, 'e7')
+  const dirs = existsSync(root) ? readdirSync(root).sort().filter((d) => existsSync(join(root, d, 'summary.json'))) : []
+  const runs = dirs.map((dir) => ({ dir, seed: json(join(root, dir, 'seed.json')), summary: json(join(root, dir, 'summary.json')) as any[] }))
+  const biggest = runs.sort((a, b) => b.seed.entries - a.seed.entries)[0]
+  if (!biggest) return { source: null, entries: 0, rows: [] }
+  return {
+    source: biggest.dir,
+    entries: biggest.seed.entries,
+    rows: biggest.summary.map((r) => ({
+      procedure: r.procedure,
+      changeS: round(r.changeMs / 1000),
+      requests: r.duringChange.requests,
+      errors: r.duringChange.errors,
+      baselineP99: r.baseline.p99,
+      p99: r.duringChange.p99,
+      longestLockS: round(r.longestLockWaitMs / 1000),
+      walGb: round(r.walBytes / 1e9),
+    })),
+  }
+}
+
 function tracked(dir: string): Set<string> {
   const files = execFileSync('git', ['ls-files', '--', dir], { cwd: ROOT, encoding: 'utf8' }).split('\n')
   return new Set(files.filter(Boolean).map((file) => file.slice(dir.length + 1).split('/')[0]!))
@@ -193,6 +215,6 @@ function chaos() {
   return { runs }
 }
 
-const evidence = { e1: e1(), e2: e2(), e4: e4(), e5: e5(), e6: e6(), chaos: chaos() }
+const evidence = { e1: e1(), e2: e2(), e4: e4(), e5: e5(), e6: e6(), e7: e7(), chaos: chaos() }
 writeFileSync(OUT, `${JSON.stringify(evidence, null, 1)}\n`)
-console.log(`wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e4.steady.length} E4 rates and ${evidence.e4.outages.length} outages, ${evidence.e5.rows.length} E5 rows, ${evidence.e6.scale.length} E6 sizes and ${evidence.e6.trials.length} trial rows, ${evidence.chaos.runs.length} chaos campaigns`)
+console.log(`wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e4.steady.length} E4 rates and ${evidence.e4.outages.length} outages, ${evidence.e5.rows.length} E5 rows, ${evidence.e6.scale.length} E6 sizes and ${evidence.e6.trials.length} trial rows, ${evidence.e7.rows.length} E7 procedures, ${evidence.chaos.runs.length} chaos campaigns`)

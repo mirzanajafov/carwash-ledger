@@ -929,107 +929,107 @@
   ]
  },
  "e4": {
-  "source": "20261014-173703",
+  "source": "20261014-224142",
   "steady": [
    {
     "rate": 100,
-    "cells": 5,
+    "cells": 3,
     "ackP50": {
-     "median": 20.2,
-     "min": 19.8,
-     "max": 20.6
+     "median": 21.4,
+     "min": 20.7,
+     "max": 21.6
     },
     "ackP99": {
-     "median": 46.1,
-     "min": 45.1,
-     "max": 47.2
+     "median": 58.8,
+     "min": 56.5,
+     "max": 60.5
     },
     "consumedP50": {
-     "median": 30.3,
-     "min": 28.9,
-     "max": 31.6
+     "median": 28.8,
+     "min": 28.7,
+     "max": 29.6
     },
     "consumedP99": {
-     "median": 64.9,
-     "min": 63,
-     "max": 66.7
+     "median": 74.5,
+     "min": 73,
+     "max": 74.9
     },
     "transactionsPerEvent": {
-     "median": 5.48,
-     "min": 5.41,
-     "max": 5.52
+     "median": 4.51,
+     "min": 4.45,
+     "max": 4.52
     },
     "walSyncsPerEvent": {
-     "median": 2.17,
-     "min": 2.14,
-     "max": 2.2
+     "median": 2.12,
+     "min": 2.12,
+     "max": 2.14
     }
    },
    {
     "rate": 500,
-    "cells": 5,
+    "cells": 3,
     "ackP50": {
      "median": 16.4,
-     "min": 16.2,
-     "max": 16.5
+     "min": 16.1,
+     "max": 17.5
     },
     "ackP99": {
-     "median": 36,
-     "min": 34.8,
-     "max": 37.5
+     "median": 37.9,
+     "min": 37.2,
+     "max": 40.2
     },
     "consumedP50": {
-     "median": 42.5,
-     "min": 41.6,
-     "max": 43
+     "median": 39.8,
+     "min": 39.2,
+     "max": 42.4
     },
     "consumedP99": {
-     "median": 94.3,
-     "min": 91,
-     "max": 100.8
+     "median": 96.4,
+     "min": 95,
+     "max": 104.7
     },
     "transactionsPerEvent": {
-     "median": 2.68,
-     "min": 2.65,
-     "max": 2.72
+     "median": 2.58,
+     "min": 2.48,
+     "max": 2.59
     },
     "walSyncsPerEvent": {
-     "median": 0.94,
-     "min": 0.93,
-     "max": 0.96
+     "median": 0.97,
+     "min": 0.94,
+     "max": 0.98
     }
    },
    {
     "rate": 2000,
-    "cells": 5,
+    "cells": 3,
     "ackP50": {
-     "median": 21.1,
-     "min": 20.9,
-     "max": 21.7
+     "median": 21.6,
+     "min": 21.5,
+     "max": 21.9
     },
     "ackP99": {
-     "median": 46,
-     "min": 45.1,
-     "max": 279
+     "median": 50.2,
+     "min": 49.4,
+     "max": 53.2
     },
     "consumedP50": {
-     "median": 57.4,
-     "min": 56.4,
-     "max": 59
+     "median": 55.8,
+     "min": 55.8,
+     "max": 56.7
     },
     "consumedP99": {
-     "median": 146,
-     "min": 134.3,
-     "max": 348.6
+     "median": 152.1,
+     "min": 148.6,
+     "max": 152.8
     },
     "transactionsPerEvent": {
-     "median": 1.35,
-     "min": 1.34,
-     "max": 1.36
+     "median": 1.31,
+     "min": 1.29,
+     "max": 1.31
     },
     "walSyncsPerEvent": {
      "median": 0.24,
-     "min": 0.23,
+     "min": 0.24,
      "max": 0.24
     }
    }
@@ -1289,6 +1289,32 @@
     "caught": 113,
     "named": 113,
     "caughtWithoutWitness": 113
+   }
+  ]
+ },
+ "e7": {
+  "source": "20261014-213708",
+  "entries": 20000000,
+  "rows": [
+   {
+    "procedure": "naive",
+    "changeS": 494.6,
+    "requests": 99447,
+    "errors": 99188,
+    "baselineP99": 15.3,
+    "p99": 8601.8,
+    "longestLockS": 10,
+    "walGb": 11.9
+   },
+   {
+    "procedure": "online",
+    "changeS": 1211.1,
+    "requests": 242334,
+    "errors": 0,
+    "baselineP99": 15.9,
+    "p99": 34.5,
+    "longestLockS": 3.5,
+    "walGb": 15.7
    }
   ]
  },
@@ -1658,6 +1684,318 @@
      "S7",
      "L4"
     ]
+   },
+   {
+    "dir": "20261014-225332",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 20,
+    "journeys": 13637,
+    "kills": 888,
+    "postgresKills": 39,
+    "kafkaKills": 42,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261014-232133",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6740,
+    "kills": 466,
+    "postgresKills": 22,
+    "kafkaKills": 25,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261014-233608",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6876,
+    "kills": 486,
+    "postgresKills": 20,
+    "kafkaKills": 24,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261014-234932",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6753,
+    "kills": 448,
+    "postgresKills": 10,
+    "kafkaKills": 23,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-000207",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6864,
+    "kills": 425,
+    "postgresKills": 21,
+    "kafkaKills": 14,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-001515",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6684,
+    "kills": 455,
+    "postgresKills": 19,
+    "kafkaKills": 23,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-002810",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6673,
+    "kills": 409,
+    "postgresKills": 20,
+    "kafkaKills": 26,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-004203",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 8,
+    "journeys": 5364,
+    "kills": 339,
+    "postgresKills": 27,
+    "kafkaKills": 24,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-005405",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6659,
+    "kills": 439,
+    "postgresKills": 34,
+    "kafkaKills": 23,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-010752",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6582,
+    "kills": 430,
+    "postgresKills": 19,
+    "kafkaKills": 22,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-012059",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6730,
+    "kills": 424,
+    "postgresKills": 23,
+    "kafkaKills": 28,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-013344",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6803,
+    "kills": 453,
+    "postgresKills": 22,
+    "kafkaKills": 23,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-014650",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6835,
+    "kills": 453,
+    "postgresKills": 18,
+    "kafkaKills": 18,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-020041",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6733,
+    "kills": 432,
+    "postgresKills": 23,
+    "kafkaKills": 20,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-021439",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 10,
+    "journeys": 6739,
+    "kills": 468,
+    "postgresKills": 22,
+    "kafkaKills": 22,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-022932",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 1,
+    "journeys": 699,
+    "kills": 45,
+    "postgresKills": 2,
+    "kafkaKills": 3,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-023206",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3451,
+    "kills": 218,
+    "postgresKills": 13,
+    "kafkaKills": 10,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-023928",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3322,
+    "kills": 207,
+    "postgresKills": 13,
+    "kafkaKills": 8,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-024639",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3447,
+    "kills": 219,
+    "postgresKills": 9,
+    "kafkaKills": 8,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-025416",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3370,
+    "kills": 218,
+    "postgresKills": 12,
+    "kafkaKills": 15,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-030140",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3303,
+    "kills": 200,
+    "postgresKills": 15,
+    "kafkaKills": 8,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-030852",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 6,
+    "journeys": 3973,
+    "kills": 251,
+    "postgresKills": 10,
+    "kafkaKills": 6,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-031741",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3365,
+    "kills": 212,
+    "postgresKills": 12,
+    "kafkaKills": 9,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
+   },
+   {
+    "dir": "20261015-032448",
+    "mode": "payments",
+    "mutant": null,
+    "runs": 5,
+    "journeys": 3446,
+    "kills": 207,
+    "postgresKills": 16,
+    "kafkaKills": 11,
+    "runsWithViolations": 0,
+    "firstViolatingRun": null,
+    "caughtBy": []
    }
   ]
  }

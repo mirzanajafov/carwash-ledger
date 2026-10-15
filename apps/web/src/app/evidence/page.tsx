@@ -56,6 +56,11 @@ export default function EvidencePage() {
   const total = (pick: (r: (typeof base)[number]) => number) => base.reduce((sum, r) => sum + pick(r), 0)
   const violations = base.reduce((sum, r) => sum + r.runsWithViolations, 0)
   const e2 = evidence.e2.rows.filter((r) => r.mode === 'locked' && r.concurrency === 1)
+  const pending = [
+    ...(evidence.e6.trials.length > 0 ? [] : [['Audit log', 'Verifying a million journals, proofs, the sequencer, and a thousand tamper trials per class.']]),
+    ...(evidence.e7.rows.length > 0 ? [] : [['Schema change', 'Adding a column to 20 million entries under live payments, naive against expand and contract.']]),
+    ...(total((r) => r.runs) >= 200 ? [] : [['A long chaos campaign', 'A few hundred runs instead of five, on the final code.']]),
+  ]
   return (
     <div className="space-y-14">
       <div className="max-w-2xl space-y-2">
@@ -162,7 +167,7 @@ export default function EvidencePage() {
       {evidence.e4.steady.length > 0 ? (
         <Section
           title="Outbox lag"
-          note="Events are written in the same transaction as the money and a relay publishes them to Kafka. How long that takes, at three steady rates (five runs each, median and range), and what happens when the broker is killed for 30 s at 500 events a second."
+          note="Events are written in the same transaction as the money and a relay publishes them to Kafka. How long that takes on the relay as deployed, at three steady rates (median and range over repeated runs), and what happens when the broker is killed for 30 s at 500 events a second."
         >
           <div className="overflow-x-auto rounded-xl border border-line bg-surface">
             <table className="w-full min-w-[36rem] text-sm">
@@ -274,6 +279,44 @@ export default function EvidencePage() {
         </Section>
       ) : null}
 
+      {evidence.e7.rows.length > 0 ? (
+        <Section
+          title="Changing a big table under load"
+          note={`Adding a column to ${(evidence.e7.entries / 1e6).toFixed(0)} million entries while 200 payments a second keep coming: one ALTER and UPDATE in a transaction, against expand, backfill in batches, check, validate and contract.`}
+        >
+          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+            <table className="w-full min-w-[40rem] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2 font-medium">How</th>
+                  <th className="px-2 py-2 text-right font-medium">Took</th>
+                  <th className="px-2 py-2 text-right font-medium">Payments meanwhile</th>
+                  <th className="px-2 py-2 text-right font-medium">Failed</th>
+                  <th className="px-2 py-2 text-right font-medium">p99</th>
+                  <th className="px-4 py-2 text-right font-medium">Longest lock wait</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {evidence.e7.rows.map((r) => (
+                  <tr key={r.procedure}>
+                    <td className="px-4 py-2">{r.procedure === 'naive' ? 'One transaction' : 'Expand and contract'}</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{(r.changeS / 60).toFixed(1)} min</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.requests.toLocaleString('en')}</td>
+                    <td className={`px-2 py-2 text-right font-mono tabular-nums ${r.errors > 0 ? 'text-bad' : ''}`}>
+                      {r.errors.toLocaleString('en')} <span className="text-xs text-muted">({((100 * r.errors) / r.requests).toFixed(1)}%)</span>
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">
+                      {r.p99 >= 1000 ? `${(r.p99 / 1000).toFixed(1)} s` : `${r.p99.toFixed(1)} ms`} <span className="text-xs text-muted">(was {r.baselineP99} ms)</span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.longestLockS.toFixed(1)} s</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      ) : null}
+
       <Section
         title="Reconciliation"
         note="Settlement files with faults injected at known rates, over three seeds. With references, everything is found. Without them, matching on the amount guesses, and a car wash sells five prices."
@@ -318,20 +361,18 @@ export default function EvidencePage() {
         </div>
       </Section>
 
-      <Section title="Still to measure" note="These need a quiet machine and run at night. Their numbers will appear here as they come in.">
-        <ul className="grid gap-2 text-sm sm:grid-cols-2">
-          {[
-            ...(evidence.e6.trials.length > 0 ? [] : [['Audit log', 'Verifying a million journals, proofs, the sequencer, and a thousand tamper trials per class.']]),
-            ['Schema change', 'Adding a column to 20 million entries under live payments, naive against expand and contract.'],
-            ['A long chaos campaign', 'A few hundred runs instead of five, on the final code.'],
-          ].map(([title, detail]) => (
-            <li key={title} className="rounded-xl border border-dashed border-line p-3">
-              <p className="font-medium">{title}</p>
-              <p className="text-xs text-muted">{detail}</p>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {pending.length > 0 ? (
+        <Section title="Still to measure" note="These need a quiet machine and run at night. Their numbers will appear here as they come in.">
+          <ul className="grid gap-2 text-sm sm:grid-cols-2">
+            {pending.map(([title, detail]) => (
+              <li key={title} className="rounded-xl border border-dashed border-line p-3">
+                <p className="font-medium">{title}</p>
+                <p className="text-xs text-muted">{detail}</p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
     </div>
   )
 }
