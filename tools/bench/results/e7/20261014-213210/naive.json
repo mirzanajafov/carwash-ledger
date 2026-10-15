@@ -1,0 +1,1041 @@
+{
+  "procedure": "naive",
+  "changeMs": 24446,
+  "steps": {
+    "all": {
+      "ms": 24445,
+      "retries": 0
+    }
+  },
+  "baseline": {
+    "p50": 7.7,
+    "p99": 15.3
+  },
+  "duringChange": {
+    "requests": 4890,
+    "errors": 4631,
+    "errorRate": 0.9470000000000001,
+    "p50": 3744.1,
+    "p99": 9413.7,
+    "max": 9454.7
+  },
+  "longestLockWaitMs": 10003,
+  "walBytes": 807071632,
+  "sizes": {
+    "before": {
+      "tableBytes": 64888832,
+      "indexBytes": 42393600,
+      "deadTuples": 0,
+      "lsn": "8/B031B048"
+    },
+    "after": {
+      "tableBytes": 141312000,
+      "indexBytes": 88104960,
+      "deadTuples": 0,
+      "lsn": "8/E04C9FD8"
+    },
+    "vacuumed": {
+      "tableBytes": 141312000,
+      "indexBytes": 88104960,
+      "deadTuples": 0,
+      "lsn": "8/E04C9FD8"
+    }
+  },
+  "vacuumMs": 17,
+  "functions": {
+    "beforeChange": {
+      "ledger_check_balance": {
+        "calls": 17670,
+        "usPerCall": 129.3
+      },
+      "ledger_entry_currency": {
+        "calls": 0,
+        "usPerCall": null
+      },
+      "ledger_protect": {
+        "calls": 0,
+        "usPerCall": null
+      },
+      "ledger_stamp_entry": {
+        "calls": 17670,
+        "usPerCall": 54.1
+      }
+    },
+    "duringChange": {
+      "ledger_check_balance": {
+        "calls": 447,
+        "usPerCall": 142.9
+      },
+      "ledger_entry_currency": {
+        "calls": 0,
+        "usPerCall": null
+      },
+      "ledger_protect": {
+        "calls": 968117,
+        "usPerCall": 17.3
+      },
+      "ledger_stamp_entry": {
+        "calls": 447,
+        "usPerCall": 54.9
+      }
+    },
+    "afterChange": {
+      "ledger_check_balance": {
+        "calls": 18468,
+        "usPerCall": 78.3
+      },
+      "ledger_entry_currency": {
+        "calls": 18468,
+        "usPerCall": 50.6
+      },
+      "ledger_protect": {
+        "calls": 0,
+        "usPerCall": null
+      },
+      "ledger_stamp_entry": {
+        "calls": 18468,
+        "usPerCall": 51.5
+      }
+    }
+  },
+  "violations": [],
+  "marks": [
+    {
+      "at": 1,
+      "what": "load"
+    },
+    {
+      "at": 30007,
+      "what": "change"
+    },
+    {
+      "at": 54453,
+      "what": "changed"
+    },
+    {
+      "at": 84458,
+      "what": "end"
+    }
+  ],
+  "bins": [
+    {
+      "s": 0,
+      "requests": 199,
+      "ok": 199,
+      "errors": {},
+      "p50": 9.1,
+      "p99": 45.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 1,
+      "requests": 216,
+      "ok": 216,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 13.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 2,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 8.2,
+      "p99": 15.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 3,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 15.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 4,
+      "requests": 203,
+      "ok": 203,
+      "errors": {},
+      "p50": 7.6,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 5,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 6,
+      "requests": 203,
+      "ok": 203,
+      "errors": {},
+      "p50": 6.5,
+      "p99": 16,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 7,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 8,
+      "requests": 221,
+      "ok": 221,
+      "errors": {},
+      "p50": 8,
+      "p99": 16.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 9,
+      "requests": 215,
+      "ok": 215,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 17,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 10,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 8,
+      "p99": 15.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 11,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 16.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 12,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 8.5,
+      "p99": 13.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 13,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 8.6,
+      "p99": 14.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 14,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 8.5,
+      "p99": 16.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 15,
+      "requests": 198,
+      "ok": 198,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 16,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 12.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 17,
+      "requests": 213,
+      "ok": 213,
+      "errors": {},
+      "p50": 8,
+      "p99": 15.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 18,
+      "requests": 215,
+      "ok": 215,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 17,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 19,
+      "requests": 173,
+      "ok": 173,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 17.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 20,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 14.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 21,
+      "requests": 190,
+      "ok": 190,
+      "errors": {},
+      "p50": 8.3,
+      "p99": 14.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 22,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 23,
+      "requests": 209,
+      "ok": 209,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 13.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 24,
+      "requests": 184,
+      "ok": 184,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 25,
+      "requests": 178,
+      "ok": 178,
+      "errors": {},
+      "p50": 7.2,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 26,
+      "requests": 178,
+      "ok": 178,
+      "errors": {},
+      "p50": 6.8,
+      "p99": 19.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 27,
+      "requests": 211,
+      "ok": 211,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 13.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 28,
+      "requests": 224,
+      "ok": 224,
+      "errors": {},
+      "p50": 7.3,
+      "p99": 14.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 29,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 8,
+      "p99": 23.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 30,
+      "requests": 201,
+      "ok": 4,
+      "errors": {
+        "timeout exceeded when trying to connect": 181,
+        "25P04": 16
+      },
+      "p50": 7.4,
+      "p99": 11.5,
+      "longestLockMs": 930,
+      "waiting": 16
+    },
+    {
+      "s": 31,
+      "requests": 210,
+      "ok": 0,
+      "errors": {
+        "dropped": 151,
+        "timeout exceeded when trying to connect": 59
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 1931,
+      "waiting": 16
+    },
+    {
+      "s": 32,
+      "requests": 210,
+      "ok": 0,
+      "errors": {
+        "dropped": 210
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 2933,
+      "waiting": 16
+    },
+    {
+      "s": 33,
+      "requests": 218,
+      "ok": 0,
+      "errors": {
+        "dropped": 218
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 3935,
+      "waiting": 16
+    },
+    {
+      "s": 34,
+      "requests": 234,
+      "ok": 0,
+      "errors": {
+        "dropped": 234
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 4936,
+      "waiting": 16
+    },
+    {
+      "s": 35,
+      "requests": 193,
+      "ok": 0,
+      "errors": {
+        "dropped": 26,
+        "timeout exceeded when trying to connect": 151,
+        "25P04": 16
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 5942,
+      "waiting": 16
+    },
+    {
+      "s": 36,
+      "requests": 192,
+      "ok": 0,
+      "errors": {
+        "dropped": 119,
+        "timeout exceeded when trying to connect": 73
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 6941,
+      "waiting": 16
+    },
+    {
+      "s": 37,
+      "requests": 192,
+      "ok": 0,
+      "errors": {
+        "dropped": 192
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 7942,
+      "waiting": 16
+    },
+    {
+      "s": 38,
+      "requests": 213,
+      "ok": 0,
+      "errors": {
+        "dropped": 213
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 8944,
+      "waiting": 16
+    },
+    {
+      "s": 39,
+      "requests": 186,
+      "ok": 0,
+      "errors": {
+        "dropped": 186
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 9943,
+      "waiting": 16
+    },
+    {
+      "s": 40,
+      "requests": 175,
+      "ok": 0,
+      "errors": {
+        "dropped": 37,
+        "timeout exceeded when trying to connect": 138
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 10003,
+      "waiting": 16
+    },
+    {
+      "s": 41,
+      "requests": 204,
+      "ok": 0,
+      "errors": {
+        "dropped": 102,
+        "timeout exceeded when trying to connect": 102
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 1926,
+      "waiting": 16
+    },
+    {
+      "s": 42,
+      "requests": 197,
+      "ok": 0,
+      "errors": {
+        "dropped": 197
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 2928,
+      "waiting": 16
+    },
+    {
+      "s": 43,
+      "requests": 207,
+      "ok": 0,
+      "errors": {
+        "dropped": 207
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 3928,
+      "waiting": 16
+    },
+    {
+      "s": 44,
+      "requests": 212,
+      "ok": 0,
+      "errors": {
+        "dropped": 212
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 4930,
+      "waiting": 16
+    },
+    {
+      "s": 45,
+      "requests": 227,
+      "ok": 16,
+      "errors": {
+        "dropped": 91,
+        "timeout exceeded when trying to connect": 120
+      },
+      "p50": 9384.2,
+      "p99": 9454.7,
+      "longestLockMs": 5935,
+      "waiting": 16
+    },
+    {
+      "s": 46,
+      "requests": 196,
+      "ok": 0,
+      "errors": {
+        "dropped": 92,
+        "timeout exceeded when trying to connect": 104
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 6934,
+      "waiting": 16
+    },
+    {
+      "s": 47,
+      "requests": 185,
+      "ok": 0,
+      "errors": {
+        "dropped": 185
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 7937,
+      "waiting": 16
+    },
+    {
+      "s": 48,
+      "requests": 186,
+      "ok": 0,
+      "errors": {
+        "dropped": 186
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 8937,
+      "waiting": 16
+    },
+    {
+      "s": 49,
+      "requests": 194,
+      "ok": 0,
+      "errors": {
+        "dropped": 194
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 9941,
+      "waiting": 16
+    },
+    {
+      "s": 50,
+      "requests": 188,
+      "ok": 132,
+      "errors": {
+        "dropped": 56
+      },
+      "p50": 3988.4,
+      "p99": 4467.8,
+      "longestLockMs": 10001,
+      "waiting": 16
+    },
+    {
+      "s": 51,
+      "requests": 187,
+      "ok": 108,
+      "errors": {
+        "dropped": 79
+      },
+      "p50": 3370.2,
+      "p99": 3622.4,
+      "longestLockMs": 1836,
+      "waiting": 16
+    },
+    {
+      "s": 52,
+      "requests": 185,
+      "ok": 0,
+      "errors": {
+        "dropped": 185
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 2835,
+      "waiting": 16
+    },
+    {
+      "s": 53,
+      "requests": 212,
+      "ok": 0,
+      "errors": {
+        "dropped": 212
+      },
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 3836,
+      "waiting": 16
+    },
+    {
+      "s": 54,
+      "requests": 208,
+      "ok": 110,
+      "errors": {
+        "dropped": 98
+      },
+      "p50": 11.6,
+      "p99": 201.2,
+      "longestLockMs": 4342,
+      "waiting": 16
+    },
+    {
+      "s": 55,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 14.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 56,
+      "requests": 187,
+      "ok": 187,
+      "errors": {},
+      "p50": 6.9,
+      "p99": 20.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 57,
+      "requests": 244,
+      "ok": 244,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 13.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 58,
+      "requests": 202,
+      "ok": 202,
+      "errors": {},
+      "p50": 8.2,
+      "p99": 15,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 59,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 8.3,
+      "p99": 21.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 60,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 12.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 61,
+      "requests": 189,
+      "ok": 189,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 12.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 62,
+      "requests": 227,
+      "ok": 227,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 23.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 63,
+      "requests": 211,
+      "ok": 211,
+      "errors": {},
+      "p50": 8.2,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 64,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 20.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 65,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 8.5,
+      "p99": 15,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 66,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 16.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 67,
+      "requests": 183,
+      "ok": 183,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 15.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 68,
+      "requests": 208,
+      "ok": 208,
+      "errors": {},
+      "p50": 8.6,
+      "p99": 31.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 69,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 12.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 70,
+      "requests": 188,
+      "ok": 188,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 12.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 71,
+      "requests": 213,
+      "ok": 213,
+      "errors": {},
+      "p50": 8.6,
+      "p99": 42,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 72,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 9.4,
+      "p99": 39.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 73,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 7.3,
+      "p99": 26.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 74,
+      "requests": 214,
+      "ok": 214,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 24.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 75,
+      "requests": 204,
+      "ok": 204,
+      "errors": {},
+      "p50": 7.4,
+      "p99": 13.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 76,
+      "requests": 217,
+      "ok": 217,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 17.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 77,
+      "requests": 202,
+      "ok": 202,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 78,
+      "requests": 211,
+      "ok": 211,
+      "errors": {},
+      "p50": 6.9,
+      "p99": 37.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 79,
+      "requests": 190,
+      "ok": 190,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 12.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 80,
+      "requests": 206,
+      "ok": 206,
+      "errors": {},
+      "p50": 8.2,
+      "p99": 14.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 81,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 14.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 82,
+      "requests": 198,
+      "ok": 198,
+      "errors": {},
+      "p50": 8.5,
+      "p99": 15.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 83,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 8.7,
+      "p99": 15.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 84,
+      "requests": 86,
+      "ok": 86,
+      "errors": {},
+      "p50": 8.4,
+      "p99": 13.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 85,
+      "requests": 0,
+      "ok": 0,
+      "errors": {},
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 0,
+      "waiting": 0
+    }
+  ]
+}

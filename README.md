@@ -6,6 +6,8 @@ A payment that is retried, cut off by a crash or reported twice by the bank stil
 
 It runs at **[carwash.najafov.dev](https://carwash.najafov.dev)**: money moving through T-accounts as customers pay at the bays, a button that kills the API in the middle of a payment, a bank you can make flaky for five minutes, three ways to tamper with the books, and the measurements behind all of it.
 
+![The live page: payments at the wash bays and the T-accounts they move](docs/screenshots/live.png)
+
 What's real and what isn't: the payment provider and the bank are a simulator I wrote, the money and the customers are fake, and on the demo a settlement "day" lasts ten minutes. The ledger, its rules, the invariant checker and the audit log are the real thing. The witness that signs the audit log runs on the same server as the ledger, so on the demo it shows the mechanism, not a real separation of trust.
 
 ## The books
@@ -50,7 +52,7 @@ The posting itself is one round trip of locks plus one CTE on plain `pg`. Prisma
 
 The API takes payments with Stripe's idempotency rules. An `Idempotency-Key` is stored with a hash of the request and the first answer: the same key and body get that answer back, the same key with a different body is refused, and two requests with one key at the same time produce one payment. A key is held by a lease while its request runs, and every write checks it still holds the lease. That fence came from the first chaos runs: without it, a slow request whose lease had expired could still create a second payment for its key.
 
-A payment is a state machine: created, authorized, captured, refunded, canceled or failed. Every move is a conditional update, so it happens once. The bank's word is checked, not trusted. A webhook only tells the API to go and ask the provider what happened, and an answer with the wrong amount is refused and recorded as an anomaly for a person. A recovery job finishes whatever a crash left pending.
+A payment is a state machine: created, authorized, captured, refunded, canceled or failed. Every move is a conditional update, so it happens once. The bank's word is checked, not trusted. A webhook only tells the API to go and ask the provider what happened, and an answer with the wrong amount is refused and recorded as an anomaly for a person. A recovery job finishes whatever a crash left pending. On the admin page a person can accept the amount the bank really used for a capture or a refund, which pulls the operation from the bank again and posts it through the normal path, or dispute it, which moves no money. The chaos runs accept them too, before the final checks, so that path is held to the same invariants.
 
 ## Events
 
@@ -78,12 +80,14 @@ Then your browser checks one journal on its own. It recomputes the leaf from the
 
 What it can't catch, honestly: a change in the second between a journal's commit and its sequencing, and a full rewrite done in the seconds before the next checkpoint. And the witness trusts the first root it ever sees.
 
+![The audit page: the log, what the witness signed, and the three ways to tamper](docs/screenshots/audit.png)
+
 I measured it on the laptop (E6) with a million journals seeded straight into the database. The sequencer turns 22,000-25,000 journals a second into leaves, and a checkpoint takes about 12 ms at any size. Verifying all million from scratch takes 31 s, about half reading rows and half hashing; checking only what was added since the last run takes 228 ms for 10,000 journals. A proof at a million journals is 15-20 hashes, at most 640 bytes. The log costs about 400 bytes a journal on disk, which is more than the journal row itself. Under 200 payments a second a journal waits half a second for the sequencer at the median and a full second at worst, which is just the interval it runs on.
 Then I tampered with the log 3,000 times on a smaller one, 1,000 times per class, each in a transaction that was rolled back afterwards. Every tamper that touched a journal the witness had signed was caught and the right journal named, 2,704 of 2,704. The second class, where the database is rewritten to agree with itself, was caught 900 times out of 900 with the witness's roots and 0 times without them, which is the whole argument for the witness in one line. The same rewrite above the last checkpoint was never caught, 0 of 100. That is the gap I describe above, and now it has a number.
 
 ## Changing a big table while it takes payments
 
-Adding the currency to entries is a real change and a stand-in for the technique. It is done in four steps: add the column with a trigger that fills it, backfill in small resumable batches, add a check constraint without validating it and then validate it, and set `NOT NULL`. Each step runs in its own transaction, because Postgres holds every lock until the end of a transaction, and validating in the same transaction would hold the exclusive lock through the whole scan. On a tiny trial the naive single-transaction version held its lock for 2 s and pushed p99 from 146 ms to 2 s; the four steps took longer and left p99 alone. The real measurement, 20 million entries under live load, is still to run.
+Adding the currency to entries is a real change and a stand-in for the technique. It is done in four steps: add the column with a trigger that fills it, backfill in small resumable batches, add a check constraint without validating it and then validate it, and set `NOT NULL`. Each step runs in its own transaction, because Postgres holds every lock until the end of a transaction, and validating in the same transaction would hold the exclusive lock through the whole scan. I measured it on 20 million entries (3.2 GB) under 200 payments a second (E7). The naive version, one `ALTER` plus one `UPDATE` in a transaction, took 8.2 minutes, and in that time 99.7% of 99,447 payments failed: the table was locked, and each request waited up to 10 s before giving up. The table also doubled in size until a 40 s `VACUUM`. The four steps took 20 minutes instead and refused nothing: 242,334 payments went through with a p99 of 34.5 ms against 16 ms before. It wasn't perfectly smooth. Two seconds went over 1 s, one of them while the check step ran a catch-up scan of all 20 million rows in the same batch as the `ALTER`, which made writers queue for up to 3.5 s. That step should do its catch-up in batches too; I found it here and haven't changed it yet.
 
 ## Does it hold?
 
@@ -97,7 +101,13 @@ The main evidence is a chaos harness. One container runs Postgres, Kafka, Toxipr
 
 After each run the invariant checker reads everything.
 
-So far: 27 runs, 74,388 journeys and journals, and 616 kills and crashes. No run broke an invariant. A zero only means something if the harness can see a violation, so every guard has a mutant: the same code with that one guard removed. Every mutant is caught, most in the first run, with two exceptions that are meant to survive. The first is M1, which removes a guard another one covers; it is caught at once when both are removed. The second is M7a, a control that changes nothing in the ledger-only harness.
+On the demo, the plug page is a small public version: pick a point in the middle of a payment, the API kills itself there, the terminal retries with the same key, and the checks run afterwards. The same page can make the bank flaky or start a storm for five minutes.
+
+![The plug page](docs/screenshots/plug.png)
+
+The long campaign ran on the night of 15 October on the code that is deployed: 200 runs, 135,048 payment journeys, 8,792 process kills and 876 Postgres and Kafka crashes, 2,253 network faults and 9,108 forged webhooks, and no run broke an invariant. I set the target at 10,000 kills before running anything and got 9,668, so call it close. One run crashed the harness itself, not the ledger: Toxiproxy's API timed out on a reset, and two seeds never ran. Together with the shorter campaigns before it, that is 227 base runs without a violation. A zero only means something if the harness can see a violation, so every guard has a mutant: the same code with that one guard removed. Every mutant is caught, most in the first run, with two exceptions that are meant to survive. The first is M1, which removes a guard another one covers; it is caught at once when both are removed. The second is M7a, a control that changes nothing in the ledger-only harness.
+
+![The evidence page: the chaos totals and every mutant with the run that caught it](docs/screenshots/evidence.png)
 
 Running it found real bugs before anyone else could:
 
@@ -110,14 +120,9 @@ Running it found real bugs before anyone else could:
 
 Running it like production found more. Inside a container the API always gets pid 7, so the plug page never saw the API come back. Three queries ordered numbers as text, so '96' came before '337'. And the backup archived the witness after the database, so the restored ledger was one leaf short of what the witness had signed.
 
-## Measurements still to run
+The server found two more the night after the first deploy. The stack sat at about one core while the demo took a payment every five seconds: four relay loops polled the outbox every 50 ms whether or not anything was there, a thousand index scans a second for two writes. The relay now backs off to a second when it finds nothing and goes back to 50 ms as soon as it publishes. And the live page had stalled. Its lookback query returned the oldest 500 journals of its window, so once the log passed about 500 journals, a new viewer got 500 old journals as if they were new and then nothing at all. Neither showed up in the tests, which never had more than a few hundred journals; there is a regression test now with 700.
 
-| | what | status |
-|---|---|---|
-| E7 | the column change on 20 million entries under live payments | tooling done, waiting for a quiet night |
-| chaos | a long campaign of a few hundred runs | waiting for a night |
-
-The measurements I have are on the evidence page, read straight from the result files in this repository.
+The measurements are on the evidence page, read straight from the result files in this repository.
 
 ## How it fits together
 

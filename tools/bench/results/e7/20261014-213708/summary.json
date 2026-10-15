@@ -1,0 +1,283 @@
+[
+  {
+    "procedure": "naive",
+    "changeMs": 494598,
+    "steps": {
+      "all": {
+        "ms": 494597,
+        "retries": 0
+      }
+    },
+    "baseline": {
+      "p50": 7.4,
+      "p99": 15.3
+    },
+    "duringChange": {
+      "requests": 99447,
+      "errors": 99188,
+      "errorRate": 0.997,
+      "p50": 2790.5,
+      "p99": 8601.8,
+      "max": 8648
+    },
+    "longestLockWaitMs": 10007,
+    "walBytes": 11887024496,
+    "sizes": {
+      "before": {
+        "tableBytes": 1365721088,
+        "indexBytes": 888971264,
+        "deadTuples": 0,
+        "lsn": "C/2237FED0"
+      },
+      "after": {
+        "tableBytes": 2901450752,
+        "indexBytes": 1776033792,
+        "deadTuples": 20018117,
+        "lsn": "E/E6BD9840"
+      },
+      "vacuumed": {
+        "tableBytes": 2901508096,
+        "indexBytes": 1776033792,
+        "deadTuples": 0,
+        "lsn": "F/BCF36DB8"
+      }
+    },
+    "vacuumMs": 40311,
+    "functions": {
+      "beforeChange": {
+        "ledger_check_balance": {
+          "calls": 17601,
+          "usPerCall": 153.3
+        },
+        "ledger_entry_currency": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_protect": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_stamp_entry": {
+          "calls": 17601,
+          "usPerCall": 53.9
+        }
+      },
+      "duringChange": {
+        "ledger_check_balance": {
+          "calls": 516,
+          "usPerCall": 156
+        },
+        "ledger_entry_currency": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_protect": {
+          "calls": 20018117,
+          "usPerCall": 16.8
+        },
+        "ledger_stamp_entry": {
+          "calls": 516,
+          "usPerCall": 59
+        }
+      },
+      "afterChange": {
+        "ledger_check_balance": {
+          "calls": 17559,
+          "usPerCall": 92.2
+        },
+        "ledger_entry_currency": {
+          "calls": 17559,
+          "usPerCall": 30.5
+        },
+        "ledger_protect": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_stamp_entry": {
+          "calls": 17559,
+          "usPerCall": 56.5
+        }
+      }
+    },
+    "violations": [],
+    "marks": [
+      {
+        "at": 1,
+        "what": "load"
+      },
+      {
+        "at": 30008,
+        "what": "change"
+      },
+      {
+        "at": 524607,
+        "what": "changed"
+      },
+      {
+        "at": 554655,
+        "what": "end"
+      }
+    ]
+  },
+  {
+    "procedure": "online",
+    "changeMs": 1211145,
+    "steps": {
+      "expand": {
+        "ms": 10,
+        "retries": 0
+      },
+      "backfill": {
+        "ms": 1203171,
+        "retries": 0
+      },
+      "check": {
+        "ms": 3636,
+        "retries": 0
+      },
+      "validate": {
+        "ms": 4274,
+        "retries": 0
+      },
+      "finish": {
+        "ms": 52,
+        "retries": 0
+      }
+    },
+    "backfill": {
+      "batches": 4004,
+      "updated": 20018108,
+      "ms": 1203171,
+      "workMs": 544193,
+      "pausedMs": 660313,
+      "through": "20020000",
+      "done": true
+    },
+    "baseline": {
+      "p50": 7.8,
+      "p99": 15.9
+    },
+    "duringChange": {
+      "requests": 242334,
+      "errors": 0,
+      "errorRate": 0,
+      "p50": 8.1,
+      "p99": 34.5,
+      "max": 1278.9
+    },
+    "longestLockWaitMs": 3540,
+    "walBytes": 15656736552,
+    "sizes": {
+      "before": {
+        "tableBytes": 1365737472,
+        "indexBytes": 888971264,
+        "deadTuples": 0,
+        "lsn": "10/6BFA02C0"
+      },
+      "after": {
+        "tableBytes": 1951105024,
+        "indexBytes": 1847828480,
+        "deadTuples": 5277189,
+        "lsn": "14/1130D9E8"
+      },
+      "vacuumed": {
+        "tableBytes": 1951105024,
+        "indexBytes": 1847828480,
+        "deadTuples": 0,
+        "lsn": "14/18670000"
+      }
+    },
+    "vacuumMs": 5836,
+    "functions": {
+      "beforeChange": {
+        "ledger_check_balance": {
+          "calls": 17667,
+          "usPerCall": 166.7
+        },
+        "ledger_entry_currency": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_protect": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_stamp_entry": {
+          "calls": 17667,
+          "usPerCall": 56.2
+        }
+      },
+      "duringChange": {
+        "ledger_check_balance": {
+          "calls": 726738,
+          "usPerCall": 116.1
+        },
+        "ledger_entry_currency": {
+          "calls": 726297,
+          "usPerCall": 15.9
+        },
+        "ledger_protect": {
+          "calls": 20018108,
+          "usPerCall": 17.4
+        },
+        "ledger_stamp_entry": {
+          "calls": 726738,
+          "usPerCall": 36.9
+        }
+      },
+      "afterChange": {
+        "ledger_check_balance": {
+          "calls": 18033,
+          "usPerCall": 81.2
+        },
+        "ledger_entry_currency": {
+          "calls": 18033,
+          "usPerCall": 23.7
+        },
+        "ledger_protect": {
+          "calls": 0,
+          "usPerCall": null
+        },
+        "ledger_stamp_entry": {
+          "calls": 18033,
+          "usPerCall": 51.5
+        }
+      }
+    },
+    "violations": [],
+    "marks": [
+      {
+        "at": 0,
+        "what": "load"
+      },
+      {
+        "at": 30004,
+        "what": "change"
+      },
+      {
+        "at": 30015,
+        "what": "expanded"
+      },
+      {
+        "at": 1233186,
+        "what": "backfilled"
+      },
+      {
+        "at": 1236823,
+        "what": "checked"
+      },
+      {
+        "at": 1241097,
+        "what": "validated"
+      },
+      {
+        "at": 1241149,
+        "what": "changed"
+      },
+      {
+        "at": 1271163,
+        "what": "end"
+      }
+    ]
+  }
+]

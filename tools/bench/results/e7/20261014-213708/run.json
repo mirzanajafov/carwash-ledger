@@ -1,0 +1,40 @@
+{
+  "experiment": "e7",
+  "options": {
+    "journals": "6000000",
+    "procedures": "naive,online",
+    "rate": "200",
+    "before": "30",
+    "after": "30",
+    "batch": "5000",
+    "duty": "0.5",
+    "max-in-flight": "256",
+    "check-seed": true,
+    "seed": "1",
+    "out": "results/e7"
+  },
+  "through": "20261013230000_audit_checkpoints",
+  "steps": [
+    "20261014100000_entries_currency_expand",
+    "20261014100100_entries_currency_check",
+    "20261014100200_entries_currency_validate",
+    "20261014100300_entries_currency_finish"
+  ],
+  "environment": {
+    "commit": "e6e27cd",
+    "node": "v24.21.0",
+    "platform": "linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1270P",
+    "cpus": 16,
+    "memoryGb": 10,
+    "postgresCgroup": "cpu.max=max 100000 cpuset=2-3 memory.max=1073741824",
+    "postgres": {
+      "fsync": "on",
+      "max_connections": "200",
+      "server_version": "18.6",
+      "shared_buffers": "32768",
+      "synchronous_commit": "on",
+      "wal_sync_method": "fdatasync"
+    }
+  }
+}

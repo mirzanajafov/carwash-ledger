@@ -1,0 +1,1353 @@
+{
+  "procedure": "online",
+  "changeMs": 57601,
+  "steps": {
+    "expand": {
+      "ms": 23,
+      "retries": 0
+    },
+    "backfill": {
+      "ms": 57465,
+      "retries": 0
+    },
+    "check": {
+      "ms": 69,
+      "retries": 0
+    },
+    "validate": {
+      "ms": 36,
+      "retries": 0
+    },
+    "finish": {
+      "ms": 7,
+      "retries": 0
+    }
+  },
+  "backfill": {
+    "batches": 194,
+    "updated": 968117,
+    "ms": 57465,
+    "workMs": 26337,
+    "pausedMs": 31191,
+    "through": "970000",
+    "done": true
+  },
+  "baseline": {
+    "p50": 7.8,
+    "p99": 15
+  },
+  "duringChange": {
+    "requests": 11599,
+    "errors": 0,
+    "errorRate": 0,
+    "p50": 6.5,
+    "p99": 18.4,
+    "max": 91
+  },
+  "longestLockWaitMs": 0,
+  "walBytes": 618405920,
+  "sizes": {
+    "before": {
+      "tableBytes": 64897024,
+      "indexBytes": 42393600,
+      "deadTuples": 0,
+      "lsn": "8/E8EF9830"
+    },
+    "after": {
+      "tableBytes": 115924992,
+      "indexBytes": 91947008,
+      "deadTuples": 361778,
+      "lsn": "9/DCBB850"
+    },
+    "vacuumed": {
+      "tableBytes": 115924992,
+      "indexBytes": 91947008,
+      "deadTuples": 0,
+      "lsn": "9/E59E000"
+    }
+  },
+  "vacuumMs": 145,
+  "functions": {
+    "beforeChange": {
+      "ledger_check_balance": {
+        "calls": 17787,
+        "usPerCall": 171.6
+      },
+      "ledger_entry_currency": {
+        "calls": 0,
+        "usPerCall": null
+      },
+      "ledger_protect": {
+        "calls": 0,
+        "usPerCall": null
+      },
+      "ledger_stamp_entry": {
+        "calls": 17787,
+        "usPerCall": 55.9
+      }
+    },
+    "duringChange": {
+      "ledger_check_balance": {
+        "calls": 34428,
+        "usPerCall": 125.5
+      },
+      "ledger_entry_currency": {
+        "calls": 34098,
+        "usPerCall": 16.1
+      },
+      "ledger_protect": {
+        "calls": 955000,
+        "usPerCall": 17.8
+      },
+      "ledger_stamp_entry": {
+        "calls": 34428,
+        "usPerCall": 37.6
+      }
+    },
+    "afterChange": {
+      "ledger_check_balance": {
+        "calls": 18381,
+        "usPerCall": 80.7
+      },
+      "ledger_entry_currency": {
+        "calls": 18381,
+        "usPerCall": 22.9
+      },
+      "ledger_protect": {
+        "calls": 13117,
+        "usPerCall": 17.6
+      },
+      "ledger_stamp_entry": {
+        "calls": 18381,
+        "usPerCall": 52.6
+      }
+    }
+  },
+  "violations": [],
+  "marks": [
+    {
+      "at": 1,
+      "what": "load"
+    },
+    {
+      "at": 30008,
+      "what": "change"
+    },
+    {
+      "at": 30031,
+      "what": "expanded"
+    },
+    {
+      "at": 87496,
+      "what": "backfilled"
+    },
+    {
+      "at": 87566,
+      "what": "checked"
+    },
+    {
+      "at": 87602,
+      "what": "validated"
+    },
+    {
+      "at": 87609,
+      "what": "changed"
+    },
+    {
+      "at": 117634,
+      "what": "end"
+    }
+  ],
+  "bins": [
+    {
+      "s": 0,
+      "requests": 199,
+      "ok": 199,
+      "errors": {},
+      "p50": 8.6,
+      "p99": 65.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 1,
+      "requests": 216,
+      "ok": 216,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 14.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 2,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 8.3,
+      "p99": 15.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 3,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 4,
+      "requests": 203,
+      "ok": 203,
+      "errors": {},
+      "p50": 8.3,
+      "p99": 21.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 5,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 15.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 6,
+      "requests": 203,
+      "ok": 203,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 16.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 7,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 7.3,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 8,
+      "requests": 221,
+      "ok": 221,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 15.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 9,
+      "requests": 215,
+      "ok": 215,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 14.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 10,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 11,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 15.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 12,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 12.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 13,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 14.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 14,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 8.3,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 15,
+      "requests": 198,
+      "ok": 198,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 18.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 16,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 8.6,
+      "p99": 15.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 17,
+      "requests": 213,
+      "ok": 213,
+      "errors": {},
+      "p50": 7.3,
+      "p99": 14.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 18,
+      "requests": 215,
+      "ok": 215,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 19,
+      "requests": 173,
+      "ok": 173,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 15.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 20,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 7,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 21,
+      "requests": 190,
+      "ok": 190,
+      "errors": {},
+      "p50": 8.4,
+      "p99": 14.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 22,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 8.4,
+      "p99": 15,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 23,
+      "requests": 209,
+      "ok": 209,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 24,
+      "requests": 184,
+      "ok": 184,
+      "errors": {},
+      "p50": 8,
+      "p99": 13.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 25,
+      "requests": 178,
+      "ok": 178,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 12.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 26,
+      "requests": 178,
+      "ok": 178,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 27,
+      "requests": 211,
+      "ok": 211,
+      "errors": {},
+      "p50": 8,
+      "p99": 14,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 28,
+      "requests": 224,
+      "ok": 224,
+      "errors": {},
+      "p50": 8.3,
+      "p99": 14.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 29,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 27.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 30,
+      "requests": 201,
+      "ok": 201,
+      "errors": {},
+      "p50": 6.8,
+      "p99": 15.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 31,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 31.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 32,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 6,
+      "p99": 21.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 33,
+      "requests": 218,
+      "ok": 218,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 13.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 34,
+      "requests": 234,
+      "ok": 234,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 14,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 35,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 6.1,
+      "p99": 14.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 36,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 6.5,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 37,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 12.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 38,
+      "requests": 213,
+      "ok": 213,
+      "errors": {},
+      "p50": 6.5,
+      "p99": 13.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 39,
+      "requests": 186,
+      "ok": 186,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 23.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 40,
+      "requests": 175,
+      "ok": 175,
+      "errors": {},
+      "p50": 6.8,
+      "p99": 14.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 41,
+      "requests": 204,
+      "ok": 204,
+      "errors": {},
+      "p50": 6.8,
+      "p99": 15.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 42,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 16.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 43,
+      "requests": 207,
+      "ok": 207,
+      "errors": {},
+      "p50": 6.5,
+      "p99": 12.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 44,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 6.1,
+      "p99": 18.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 45,
+      "requests": 227,
+      "ok": 227,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 14,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 46,
+      "requests": 196,
+      "ok": 196,
+      "errors": {},
+      "p50": 5.5,
+      "p99": 11.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 47,
+      "requests": 185,
+      "ok": 185,
+      "errors": {},
+      "p50": 5.4,
+      "p99": 11.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 48,
+      "requests": 186,
+      "ok": 186,
+      "errors": {},
+      "p50": 5.5,
+      "p99": 14.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 49,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 9.3,
+      "p99": 30.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 50,
+      "requests": 188,
+      "ok": 188,
+      "errors": {},
+      "p50": 5.5,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 51,
+      "requests": 187,
+      "ok": 187,
+      "errors": {},
+      "p50": 6.1,
+      "p99": 15.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 52,
+      "requests": 185,
+      "ok": 185,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 14.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 53,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 22.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 54,
+      "requests": 208,
+      "ok": 208,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 81.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 55,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 8,
+      "p99": 15.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 56,
+      "requests": 187,
+      "ok": 187,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 13,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 57,
+      "requests": 244,
+      "ok": 244,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 13.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 58,
+      "requests": 202,
+      "ok": 202,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 15.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 59,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 8,
+      "p99": 41.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 60,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 7,
+      "p99": 15.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 61,
+      "requests": 189,
+      "ok": 189,
+      "errors": {},
+      "p50": 7,
+      "p99": 14.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 62,
+      "requests": 227,
+      "ok": 227,
+      "errors": {},
+      "p50": 5.7,
+      "p99": 16.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 63,
+      "requests": 211,
+      "ok": 211,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 13.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 64,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 6.1,
+      "p99": 16.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 65,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 6,
+      "p99": 14.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 66,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 5.9,
+      "p99": 12.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 67,
+      "requests": 183,
+      "ok": 183,
+      "errors": {},
+      "p50": 6.5,
+      "p99": 14.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 68,
+      "requests": 208,
+      "ok": 208,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 15.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 69,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 6.6,
+      "p99": 21.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 70,
+      "requests": 188,
+      "ok": 188,
+      "errors": {},
+      "p50": 6.5,
+      "p99": 16.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 71,
+      "requests": 213,
+      "ok": 213,
+      "errors": {},
+      "p50": 6.9,
+      "p99": 16.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 72,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 7.1,
+      "p99": 18.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 73,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 6.8,
+      "p99": 14.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 74,
+      "requests": 214,
+      "ok": 214,
+      "errors": {},
+      "p50": 6,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 75,
+      "requests": 204,
+      "ok": 204,
+      "errors": {},
+      "p50": 6.1,
+      "p99": 12,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 76,
+      "requests": 217,
+      "ok": 217,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 77,
+      "requests": 202,
+      "ok": 202,
+      "errors": {},
+      "p50": 5.8,
+      "p99": 14.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 78,
+      "requests": 211,
+      "ok": 211,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 12.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 79,
+      "requests": 190,
+      "ok": 190,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 40.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 80,
+      "requests": 206,
+      "ok": 206,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 81,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 7,
+      "p99": 11.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 82,
+      "requests": 198,
+      "ok": 198,
+      "errors": {},
+      "p50": 6.6,
+      "p99": 13.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 83,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 6.6,
+      "p99": 12.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 84,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 5.7,
+      "p99": 10.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 85,
+      "requests": 217,
+      "ok": 217,
+      "errors": {},
+      "p50": 6.4,
+      "p99": 20,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 86,
+      "requests": 200,
+      "ok": 200,
+      "errors": {},
+      "p50": 6.3,
+      "p99": 12.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 87,
+      "requests": 186,
+      "ok": 186,
+      "errors": {},
+      "p50": 7,
+      "p99": 12.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 88,
+      "requests": 219,
+      "ok": 219,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 15,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 89,
+      "requests": 205,
+      "ok": 205,
+      "errors": {},
+      "p50": 5.9,
+      "p99": 26.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 90,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 13.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 91,
+      "requests": 176,
+      "ok": 176,
+      "errors": {},
+      "p50": 7.6,
+      "p99": 16.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 92,
+      "requests": 192,
+      "ok": 192,
+      "errors": {},
+      "p50": 7.4,
+      "p99": 20.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 93,
+      "requests": 207,
+      "ok": 207,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 14.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 94,
+      "requests": 219,
+      "ok": 219,
+      "errors": {},
+      "p50": 7.4,
+      "p99": 11.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 95,
+      "requests": 210,
+      "ok": 210,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 22.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 96,
+      "requests": 186,
+      "ok": 186,
+      "errors": {},
+      "p50": 8,
+      "p99": 14,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 97,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 13.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 98,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 19.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 99,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 6.7,
+      "p99": 38.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 100,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 7.3,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 101,
+      "requests": 217,
+      "ok": 217,
+      "errors": {},
+      "p50": 7.8,
+      "p99": 14.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 102,
+      "requests": 195,
+      "ok": 195,
+      "errors": {},
+      "p50": 8,
+      "p99": 14.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 103,
+      "requests": 231,
+      "ok": 231,
+      "errors": {},
+      "p50": 7.6,
+      "p99": 13.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 104,
+      "requests": 198,
+      "ok": 198,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 13.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 105,
+      "requests": 199,
+      "ok": 199,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.6,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 106,
+      "requests": 217,
+      "ok": 217,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.5,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 107,
+      "requests": 188,
+      "ok": 188,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 15.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 108,
+      "requests": 197,
+      "ok": 197,
+      "errors": {},
+      "p50": 8.4,
+      "p99": 14.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 109,
+      "requests": 193,
+      "ok": 193,
+      "errors": {},
+      "p50": 6.2,
+      "p99": 21.7,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 110,
+      "requests": 224,
+      "ok": 224,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 14.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 111,
+      "requests": 212,
+      "ok": 212,
+      "errors": {},
+      "p50": 8.1,
+      "p99": 16.1,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 112,
+      "requests": 209,
+      "ok": 209,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 14.3,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 113,
+      "requests": 180,
+      "ok": 180,
+      "errors": {},
+      "p50": 7.7,
+      "p99": 14.2,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 114,
+      "requests": 199,
+      "ok": 199,
+      "errors": {},
+      "p50": 7.6,
+      "p99": 12.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 115,
+      "requests": 181,
+      "ok": 181,
+      "errors": {},
+      "p50": 7.5,
+      "p99": 15.9,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 116,
+      "requests": 194,
+      "ok": 194,
+      "errors": {},
+      "p50": 7.9,
+      "p99": 13.8,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 117,
+      "requests": 116,
+      "ok": 116,
+      "errors": {},
+      "p50": 8.5,
+      "p99": 13.4,
+      "longestLockMs": 0,
+      "waiting": 0
+    },
+    {
+      "s": 118,
+      "requests": 0,
+      "ok": 0,
+      "errors": {},
+      "p50": null,
+      "p99": null,
+      "longestLockMs": 0,
+      "waiting": 0
+    }
+  ]
+}
