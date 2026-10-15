@@ -60,7 +60,7 @@ Every journal writes its events to an outbox in the same transaction. A relay pu
 
 Kafka is a single broker in KRaft mode. Postgres is the record, so a broker that comes back empty loses nothing.
 
-I measured the lag on the laptop (E4): five runs at each of 100, 500 and 2,000 events a second. An event reaches Kafka in about 20 ms at the median and 36-46 ms at p99, and that barely moves with the rate, because most of it is the relay's 50 ms poll. The consumer adds 10-36 ms on top. What does change with the rate is the cost: at 100 events a second each event costs 5.5 database transactions, at 2,000 it costs 1.35, because the relay and the consumer pay per batch. When I killed the broker for 30 s at 500 a second, about 25,000 events piled up in the outbox and drained in under 2 s once the relay reconnected. The slow part was everything around that: the broker took 13 s to start and the relay another 7 s to publish again, and latency stayed high for 24-57 s after that.
+I measured the lag on the laptop (E4): five runs at each of 100, 500 and 2,000 events a second. An event reaches Kafka in about 20 ms at the median and 36-46 ms at p99, and that barely moves with the rate, because most of it is the relay's 50 ms poll. The consumer adds 10-36 ms on top. What does change with the rate is the cost: at 100 events a second each event costs 5.5 database transactions, at 2,000 it costs 1.35, because the relay and the consumer pay per batch. When I killed the broker for 30 s at 500 a second, about 25,000 events piled up in the outbox and drained in under 2 s once the relay reconnected. The slow part was everything around that: the broker took 13 s to start and the relay another 7 s to publish again, and latency stayed high for 24-57 s after that. Later the relay learned to back off when the outbox is empty (see below), and I ran the steady rates again: at 100 events a second p99 rose from 46 to 59 ms while each event cost a transaction less, and at 500 and 2,000 nothing moved beyond run-to-run noise.
 
 ## Reconciliation
 
@@ -83,6 +83,7 @@ What it can't catch, honestly: a change in the second between a journal's commit
 ![The audit page: the log, what the witness signed, and the three ways to tamper](docs/screenshots/audit.png)
 
 I measured it on the laptop (E6) with a million journals seeded straight into the database. The sequencer turns 22,000-25,000 journals a second into leaves, and a checkpoint takes about 12 ms at any size. Verifying all million from scratch takes 31 s, about half reading rows and half hashing; checking only what was added since the last run takes 228 ms for 10,000 journals. A proof at a million journals is 15-20 hashes, at most 640 bytes. The log costs about 400 bytes a journal on disk, which is more than the journal row itself. Under 200 payments a second a journal waits half a second for the sequencer at the median and a full second at worst, which is just the interval it runs on.
+
 Then I tampered with the log 3,000 times on a smaller one, 1,000 times per class, each in a transaction that was rolled back afterwards. Every tamper that touched a journal the witness had signed was caught and the right journal named, 2,704 of 2,704. The second class, where the database is rewritten to agree with itself, was caught 900 times out of 900 with the witness's roots and 0 times without them, which is the whole argument for the witness in one line. The same rewrite above the last checkpoint was never caught, 0 of 100. That is the gap I describe above, and now it has a number.
 
 ## Changing a big table while it takes payments
@@ -176,6 +177,7 @@ For the dashboard, start the provider, the API, the worker, the witness, the tam
 | `GET /v1/live` | the dashboard's event stream |
 | `POST /v1/admin/plug`, `/checks`, `/verify` | the dashboard's demo actions, limited globally |
 | `POST /v1/admin/sessions`, `GET`/`DELETE /v1/admin/sessions/current` | an admin key opens a 12-hour session for the dashboard; sessions skip the global limits |
+| `GET /v1/admin/anomalies`, `POST /v1/admin/anomalies/:id/accept`, `/dispute` | answers the API refused, and a person's decision on them |
 
 ## What's where
 
@@ -199,4 +201,6 @@ tools/recon-eval     the reconciliation experiment
 
 ## Limits and next
 
-One Postgres without a replica, one Kafka broker, and backups on the same disk as the database. That's fine for a demo and not for money. The witness should sign somewhere I don't control: a public transparency log or a git repository someone else can watch. FX, chargebacks and disputes aren't there. The sequencer is a single writer by design, and E6 will show where it stops. Next are the three measurements above, the long chaos campaign, and moving the witness's roots off this server.
+One Postgres without a replica, one Kafka broker, and backups on the same disk as the database. That's fine for a demo and not for money. The witness runs on the same server as the ledger; it should sign somewhere I don't control, like a public transparency log or a git repository someone else watches. The sequencer is a single writer by design; it did 22,000-25,000 journals a second here, far above anything a car wash chain needs, but it is still one process. FX, chargebacks and disputes with the card networks aren't there.
+
+If I did it again, I would give the online migration's check step its own batched catch-up from the start, and I would build the measurement harness for the laptop's memory before the first long campaign rather than during it.
