@@ -56,6 +56,7 @@ model Journal {
   refund      Refund?             @relation("RefundJournal")
   payout      Payout?             @relation("PayoutJournal")
   payoutUndo  Payout?             @relation("PayoutReversalJournal")
+  payoutFix   Payout?             @relation("PayoutAdjustmentJournal")
 
   @@map("journals")
 }
@@ -237,20 +238,22 @@ model Refund {
 }
 
 model Payout {
-  id                String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  merchantId        BigInt       @map("merchant_id")
-  amount            BigInt
-  currency          String       @db.Char(3)
-  status            PayoutStatus @default(pending)
-  failureReason     String?      @map("failure_reason")
-  journalId         BigInt?      @unique @map("journal_id")
-  reversalJournalId BigInt?      @unique @map("reversal_journal_id")
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  resolvedAt        DateTime?    @map("resolved_at") @db.Timestamptz(6)
-  merchant          Merchant     @relation(fields: [merchantId], references: [id])
-  journal           Journal?     @relation("PayoutJournal", fields: [journalId], references: [id])
-  reversalJournal   Journal?     @relation("PayoutReversalJournal", fields: [reversalJournalId], references: [id])
-  attempts          Attempt[]
+  id                  String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  merchantId          BigInt       @map("merchant_id")
+  amount              BigInt
+  currency            String       @db.Char(3)
+  status              PayoutStatus @default(pending)
+  failureReason       String?      @map("failure_reason")
+  journalId           BigInt?      @unique @map("journal_id")
+  reversalJournalId   BigInt?      @unique @map("reversal_journal_id")
+  adjustmentJournalId BigInt?      @unique @map("adjustment_journal_id")
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt          DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  merchant            Merchant     @relation(fields: [merchantId], references: [id])
+  journal             Journal?     @relation("PayoutJournal", fields: [journalId], references: [id])
+  reversalJournal     Journal?     @relation("PayoutReversalJournal", fields: [reversalJournalId], references: [id])
+  adjustmentJournal   Journal?     @relation("PayoutAdjustmentJournal", fields: [adjustmentJournalId], references: [id])
+  attempts            Attempt[]
 
   @@index([merchantId, createdAt])
   @@map("payouts")
