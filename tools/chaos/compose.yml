@@ -9,7 +9,7 @@ services:
         MUTANT: ${MUTANT:-}
     image: carwash-chaos:${MUTANT_TAG:-base}
     init: true
-    cpus: 4
+    cpus: ${CHAOS_CPUS:-4}
     mem_limit: 2560m
     shm_size: 256m
     environment:
