@@ -48,12 +48,12 @@ const LATEST_JOURNALS = `
   ) latest
   ORDER BY id::bigint`
 
-const PAYMENTS = `
+export const PAYMENTS = `
   SELECT p.id::text, m.code AS merchant, p.amount::text, p.currency, p.status::text,
          p.captured_amount::text, p.refunded_amount::text, p.updated_at
   FROM payments p
   JOIN merchants m ON m.id = p.merchant_id
-  WHERE p.id >= uuidv7(interval '-60 seconds')
+  WHERE p.id >= (SELECT uuidv7(interval '-60 seconds'))
   ORDER BY p.id`
 
 @Injectable()
