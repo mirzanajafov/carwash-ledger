@@ -9,7 +9,7 @@ import { describeLedgerRun, runLedger, summarizeLedger, type Lab, type LedgerOpt
 import { describePaymentsRun, runPayments, summarizePayments, type PaymentsOptions, type PaymentsReport } from './payments/run.ts'
 import { LocalKafka } from './kafka.ts'
 import { createRoles, LocalPostgres } from './postgres.ts'
-import { appendJsonLine, createResultsDir, writeJson } from './results.ts'
+import { appendJsonLine, campaignFailed, createResultsDir, writeJson } from './results.ts'
 import { Toxiproxy } from './toxiproxy.ts'
 
 const { values } = parseArgs({
@@ -29,6 +29,7 @@ const { values } = parseArgs({
     'check-every': { type: 'string', default: '5000' },
     settle: { type: 'string', default: '120' },
     'until-violation': { type: 'boolean', default: false },
+    'fail-on-violation': { type: 'boolean', default: false },
     posters: { type: 'string', default: '4' },
     pool: { type: 'string', default: '8' },
     reversals: { type: 'string', default: '0.2' },
@@ -162,6 +163,7 @@ async function main(): Promise<void> {
   }
   writeJson(join(dir, 'summary.json'), summary)
   console.log(JSON.stringify(summary, null, 2))
+  if (values['fail-on-violation'] && campaignFailed(summary)) process.exitCode = 1
 }
 
 await main()
