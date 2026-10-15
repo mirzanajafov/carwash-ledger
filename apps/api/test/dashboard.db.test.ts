@@ -5,6 +5,7 @@ import { PgCtePoster } from '@carwash/ledger'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Database } from '../src/db/database.ts'
 import { Chart } from '../src/ledger/chart.service.ts'
+import { PAYMENTS } from '../src/live/live-feed.ts'
 import { startApi, startStack, type Stack } from './support.ts'
 
 let stack: Stack
@@ -107,6 +108,22 @@ describe('the live feed', () => {
     } finally {
       await live.close()
     }
+  })
+
+  it('finds the last minute of payments through the primary key, not by scanning them all', async () => {
+    const client = await stack.admin.connect()
+    let plan = ''
+    try {
+      await client.query('BEGIN')
+      await client.query('SET LOCAL enable_seqscan = off')
+      const { rows } = await client.query<{ 'QUERY PLAN': string }>(`EXPLAIN ${PAYMENTS}`)
+      plan = rows.map((r) => r['QUERY PLAN']).join('\n')
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+    expect(plan).toMatch(/Index Scan (using|on) payments_pkey/)
+    expect(plan).toMatch(/Index Cond: \(id >= /)
   })
 
   it('keeps up when the log holds more than a batch of journals, and never replays old ones as new', async () => {
