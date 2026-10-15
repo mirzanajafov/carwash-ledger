@@ -54,14 +54,16 @@ export class Toxiproxy {
   }
 
   async #call(method: string, path: string, body?: unknown): Promise<void> {
-    const response = await fetch(`${this.#api}${path}`, {
-      method,
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-    if (!response.ok && response.status !== 404) {
-      throw new Error(`toxiproxy ${method} ${path}: ${response.status} ${await response.text()}`)
-    }
+    await callWithRetries(
+      () =>
+        fetch(`${this.#api}${path}`, {
+          method,
+          headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: AbortSignal.timeout(5000),
+        }),
+      `toxiproxy ${method} ${path}`,
+    )
   }
 
   async replaceProxy(name: string, listenPort: number, upstreamPort: number): Promise<void> {
@@ -92,5 +94,27 @@ export class Toxiproxy {
 
   stop(): void {
     this.#child?.kill('SIGTERM')
+  }
+}
+
+export async function callWithRetries(
+  send: () => Promise<Response>,
+  what: string,
+  attempts = 5,
+  pause: (ms: number) => Promise<unknown> = sleep,
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    let failure: string
+    try {
+      const response = await send()
+      if (response.ok || response.status === 404 || (attempt > 0 && response.status === 409)) return
+      failure = `${response.status} ${await response.text()}`
+      if (response.status < 500) throw new Error(`${what}: ${failure}`)
+    } catch (error) {
+      if ((error as Error).message.startsWith(`${what}: `)) throw error
+      failure = (error as Error).message
+    }
+    if (attempt + 1 >= attempts) throw new Error(`${what}: ${failure} after ${attempts} attempts`)
+    await pause(200 * 2 ** attempt)
   }
 }
