@@ -36,4 +36,4 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v5
-      - run: CHAOS_CPUS=$(nproc) sh tools/chaos/run.sh --runs 3 --duration 30
+      - run: chmod a+w tools/chaos/results && CHAOS_CPUS=$(nproc) sh tools/chaos/run.sh --runs 3 --duration 30
