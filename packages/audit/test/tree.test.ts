@@ -40,6 +40,10 @@ function store(leaves: readonly Hash[]) {
   return source
 }
 
+function flipBit(hash: Hash, bit: number): Hash {
+  return hash.map((byte, i) => (i === bit >> 3 ? byte ^ (1 << (bit & 7)) : byte))
+}
+
 const leavesOf = (n: number, seed: number) => Array.from({ length: n }, (_, i) => leafHash(Uint8Array.of(seed & 0xff, i & 0xff, (i >> 8) & 0xff)))
 
 describe('the Merkle tree', () => {
@@ -65,7 +69,7 @@ describe('the Merkle tree', () => {
     const leaves = leavesOf(130, 2)
     const source = store(leaves)
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 130 }), fc.nat(), fc.nat(), (size, pick, flip) => {
+      fc.property(fc.integer({ min: 1, max: 130 }), fc.nat(), fc.nat(), fc.integer({ min: 0, max: 255 }), (size, pick, node, bit) => {
         const index = pick % size
         const root = rootOf(size, source)
         const proof = inclusionProof(index, size, source)
@@ -73,9 +77,8 @@ describe('the Merkle tree', () => {
         expect(verifyInclusion(leaves[index]!, index, size, proof, root)).toBe(true)
         if (size > 1) expect(verifyInclusion(leaves[(index + 1) % size]!, index, size, proof, root)).toBe(false)
         if (proof.length > 0) {
-          const bad = proof.map((p) => Uint8Array.from(p))
-          const at = flip % bad.length
-          bad[at]![flip % 32]! ^= 1 << (flip % 8)
+          const at = node % proof.length
+          const bad = proof.map((hash, i) => (i === at ? flipBit(hash, bit) : hash))
           expect(verifyInclusion(leaves[index]!, index, size, bad, root)).toBe(false)
         }
       }),
