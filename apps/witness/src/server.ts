@@ -11,12 +11,16 @@ function send(response: ServerResponse, status: number, body: unknown): void {
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
-  for await (const chunk of request) {
-    size += (chunk as Buffer).length
-    if (size > 1_000_000) throw new Refusal('too_large', 'the body is over 1 MB')
-    chunks.push(chunk as Buffer)
+  for await (const chunk of request as AsyncIterable<Buffer>) {
+    size += chunk.length
+    if (size <= 1_000_000) chunks.push(chunk)
   }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  if (size > 1_000_000) throw new Refusal('too_large', 'the body is over 1 MB')
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    throw new Refusal('invalid', 'the body is not JSON')
+  }
 }
 
 function authorized(request: IncomingMessage, token: string): boolean {
@@ -65,10 +69,9 @@ export function createWitnessServer(witness: Witness, token: string): Server {
     routes(request, response).catch((error: unknown) => {
       if (response.headersSent) return
       if (error instanceof Refusal) {
-        const status = error.code === 'invalid' || error.code === 'too_large' ? 400 : 409
+        const status = error.code === 'invalid' ? 400 : error.code === 'too_large' ? 413 : 409
         return send(response, status, { error: { code: error.code, message: error.message } })
       }
-      if (error instanceof SyntaxError) return send(response, 400, { error: { code: 'invalid', message: 'the body is not JSON' } })
       send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })
   })

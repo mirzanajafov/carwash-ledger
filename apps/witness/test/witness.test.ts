@@ -143,6 +143,7 @@ describe('the witness server', () => {
       expect((await post(submission(source, 10), 'wrong-token-1')).status).toBe(401)
       expect((await post(submission(source, 10), 'secret-token-but-longer')).status).toBe(401)
       expect((await post('{"size":')).status).toBe(400)
+      for (let i = 0; i < 10; i++) expect((await post({ ...submission(source, 10), note: 'x'.repeat(2_000_000) })).status).toBe(413)
       expect((await post({ size: 0, root: toHex(rootOf(1, source)) })).status).toBe(400)
       expect((await post({ size: 10, root: 'ZZ' })).status).toBe(400)
       expect((await post({ ...submission(source, 10), proof: Array(65).fill(toHex(rootOf(1, source))) })).status).toBe(400)

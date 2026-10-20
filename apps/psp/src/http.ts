@@ -25,9 +25,9 @@ export async function readJson(request: IncomingMessage): Promise<Record<string,
   let size = 0
   for await (const chunk of request as AsyncIterable<Buffer>) {
     size += chunk.length
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'body_too_large', `the body is larger than ${MAX_BODY_BYTES} bytes`)
-    chunks.push(chunk)
+    if (size <= MAX_BODY_BYTES) chunks.push(chunk)
   }
+  if (size > MAX_BODY_BYTES) throw new HttpError(413, 'body_too_large', `the body is larger than ${MAX_BODY_BYTES} bytes`)
   if (size === 0) return {}
   let body: unknown
   try {

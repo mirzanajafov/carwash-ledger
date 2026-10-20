@@ -257,6 +257,9 @@ describe('PSP simulator', () => {
     expect((await call('GET', '/admin/faults', { auth: 'wrong' })).status).toBe(401)
     expect((await call('GET', '/admin/faults')).status).toBe(401)
     expect((await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { decline: 2 } })).status).toBe(400)
+    for (let i = 0; i < 10; i++) {
+      expect((await call('POST', '/v1/charges', { key: randomUUID(), body: { amount: 100, currency: 'EUR', token: 'tok_ok', note: 'x'.repeat(2_000_000) } })).status).toBe(413)
+    }
   })
 
   it('misstates the amount it did when the token or the plan says so', async () => {
