@@ -10,6 +10,7 @@ class HttpError extends Error {
 
   constructor(status: number, code: string, message: string) {
     super(message)
+    this.name = new.target.name
     this.status = status
     this.code = code
   }
@@ -68,6 +69,7 @@ export function createTamperServer(service: TamperService, token: string): Serve
       if (response.headersSent) return
       if (error instanceof Conflict) return send(response, 409, { error: { code: error.code, message: error.message } })
       if (error instanceof HttpError) return send(response, error.status, { error: { code: error.code, message: error.message } })
+      process.stderr.write(`tamper: ${error instanceof Error ? error.stack : String(error)}\n`)
       send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })
   })
