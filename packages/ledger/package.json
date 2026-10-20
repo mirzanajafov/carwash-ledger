@@ -11,24 +11,22 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json",
-    "test": "vitest run",
-    "test:db": "vitest run --config vitest.db.config.ts"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@carwash/db": "workspace:*",
     "@carwash/failpoints": "workspace:*",
     "@carwash/pg": "workspace:*",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
     "@carwash/invariants": "workspace:*",
     "@carwash/testkit": "workspace:*",
-    "@types/pg": "^8.23.1",
-    "fast-check": "^4.3.0"
+    "@types/pg": "catalog:",
+    "fast-check": "catalog:"
   }
 }

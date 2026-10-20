@@ -23,11 +23,29 @@ const payment = (id: string, status: string): Payment => ({
 describe('the live state', () => {
   it('keeps the newest journals once each and files their entries under the right T-account and side', () => {
     let state = EMPTY
-    state = reduce(state, { type: 'journal', data: journal('7', [['psp_receivable:EUR', '2400'], ['merchant_payable:wash_north', '-2342'], ['platform_fee_revenue:EUR', '-58']]), at: 1 })
-    state = reduce(state, { type: 'journal', data: journal('5', [['psp_receivable:EUR', '900'], ['merchant_payable:wash_north', '-900']]), at: 2 })
+    state = reduce(state, {
+      type: 'journal',
+      data: journal('7', [
+        ['psp_receivable:EUR', '2400'],
+        ['merchant_payable:wash_north', '-2342'],
+        ['platform_fee_revenue:EUR', '-58'],
+      ]),
+      at: 1,
+    })
+    state = reduce(state, {
+      type: 'journal',
+      data: journal('5', [
+        ['psp_receivable:EUR', '900'],
+        ['merchant_payable:wash_north', '-900'],
+      ]),
+      at: 2,
+    })
     state = reduce(state, { type: 'journal', data: journal('7', []), at: 3 })
     expect(state.journals.map((j) => j.id)).toEqual(['7', '5'])
-    expect(state.postings.receivable!.map((p) => [p.side, p.amount])).toEqual([['debit', 900n], ['debit', 2400n]])
+    expect(state.postings.receivable!.map((p) => [p.side, p.amount])).toEqual([
+      ['debit', 900n],
+      ['debit', 2400n],
+    ])
     expect(state.postings.drawer!.map((p) => [p.side, p.amount])).toEqual([['credit', 58n]])
     expect(state.fresh.payables).toBe(2)
   })

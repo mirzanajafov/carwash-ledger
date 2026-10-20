@@ -31,7 +31,7 @@ import { checkKeys, compareBeliefs, readState, unanswered } from './checks.ts'
 import { Clients } from './client.ts'
 import { Forger } from './forger.ts'
 import { Journeys } from './journeys.ts'
-import { planPayments, PROXIES, SERVICES, type PaymentFault, type ProxyName, type ServiceName } from './plan.ts'
+import { planPayments, PROXIES, SERVICES, type PaymentFault, type ProxyName } from './plan.ts'
 
 export interface PspFaults {
   decline: number
@@ -262,9 +262,12 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         if (stopping || kind === 'stopped') return
         const streak = kind === 'boot' ? (bootStreaks.get(service) ?? 0) + 1 : 0
         bootStreaks.set(service, streak)
-        setTimeout(() => {
-          if (!stopping) service.start()
-        }, Math.min(4000, 500 * 2 ** streak))
+        setTimeout(
+          () => {
+            if (!stopping) service.start()
+          },
+          Math.min(4000, 500 * 2 ** streak),
+        )
       },
     }
     const ledgerUrl = (proxy: ProxyName) => withPort(ledgerDb.url('ledger_app'), PROXY_PORTS[proxy])
@@ -362,7 +365,11 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       if (created?.status !== 200) throw new Error(`could not create merchant ${code}: ${JSON.stringify(created?.body)}`)
     }
     await postgres.checkpoint()
-    const journeys = new Journeys(clients, merchants, Object.keys(keys).filter((k) => k !== 'admin'))
+    const journeys = new Journeys(
+      clients,
+      merchants,
+      Object.keys(keys).filter((k) => k !== 'admin'),
+    )
     const forger = new Forger(audit, endpoints, WEBHOOK_SECRET, mulberry32(seed ^ 0x77656268))
 
     let postgresBusy = false
@@ -425,8 +432,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
 
     const tasks: Promise<unknown>[] = []
-    const track = (task: Promise<unknown>) =>
-      tasks.push(task.catch((error: Error) => report.harnessErrors.push(`task: ${error.stack ?? String(error)}`)))
+    const track = (task: Promise<unknown>) => tasks.push(task.catch((error: Error) => report.harnessErrors.push(`task: ${error.stack ?? String(error)}`)))
     const faultTasks: Promise<void>[] = []
     const started = performance.now()
     const now = () => performance.now() - started
@@ -496,7 +502,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     report.settleMs = Math.round(now() - settleStarted!)
     try {
       report.anomalies = await acceptAnomalies(keys.admin!, journeys)
-      log(`anomalies: ${report.anomalies.open} open, ${report.anomalies.accepted} accepted${report.anomalies.failed.length ? `, refused ${report.anomalies.failed.join('; ')}` : ''}`)
+      log(
+        `anomalies: ${report.anomalies.open} open, ${report.anomalies.accepted} accepted${report.anomalies.failed.length ? `, refused ${report.anomalies.failed.join('; ')}` : ''}`,
+      )
     } catch (error) {
       report.harnessErrors.push(`accepting anomalies: ${String(error)}`)
     }
@@ -546,12 +554,22 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(await checkEvents(audit), 'final')
     found.addResults([await checkAudit(audit, witness), await checkSequenced(audit, witness)], 'final')
     found.addResults(
-      [await checkSettlement(audit, { daySeconds: SETTLEMENT_DAY_SECONDS, feeBps: 120, feeFixed: 8, completeThrough: Math.max(...report.settlement.days, -1) })],
+      [
+        await checkSettlement(audit, {
+          daySeconds: SETTLEMENT_DAY_SECONDS,
+          feeBps: 120,
+          feeFixed: 8,
+          completeThrough: Math.max(...report.settlement.days, -1),
+        }),
+      ],
       'final',
     )
     const keyFindings = checkKeys(clients.records.values(), clients.probes)
     found.add('S5', 'final', 'every idempotency key answered one way, and refused a different request', keyFindings.count, keyFindings.examples)
-    const state = await readState(audit, journeys.refused.map((r) => r.key))
+    const state = await readState(
+      audit,
+      journeys.refused.map((r) => r.key),
+    )
     const beliefs = compareBeliefs(journeys.payments, journeys.payouts, journeys.refused, state)
     found.add('S8', 'final', 'the ledger holds what clients were told, and every refused answer left an anomaly', beliefs.count, beliefs.examples)
     const open = unanswered(clients.records.values(), clients.probes)

@@ -221,13 +221,10 @@ describe('PSP simulator', () => {
   it('delivers a duplicated webhook twice with one event id and never sends a dropped one', async () => {
     const duplicated = await authorize('tok_webhook_duplicate')
     const dropped = await authorize('tok_webhook_drop')
-    const copies = await waitFor(
-      async () => {
-        const mine = received.filter((r) => JSON.parse(r.body).data.object.charge?.id === duplicated)
-        return mine.length >= 2 ? mine : undefined
-      },
-      15_000,
-    )
+    const copies = await waitFor(async () => {
+      const mine = received.filter((r) => JSON.parse(r.body).data.object.charge?.id === duplicated)
+      return mine.length >= 2 ? mine : undefined
+    }, 15_000)
     expect(new Set(copies.map((c) => JSON.parse(c.body).id)).size).toBe(1)
     expect(received.some((r) => JSON.parse(r.body).data.object.charge?.id === dropped)).toBe(false)
     const { rows } = await sql.query(
@@ -266,7 +263,9 @@ describe('PSP simulator', () => {
   it('answers every body over 16 kB with 413 and stores nothing under its key', async () => {
     const key = randomUUID()
     for (let i = 0; i < 10; i++) {
-      expect((await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok', note: 'x'.repeat(2_000_000) } })).status).toBe(413)
+      expect((await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok', note: 'x'.repeat(2_000_000) } })).status).toBe(
+        413,
+      )
     }
     expect(await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })).toMatchObject({ status: 200, replayed: false })
   })

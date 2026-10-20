@@ -1,14 +1,7 @@
 import { checkLedger, violations } from '@carwash/invariants'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  AccountRegistry,
-  DuplicateJournalError,
-  InvalidJournalError,
-  checkout,
-  pgAccountLoader,
-  postInTransaction,
-} from '../src/index.ts'
+import { AccountRegistry, DuplicateJournalError, InvalidJournalError, checkout, pgAccountLoader, postInTransaction } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
 let ledger: LedgerFixture
@@ -100,9 +93,9 @@ describe('postInTransaction', () => {
     const lease = await checkout(ledger.app)
     try {
       await lease.client.query('BEGIN')
-      await expect(
-        postInTransaction(lease.client, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) }),
-      ).rejects.toBeInstanceOf(DuplicateJournalError)
+      await expect(postInTransaction(lease.client, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) })).rejects.toBeInstanceOf(
+        DuplicateJournalError,
+      )
       await lease.client.query('ROLLBACK')
     } finally {
       lease.release()

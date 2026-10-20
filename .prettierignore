@@ -1,0 +1,4 @@
+*.md
+pnpm-lock.yaml
+**/results
+apps/web/src/data/evidence.json

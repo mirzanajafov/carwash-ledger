@@ -8,7 +8,9 @@ const publisher = await KafkaPublisher.connect({
   deliveryTimeoutMs: 10_000,
   topicPrefix: process.env.E4_PREFIX!,
 })
-const relay = new Relay(pool, publisher, { workers: 4, batch: 500, pollMs: 50, pauseMs: Number(process.env.E4_PAUSE_MS ?? 10) }, (message) => console.log(`e4-relay: ${message}`))
+const relay = new Relay(pool, publisher, { workers: 4, batch: 500, pollMs: 50, pauseMs: Number(process.env.E4_PAUSE_MS ?? 10) }, (message) =>
+  console.log(`e4-relay: ${message}`),
+)
 relay.start()
 console.log('e4-relay: ready')
 

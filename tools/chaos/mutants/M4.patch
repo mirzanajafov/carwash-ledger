@@ -1,18 +1,14 @@
 --- a/packages/outbox/src/relay.ts
 +++ b/packages/outbox/src/relay.ts
-@@ -61,12 +61,12 @@
-   try {
-     const batch = (await client.query<OutboxRow>(BATCH, [lanes, options.batch])).rows
+@@ -79,10 +79,10 @@
+       lanes = lanes.filter((lane) => used.has(lane))
+     }
      if (batch.length === 0) return null
-+    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [
-+      batch.map((row) => row.id),
-+    ])
++    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [batch.map((row) => row.id)])
      failpoint('relay.before_produce')
      await publisher.publish(batch)
      failpoint('relay.after_produce')
--    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [
--      batch.map((row) => row.id),
--    ])
+-    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [batch.map((row) => row.id)])
      return { lanes, published: batch.length }
    } finally {
      await client.query(UNLOCK, [options.lockClass, lanes])

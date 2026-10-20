@@ -21,12 +21,7 @@ export class PaymentsController {
   }
 
   @Post(':id/capture')
-  capture(
-    @Req() request: AuthedRequest,
-    @Res() response: Response,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: CaptureBody,
-  ): Promise<void> {
+  capture(@Req() request: AuthedRequest, @Res() response: Response, @Param('id', ParseUUIDPipe) id: string, @Body() body: CaptureBody): Promise<void> {
     return this.#idempotency.run(request, response, (owned) => this.#payments.capture(owned, request.client, id, body.amount))
   }
 
@@ -36,12 +31,7 @@ export class PaymentsController {
   }
 
   @Post(':id/refunds')
-  refund(
-    @Req() request: AuthedRequest,
-    @Res() response: Response,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: RefundBody,
-  ): Promise<void> {
+  refund(@Req() request: AuthedRequest, @Res() response: Response, @Param('id', ParseUUIDPipe) id: string, @Body() body: RefundBody): Promise<void> {
     return this.#idempotency.run(request, response, (owned) => this.#payments.refund(owned, request.client, id, body.amount))
   }
 

@@ -35,7 +35,11 @@ export function LiveBoard() {
         {state.balances.length > 0 ? (
           <span className={`inline-flex items-center gap-1.5 ${net === 0n ? 'text-ok' : 'text-bad'}`}>
             <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-              {net === 0n ? <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" /> : <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" />}
+              {net === 0n ? (
+                <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" />
+              ) : (
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" />
+              )}
             </svg>
             {net === 0n ? 'Debits equal credits' : `Off by ${money(net)}`}
           </span>

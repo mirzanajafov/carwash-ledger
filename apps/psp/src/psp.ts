@@ -122,7 +122,9 @@ function operationJson(row: OperationRow) {
 }
 
 export function requestHash(method: string, path: string, body: unknown): Buffer {
-  return createHash('sha256').update(`${method} ${path}\n${canonicalJson(body)}`).digest()
+  return createHash('sha256')
+    .update(`${method} ${path}\n${canonicalJson(body)}`)
+    .digest()
 }
 
 export function canonicalJson(value: unknown): string {
@@ -220,10 +222,7 @@ export class Psp {
   }
 
   async operation(key: string): Promise<unknown> {
-    const { rows } = await this.#pool.query<OperationRow>(
-      `${SELECT_OPERATION} WHERE o.idempotency_key = $1 ORDER BY o.created_at DESC LIMIT 1`,
-      [key],
-    )
+    const { rows } = await this.#pool.query<OperationRow>(`${SELECT_OPERATION} WHERE o.idempotency_key = $1 ORDER BY o.created_at DESC LIMIT 1`, [key])
     if (!rows[0]) throw new HttpError(404, 'operation_not_found', `no operation with idempotency key ${key}`)
     return operationJson(rows[0])
   }
@@ -313,23 +312,12 @@ export class Psp {
     return operationJson(rows[0]!)
   }
 
-  async #enqueueWebhook(
-    client: pg.PoolClient,
-    operationId: string,
-    status: Outcome['status'],
-    body: unknown,
-    behaviour: Behaviour,
-  ): Promise<void> {
+  async #enqueueWebhook(client: pg.PoolClient, operationId: string, status: Outcome['status'], body: unknown, behaviour: Behaviour): Promise<void> {
     if (!this.#settings.webhooks) return
     const eventId = `evt_${randomUUID()}`
     const type = `operation.${status}`
     const payload = { id: eventId, object: 'event', type, created: Math.floor(Date.now() / 1000), data: { object: body } }
-    await client.query('INSERT INTO events (id, operation_id, type, payload) VALUES ($1, $2, $3, $4)', [
-      eventId,
-      operationId,
-      type,
-      payload,
-    ])
+    await client.query('INSERT INTO events (id, operation_id, type, payload) VALUES ($1, $2, $3, $4)', [eventId, operationId, type, payload])
     const { webhook, draw } = behaviour
     let delay = 0
     if (webhook.has('delay')) delay += 30 + Math.floor(draw('webhook.delay.s') * 91)
@@ -337,10 +325,11 @@ export class Psp {
     const dueIn = [delay]
     if (webhook.has('duplicate')) dueIn.push(delay + Math.floor(draw('webhook.duplicate.s') * 6))
     for (const seconds of dueIn) {
-      await client.query(
-        'INSERT INTO deliveries (event_id, due_at, dropped) VALUES ($1, now() + make_interval(secs => $2), $3)',
-        [eventId, seconds, webhook.has('drop')],
-      )
+      await client.query('INSERT INTO deliveries (event_id, due_at, dropped) VALUES ($1, now() + make_interval(secs => $2), $3)', [
+        eventId,
+        seconds,
+        webhook.has('drop'),
+      ])
     }
   }
 }

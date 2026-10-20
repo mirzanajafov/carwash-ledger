@@ -9,8 +9,22 @@
   "scripts": {
     "generate": "pnpm --filter @carwash/db generate",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "test:db": "pnpm -r --workspace-concurrency=1 test:db"
+    "typecheck": "tsc && pnpm -r typecheck",
+    "test": "vitest run --project unit --project web",
+    "test:db": "vitest run --project db",
+    "lint": "eslint --max-warnings 0 .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "3.9.10",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "catalog:"
   }
 }

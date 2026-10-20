@@ -19,14 +19,7 @@ export async function crashKafka(kafka: LocalKafka, downMs: number): Promise<num
   return Math.round(await kafka.waitReady())
 }
 
-export async function holdToxic(
-  toxiproxy: Toxiproxy,
-  proxy: string,
-  toxic: ToxicKind,
-  lastsMs: number,
-  name: string,
-  random: Random,
-): Promise<void> {
+export async function holdToxic(toxiproxy: Toxiproxy, proxy: string, toxic: ToxicKind, lastsMs: number, name: string, random: Random): Promise<void> {
   if (toxic === 'down') {
     await toxiproxy.setEnabled(proxy, false)
     await sleep(lastsMs)

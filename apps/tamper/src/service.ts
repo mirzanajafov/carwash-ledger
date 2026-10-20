@@ -57,7 +57,14 @@ export class TamperService {
     const current = this.#current
     if (!current) return null
     const restoresAt = this.#autoRestoreMs > 0 ? new Date(Date.parse(current.at) + this.#autoRestoreMs).toISOString() : null
-    return { tamper_class: current.tamperClass, seq: current.seq, journal_id: current.journalId, witnessed_size: current.witnessedSize, at: current.at, restores_at: restoresAt }
+    return {
+      tamper_class: current.tamperClass,
+      seq: current.seq,
+      journal_id: current.journalId,
+      witnessed_size: current.witnessedSize,
+      at: current.at,
+      restores_at: restoresAt,
+    }
   }
 
   tamper(tamperClass: TamperClass): Promise<Tamper> {

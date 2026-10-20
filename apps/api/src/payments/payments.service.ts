@@ -42,9 +42,7 @@ export class PaymentsService {
   async create(owned: OwnedKey, input: CreatePaymentInput): Promise<Final> {
     if (owned.paymentId === null) {
       await this.#db.transaction(async (client) => {
-        const { rows } = await client.query<{ id: string; currency: string }>('SELECT id::text, currency FROM merchants WHERE code = $1', [
-          input.merchant,
-        ])
+        const { rows } = await client.query<{ id: string; currency: string }>('SELECT id::text, currency FROM merchants WHERE code = $1', [input.merchant])
         const merchant = rows[0]
         if (!merchant) throw notFound(`merchant ${input.merchant}`)
         if (merchant.currency !== input.currency) {
@@ -102,10 +100,7 @@ export class PaymentsService {
         if (BigInt(amount) > available) {
           throw new ApiError(409, 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
         }
-        const inserted = await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [
-          payment.id,
-          amount,
-        ])
+        const inserted = await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [payment.id, amount])
         const refundId = inserted.rows[0]!.id
         await client.query(`INSERT INTO attempts (kind, payment_id, refund_id, amount, currency) VALUES ('refund', $1, $2, $3, $4)`, [
           payment.id,

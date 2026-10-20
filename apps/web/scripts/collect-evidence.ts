@@ -34,14 +34,22 @@ function round(x: number, digits = 1): number {
   return Math.round(x * f) / f
 }
 
+interface E1Cell {
+  mode: string
+  connections: number
+  rate: number
+  achieved: number[]
+  p99: number[]
+}
+
 function e1() {
-  const cells = new Map<string, { mode: string; connections: number; rate: number; achieved: number[]; p99: number[] }>()
+  const cells = new Map<string, E1Cell>()
   const take = (dir: string, only?: string) => {
     for (const cell of lines(join(BENCH, 'e1', dir, 'cells.jsonl'))) {
       if (!E1_MODES.includes(cell.mode) || (only && cell.mode !== only)) continue
       if (!only && E1_OVERRIDES[cell.mode]) continue
       const key = `${cell.mode}:${cell.connections}:${cell.rate}`
-      const row = cells.get(key) ?? { mode: cell.mode, connections: cell.connections, rate: cell.rate, achieved: [], p99: [] }
+      const row: E1Cell = cells.get(key) ?? { mode: cell.mode, connections: cell.connections, rate: cell.rate, achieved: [], p99: [] }
       row.achieved.push(cell.load.achievedPerSecond)
       row.p99.push(cell.load.latencyMs.p99)
       cells.set(key, row)
@@ -52,7 +60,12 @@ function e1() {
   const points = [...cells.values()]
     .map((c) => ({ mode: c.mode, connections: c.connections, rate: c.rate, achieved: round(median(c.achieved)), p99: round(median(c.p99)) }))
     .sort((a, b) => a.mode.localeCompare(b.mode) || a.connections - b.connections || a.rate - b.rate)
-  return { source: [E1_MAIN, ...Object.values(E1_OVERRIDES)], modes: E1_MODES, connections: [...new Set(points.map((p) => p.connections))].sort((a, b) => a - b), points }
+  return {
+    source: [E1_MAIN, ...Object.values(E1_OVERRIDES)],
+    modes: E1_MODES,
+    connections: [...new Set(points.map((p) => p.connections))].sort((a, b) => a - b),
+    points,
+  }
 }
 
 function e2() {
@@ -140,7 +153,9 @@ function e6() {
         }))
     : []
   const incremental = scaleDir
-    ? (json(join(root, scaleDir, 'scale.json')) as any[]).filter((step) => step.incremental).map((step) => ({ journals: step.incremental, ms: step.verifyMedianMs }))
+    ? (json(join(root, scaleDir, 'scale.json')) as any[])
+        .filter((step) => step.incremental)
+        .map((step) => ({ journals: step.incremental, ms: step.verifyMedianMs }))
     : []
   const lag = lagDir ? json(join(root, lagDir, 'lag.json')).lagMs : null
   const trials = trialsDir ? json(join(root, trialsDir, 'trials.json')) : null
@@ -150,13 +165,14 @@ function e6() {
     incremental,
     lag: lag ? { rate: 200, p50: Math.round(lag.p50), p99: Math.round(lag.p99), max: Math.round(lag.max) } : null,
     trials: trials
-      ? Object.entries(trials.result as Record<string, any>).map(([key, row]) => ({
-          key,
-          trials: row.trials,
-          caught: row.caught,
-          named: row.named,
-          caughtWithoutWitness: row.caughtWithoutWitness,
-        }))
+      ? Object.entries(trials.result as Record<string, any>)
+          .map(([key, row]) => ({
+            key,
+            trials: row.trials,
+            caught: row.caught,
+            named: row.named,
+            caughtWithoutWitness: row.caughtWithoutWitness,
+          }))
           .sort((a, b) => a.key.slice(0, 7).localeCompare(b.key.slice(0, 7)) || Number(b.key.endsWith('covered')) - Number(a.key.endsWith('covered')))
       : [],
   }
@@ -164,7 +180,11 @@ function e6() {
 
 function e7() {
   const root = join(BENCH, 'e7')
-  const dirs = existsSync(root) ? readdirSync(root).sort().filter((d) => existsSync(join(root, d, 'summary.json'))) : []
+  const dirs = existsSync(root)
+    ? readdirSync(root)
+        .sort()
+        .filter((d) => existsSync(join(root, d, 'summary.json')))
+    : []
   const runs = dirs.map((dir) => ({ dir, seed: json(join(root, dir, 'seed.json')), summary: json(join(root, dir, 'summary.json')) as any[] }))
   const biggest = runs.sort((a, b) => b.seed.entries - a.seed.entries)[0]
   if (!biggest) return { source: null, entries: 0, rows: [] }
@@ -197,7 +217,8 @@ function chaos() {
     const file = join(CHAOS, dir, 'summary.json')
     if (!existsSync(file)) continue
     const s = json(file)
-    const sum = (counts: Record<string, number> | number | undefined): number => (typeof counts === 'number' ? counts : Object.values(counts ?? {}).reduce((a, b) => a + b, 0))
+    const sum = (counts: Record<string, number> | number | undefined): number =>
+      typeof counts === 'number' ? counts : Object.values(counts ?? {}).reduce((a, b) => a + b, 0)
     runs.push({
       dir,
       mode: s.mode ?? 'ledger',
@@ -217,4 +238,6 @@ function chaos() {
 
 const evidence = { e1: e1(), e2: e2(), e4: e4(), e5: e5(), e6: e6(), e7: e7(), chaos: chaos() }
 writeFileSync(OUT, `${JSON.stringify(evidence, null, 1)}\n`)
-console.log(`wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e4.steady.length} E4 rates and ${evidence.e4.outages.length} outages, ${evidence.e5.rows.length} E5 rows, ${evidence.e6.scale.length} E6 sizes and ${evidence.e6.trials.length} trial rows, ${evidence.e7.rows.length} E7 procedures, ${evidence.chaos.runs.length} chaos campaigns`)
+console.log(
+  `wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e4.steady.length} E4 rates and ${evidence.e4.outages.length} outages, ${evidence.e5.rows.length} E5 rows, ${evidence.e6.scale.length} E6 sizes and ${evidence.e6.trials.length} trial rows, ${evidence.e7.rows.length} E7 procedures, ${evidence.chaos.runs.length} chaos campaigns`,
+)

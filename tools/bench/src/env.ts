@@ -26,9 +26,8 @@ export async function describeEnvironment(admin: pg.Pool): Promise<Record<string
      WHERE name IN ('server_version', 'shared_buffers', 'synchronous_commit', 'fsync', 'wal_sync_method', 'max_connections')`,
   )
   return {
-    commit: process.env.GIT_COMMIT && process.env.GIT_COMMIT !== 'unknown'
-      ? process.env.GIT_COMMIT
-      : (tryRun('git', ['rev-parse', '--short', 'HEAD']) ?? 'unknown'),
+    commit:
+      process.env.GIT_COMMIT && process.env.GIT_COMMIT !== 'unknown' ? process.env.GIT_COMMIT : (tryRun('git', ['rev-parse', '--short', 'HEAD']) ?? 'unknown'),
     node: process.version,
     platform: process.platform,
     cpu: cpus()[0]?.model,

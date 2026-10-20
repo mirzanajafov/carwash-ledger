@@ -21,7 +21,13 @@ const log = (line: string) => process.stdout.write(`${new Date().toISOString()} 
 const pending = new Set<Promise<void>>()
 
 async function wash(v: Visit): Promise<void> {
-  const created = await api.send(clientKey!, 'POST', '/v1/payments', { amount: v.amount, currency: 'EUR', merchant: v.merchant, token: v.token, capture: v.capture })
+  const created = await api.send(clientKey!, 'POST', '/v1/payments', {
+    amount: v.amount,
+    currency: 'EUR',
+    merchant: v.merchant,
+    token: v.token,
+    capture: v.capture,
+  })
   log(`${v.program} at ${v.merchant} for ${v.amount}: ${created.status} ${created.body?.status ?? created.body?.error?.code ?? ''}`)
   if (created.status !== 200) return
   const id = created.body.id as string
@@ -56,7 +62,14 @@ let nextPayout = Date.now() + payoutEveryMs
 while (!stop.signal.aborted) {
   await sleep(gapMs(random, perMinute), undefined, { signal: stop.signal }).catch(() => undefined)
   if (stop.signal.aborted) break
-  track(wash(visit(random, merchants.map((m) => m.code))))
+  track(
+    wash(
+      visit(
+        random,
+        merchants.map((m) => m.code),
+      ),
+    ),
+  )
   if (Date.now() >= nextPayout) {
     nextPayout = Date.now() + payoutEveryMs
     const merchant = merchants[Math.floor(random() * merchants.length)]!.code

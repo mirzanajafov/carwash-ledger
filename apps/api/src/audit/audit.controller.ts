@@ -61,7 +61,14 @@ export class AuditController {
   @Get('journals/:id')
   async journal(@Param('id') id: string) {
     if (!/^\d{1,18}$/.test(id)) throw badRequest('the journal id must be a number')
-    const { rows } = await this.#db.pool.query<{ id: string; external_ref: string; micros: string; created_at: Date; seq: string | null; entries: { id: string; account_id: string; account: string; amount: string }[] }>(
+    const { rows } = await this.#db.pool.query<{
+      id: string
+      external_ref: string
+      micros: string
+      created_at: Date
+      seq: string | null
+      entries: { id: string; account_id: string; account: string; amount: string }[]
+    }>(
       `SELECT j.id::text, j.external_ref, (extract(epoch FROM j.created_at) * 1000000)::bigint::text AS micros, j.created_at,
               (SELECT a.seq::text FROM audit_log a WHERE a.journal_id = j.id) AS seq,
               json_agg(json_build_object('id', e.id::text, 'account_id', e.account_id::text, 'account', acc.code, 'amount', e.amount::text) ORDER BY e.id) AS entries

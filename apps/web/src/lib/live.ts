@@ -43,9 +43,7 @@ export interface LiveState {
 }
 
 export type LiveAction =
-  | { type: 'balances'; data: Balance[]; at: number }
-  | { type: 'journal'; data: Journal; at: number }
-  | { type: 'payment'; data: Payment; at: number }
+  { type: 'balances'; data: Balance[]; at: number } | { type: 'journal'; data: Journal; at: number } | { type: 'payment'; data: Payment; at: number }
 
 export const EMPTY: LiveState = { balances: [], journals: [], payments: [], postings: {}, fresh: {}, updatedAt: null }
 
@@ -64,7 +62,13 @@ export function reduce(state: LiveState, action: LiveAction): LiveState {
       const book = bookOf(entry.account)
       if (!book) continue
       const amount = BigInt(entry.amount)
-      const posting: Posting = { journal: action.data.id, ref: action.data.external_ref, side: amount > 0n ? 'debit' : 'credit', amount: amount < 0n ? -amount : amount, at: action.data.posted_at }
+      const posting: Posting = {
+        journal: action.data.id,
+        ref: action.data.external_ref,
+        side: amount > 0n ? 'debit' : 'credit',
+        amount: amount < 0n ? -amount : amount,
+        at: action.data.posted_at,
+      }
       postings[book.key] = [posting, ...(postings[book.key] ?? [])].slice(0, POSTINGS)
       fresh[book.key] = action.at
     }

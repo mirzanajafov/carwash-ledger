@@ -30,7 +30,11 @@ export interface RelayOptions {
 
 export const RELAY_DEFAULTS: RelayOptions = { workers: 4, batch: 500, pollMs: 50, idleMaxMs: 1000, pauseMs: 10, lockClass: 0x0b0c }
 
-export function nextWait(idleMs: number, relayed: Relayed | null, options: Pick<RelayOptions, 'batch' | 'pollMs' | 'idleMaxMs' | 'pauseMs'>): { waitMs: number; idleMs: number } {
+export function nextWait(
+  idleMs: number,
+  relayed: Relayed | null,
+  options: Pick<RelayOptions, 'batch' | 'pollMs' | 'idleMaxMs' | 'pauseMs'>,
+): { waitMs: number; idleMs: number } {
   if (!relayed) return { waitMs: idleMs, idleMs: Math.min(idleMs * 2, Math.max(options.idleMaxMs, options.pollMs)) }
   return { waitMs: relayed.published < options.batch ? options.pauseMs : 0, idleMs: options.pollMs }
 }
@@ -78,9 +82,7 @@ export async function relayOnce(client: pg.ClientBase, publisher: Publisher, opt
     failpoint('relay.before_produce')
     await publisher.publish(batch)
     failpoint('relay.after_produce')
-    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [
-      batch.map((row) => row.id),
-    ])
+    await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[]) AND published_at IS NULL', [batch.map((row) => row.id)])
     return { lanes, published: batch.length }
   } finally {
     await client.query(UNLOCK, [options.lockClass, lanes])

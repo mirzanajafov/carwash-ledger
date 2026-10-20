@@ -82,7 +82,13 @@ export class DashboardController {
       await checkAudit(pool, witness),
       await checkSequenced(pool, undefined, { graceSeconds: 10 }),
     ]
-    return { object: 'invariant_checks', ran_at: new Date().toISOString(), ms: Math.round(performance.now() - started), witnessed: witness !== undefined, results }
+    return {
+      object: 'invariant_checks',
+      ran_at: new Date().toISOString(),
+      ms: Math.round(performance.now() - started),
+      witnessed: witness !== undefined,
+      results,
+    }
   }
 
   @Post('verify')

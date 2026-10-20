@@ -7,7 +7,19 @@ import { Database } from '../db/database.ts'
 export type LiveEvent =
   | { type: 'balances'; data: { code: string; type: string; currency: string; amount: string }[] }
   | { type: 'journal'; data: { id: string; external_ref: string; posted_at: string; entries: { account: string; amount: string }[] } }
-  | { type: 'payment'; data: { id: string; merchant: string; amount: string; currency: string; status: string; captured_amount: string; refunded_amount: string; updated_at: string } }
+  | {
+      type: 'payment'
+      data: {
+        id: string
+        merchant: string
+        amount: string
+        currency: string
+        status: string
+        captured_amount: string
+        refunded_amount: string
+        updated_at: string
+      }
+    }
 
 type Listener = (event: LiveEvent) => void
 type JournalEvent = Extract<LiveEvent, { type: 'journal' }>
@@ -158,7 +170,16 @@ export class LiveFeed implements OnModuleDestroy {
         this.#emit(event)
       }
       for (const id of this.#seen) if (id <= this.#cursor! - LOOK_BACK) this.#seen.delete(id)
-      const { rows: payments } = await pool.query<{ id: string; merchant: string; amount: string; currency: string; status: string; captured_amount: string; refunded_amount: string; updated_at: Date }>(PAYMENTS)
+      const { rows: payments } = await pool.query<{
+        id: string
+        merchant: string
+        amount: string
+        currency: string
+        status: string
+        captured_amount: string
+        refunded_amount: string
+        updated_at: Date
+      }>(PAYMENTS)
       const current = new Set<string>()
       for (const row of payments) {
         current.add(row.id)

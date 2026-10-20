@@ -48,7 +48,11 @@ export function simulate(
     for (let d = span.linesFrom; d <= span.linesThrough; d++) lines.push(...(world.files.get(d) ?? []))
     const items = world.items.filter((item) => item.day >= span.itemsFrom && item.day <= span.itemsThrough)
     const result = reconcile(lines, items, { contract: options.contract, fallback: options.fallback, settledThrough: day })
-    for (let d = Math.max(0, span.keepFrom); d <= span.keepThrough; d++) byDay.set(d, result.breaks.filter((b) => b.day === d))
+    for (let d = Math.max(0, span.keepFrom); d <= span.keepThrough; d++)
+      byDay.set(
+        d,
+        result.breaks.filter((b) => b.day === d),
+      )
     for (const match of result.matches) placement.set(match.line, match.item as LabelledItem)
     for (const b of result.breaks) if (b.day >= span.keepFrom && b.day <= span.keepThrough) seen.add(key(b))
   }

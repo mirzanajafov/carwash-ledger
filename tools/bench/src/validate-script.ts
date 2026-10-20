@@ -1,10 +1,7 @@
 import type { BalanceMode } from '@carwash/ledger'
 
 export function pgbenchScript(mode: BalanceMode): string {
-  const locks =
-    mode === 'locked'
-      ? 'ARRAY[:receivable, :fees, :m]::bigint[], ARRAY[0, 0, 0]::int[]'
-      : 'ARRAY[:m]::bigint[], ARRAY[0]::int[]'
+  const locks = mode === 'locked' ? 'ARRAY[:receivable, :fees, :m]::bigint[], ARRAY[0, 0, 0]::int[]' : 'ARRAY[:m]::bigint[], ARRAY[0]::int[]'
   const deltas =
     mode === 'locked'
       ? 'ARRAY[:receivable, :m, :fees]::bigint[], ARRAY[0, 0, 0]::int[], ARRAY[:gross, :nneg, :fneg]::bigint[]'

@@ -26,9 +26,9 @@ export default async function AdminPage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Admin.</h1>
         <p className="text-muted">
-          Visitors share the demo, so the plug, the checks and the bank&apos;s weather each run once in a while for everyone. An admin key opens a session
-          that skips those turns and can set the bank&apos;s fault plan by hand. The key is checked once and never kept; the session lives in a cookie this
-          site can&apos;t read from a script, ends after 12 hours, on logout, or as soon as the key is revoked.
+          Visitors share the demo, so the plug, the checks and the bank&apos;s weather each run once in a while for everyone. An admin key opens a session that
+          skips those turns and can set the bank&apos;s fault plan by hand. The key is checked once and never kept; the session lives in a cookie this site
+          can&apos;t read from a script, ends after 12 hours, on logout, or as soon as the key is revoked.
         </p>
       </div>
       {session ? (

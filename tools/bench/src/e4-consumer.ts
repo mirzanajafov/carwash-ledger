@@ -7,9 +7,7 @@ const spec: ConsumerSpec = {
   name: 'e4',
   topic: TOPICS.payments,
   apply: async (client, events) => {
-    await client.query('INSERT INTO e4_consumed (event_id, consumed_at) SELECT unnest($1::uuid[]), clock_timestamp()', [
-      events.map((event) => event.id),
-    ])
+    await client.query('INSERT INTO e4_consumed (event_id, consumed_at) SELECT unnest($1::uuid[]), clock_timestamp()', [events.map((event) => event.id)])
   },
 }
 

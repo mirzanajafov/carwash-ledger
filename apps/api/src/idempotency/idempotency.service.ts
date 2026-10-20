@@ -88,10 +88,10 @@ export class IdempotencyService {
     const hash = requestHash(method, path, body)
     const keyParams = [clientId, key]
     return this.#db.transaction(async (client) => {
-      await client.query(
-        'DELETE FROM idempotency_keys WHERE client_id = $1 AND key = $2 AND created_at <= now() - make_interval(secs => $3)',
-        [...keyParams, this.#config.idempotencyWindowSeconds],
-      )
+      await client.query('DELETE FROM idempotency_keys WHERE client_id = $1 AND key = $2 AND created_at <= now() - make_interval(secs => $3)', [
+        ...keyParams,
+        this.#config.idempotencyWindowSeconds,
+      ])
       const inserted = await client.query<{ lease_id: string }>(
         `INSERT INTO idempotency_keys (client_id, key, method, path, request_hash, locked_until, lease_id)
          VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6), gen_random_uuid())
@@ -168,10 +168,11 @@ export class IdempotencyService {
   }
 
   async abandon(owned: OwnedKey): Promise<void> {
-    const deleted = await this.#db.pool.query(
-      `DELETE FROM idempotency_keys WHERE ${OWNED} AND state = 'started' AND recovery_point = 'started'`,
-      [owned.clientId, owned.key, owned.leaseId],
-    )
+    const deleted = await this.#db.pool.query(`DELETE FROM idempotency_keys WHERE ${OWNED} AND state = 'started' AND recovery_point = 'started'`, [
+      owned.clientId,
+      owned.key,
+      owned.leaseId,
+    ])
     if (deleted.rowCount === 0) await this.release(owned)
   }
 

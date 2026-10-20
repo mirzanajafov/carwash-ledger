@@ -74,10 +74,16 @@ export class Settlements {
         journalId = await postInTransaction(client, this.#chart.registry, { externalRef: `settlement:${file.id}`, entries })
         await journalEvents(client, journalId)
       }
-      await client.query(
-        'INSERT INTO settlement_files (id, day, currency, lines, gross, fee, net, journal_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [file.id, file.day, file.currency, file.lines.length, file.gross, file.fee, file.net, journalId],
-      )
+      await client.query('INSERT INTO settlement_files (id, day, currency, lines, gross, fee, net, journal_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [
+        file.id,
+        file.day,
+        file.currency,
+        file.lines.length,
+        file.gross,
+        file.fee,
+        file.net,
+        journalId,
+      ])
       await client.query(
         `INSERT INTO settlement_lines (file_id, line, operation, reference, kind, gross, fee, net, operated_at)
          SELECT $1, * FROM unnest($2::int[], $3::text[], $4::text[], $5::text[], $6::bigint[], $7::bigint[], $8::bigint[], $9::timestamptz[])`,
@@ -99,20 +105,36 @@ export class Settlements {
 
   async reconcile(currency: string): Promise<ReconcileSummary | undefined> {
     const calendar = await this.#psp.calendar()
-    if (calendar.kind === 'unknown') throw new ApiError(503, 'psp_unavailable', `the PSP's calendar is not available (${calendar.reason})`, { 'Retry-After': '5' })
-    const { rows: latest } = await this.#db.pool.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [currency])
+    if (calendar.kind === 'unknown')
+      throw new ApiError(503, 'psp_unavailable', `the PSP's calendar is not available (${calendar.reason})`, { 'Retry-After': '5' })
+    const { rows: latest } = await this.#db.pool.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [
+      currency,
+    ])
     const through = latest[0]!.day
     if (through === null) return undefined
     const span = window(through, this.#config.reconWindowDays)
     const receivable = this.#chart.accounts(currency).receivable.id
     const items = (
-      await this.#db.pool.query<Omit<LedgerItem, 'gross'> & { gross: string }>(ITEMS, [calendar.daySeconds, receivable, currency, span.itemsFrom, span.itemsThrough])
+      await this.#db.pool.query<Omit<LedgerItem, 'gross'> & { gross: string }>(ITEMS, [
+        calendar.daySeconds,
+        receivable,
+        currency,
+        span.itemsFrom,
+        span.itemsThrough,
+      ])
     ).rows.map((row) => ({ ...row, gross: BigInt(row.gross) }))
     const lines = (
-      await this.#db.pool.query<{ fileId: string; day: number; line: number; operation: string; reference: string; kind: 'capture' | 'refund'; gross: string; fee: string; net: string }>(
-        LINES,
-        [currency, span.linesFrom, span.linesThrough],
-      )
+      await this.#db.pool.query<{
+        fileId: string
+        day: number
+        line: number
+        operation: string
+        reference: string
+        kind: 'capture' | 'refund'
+        gross: string
+        fee: string
+        net: string
+      }>(LINES, [currency, span.linesFrom, span.linesThrough])
     ).rows.map((row) => ({ ...row, gross: BigInt(row.gross), fee: BigInt(row.fee), net: BigInt(row.net) }))
     const result = reconcile(lines, items, {
       contract: { bps: BigInt(this.#config.pspFeeBps), fixed: this.#config.pspFeeFixed },
@@ -185,7 +207,17 @@ export class Settlements {
 
   async days(currency: string, limit: number) {
     const calendar = await this.#psp.calendar()
-    const { rows } = await this.#db.pool.query<{ day: number; id: string; lines: number; gross: string; fee: string; net: string; journal_id: string | null; received_at: Date; breaks: Record<string, number> | null }>(
+    const { rows } = await this.#db.pool.query<{
+      day: number
+      id: string
+      lines: number
+      gross: string
+      fee: string
+      net: string
+      journal_id: string | null
+      received_at: Date
+      breaks: Record<string, number> | null
+    }>(
       `SELECT f.day::int AS day, f.id, f.lines, f.gross::text, f.fee::text, f.net::text, f.journal_id::text, f.received_at,
               (SELECT jsonb_object_agg(class, n) FROM (SELECT class, count(*)::int AS n FROM recon_breaks b WHERE b.currency = f.currency AND b.day = f.day GROUP BY class) c) AS breaks
        FROM settlement_files f WHERE f.currency = $1 ORDER BY f.day DESC LIMIT $2`,
@@ -199,10 +231,18 @@ export class Settlements {
   }
 
   async day(currency: string, day: number, limit: number) {
-    const { rows: files } = await this.#db.pool.query<{ id: string; lines: number; gross: string; fee: string; net: string; journal_id: string | null; received_at: Date }>(
-      `SELECT id, lines, gross::text, fee::text, net::text, journal_id::text, received_at FROM settlement_files WHERE currency = $1 AND day = $2`,
-      [currency, day],
-    )
+    const { rows: files } = await this.#db.pool.query<{
+      id: string
+      lines: number
+      gross: string
+      fee: string
+      net: string
+      journal_id: string | null
+      received_at: Date
+    }>(`SELECT id, lines, gross::text, fee::text, net::text, journal_id::text, received_at FROM settlement_files WHERE currency = $1 AND day = $2`, [
+      currency,
+      day,
+    ])
     const file = files[0]
     const { rows: lines } = file
       ? await this.#db.pool.query(
@@ -234,4 +274,3 @@ export class Settlements {
     return first ?? currentDay
   }
 }
-

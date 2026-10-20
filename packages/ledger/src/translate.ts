@@ -1,9 +1,4 @@
-import {
-  AlreadyReversedError,
-  DuplicateJournalError,
-  LedgerError,
-  LedgerRuleError,
-} from './errors.ts'
+import { AlreadyReversedError, DuplicateJournalError, LedgerError, LedgerRuleError } from './errors.ts'
 import type { JournalPlan } from './plan.ts'
 import { errorText, sqlStateOf } from './sql-state.ts'
 

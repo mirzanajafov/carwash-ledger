@@ -12,19 +12,19 @@
   },
   "scripts": {
     "generate": "prisma generate",
-    "build": "prisma generate && tsc -p tsconfig.json",
-    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "typecheck": "prisma generate && tsc",
     "migrate": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.2",
-    "@types/pg": "^8.23.1",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@types/pg": "catalog:",
     "dotenv": "^18.0.3",
     "prisma": "^7.10.0"
   }

@@ -18,7 +18,8 @@ export class Frontier {
 
   constructor(size = 0, edge: readonly Hash[] = []) {
     if (!Number.isSafeInteger(size) || size < 0) throw new RangeError('a tree size is a non-negative integer')
-    if (edge.length !== completeSubtrees(size)) throw new Error(`a tree of ${size} leaves has ${completeSubtrees(size)} complete subtrees on its right edge, not ${edge.length}`)
+    if (edge.length !== completeSubtrees(size))
+      throw new Error(`a tree of ${size} leaves has ${completeSubtrees(size)} complete subtrees on its right edge, not ${edge.length}`)
     this.#size = size
     this.#edge = edge.map((hash) => Uint8Array.from(hash))
   }

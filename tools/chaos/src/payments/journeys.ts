@@ -133,9 +133,7 @@ export class Journeys {
       }
       const captureBody = journey.captureAmount === journey.amount ? {} : { amount: journey.captureAmount }
       const path = `/v1/payments/${payment.id}/capture`
-      const sent = await Promise.all(
-        Array.from({ length: journey.rival ? 2 : 1 }, () => this.#send(caller, 'capture', path, captureBody, journey.duplicate)),
-      )
+      const sent = await Promise.all(Array.from({ length: journey.rival ? 2 : 1 }, () => this.#send(caller, 'capture', path, captureBody, journey.duplicate)))
       if (sent.some((s) => s.answer === undefined)) return 'stopped'
       const won = sent.filter((s) => s.answer!.status === 200)
       const lost = sent.filter((s) => s.answer!.status !== 200)

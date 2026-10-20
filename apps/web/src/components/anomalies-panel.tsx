@@ -28,7 +28,8 @@ function describe(a: Anomaly): string {
   const asked = money(a.attempt.amount, a.attempt.currency)
   const where = a.merchant ? ` at ${merchantName(a.merchant)}` : ''
   if (a.resolution === 'accepted') return `A ${a.attempt.kind}${where}, posted at the bank's ${money(a.attempt.amount, a.attempt.currency)}.`
-  if (a.kind === 'answer_mismatch' && a.bank_amount) return `A ${a.attempt.kind} of ${asked}${where}: the bank says ${money(a.bank_amount, a.attempt.currency)}.`
+  if (a.kind === 'answer_mismatch' && a.bank_amount)
+    return `A ${a.attempt.kind} of ${asked}${where}: the bank says ${money(a.bank_amount, a.attempt.currency)}.`
   return `A ${a.attempt.kind} of ${asked}${where}: ${a.kind.replaceAll('_', ' ')}.`
 }
 

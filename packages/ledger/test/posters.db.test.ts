@@ -40,9 +40,7 @@ describe('concurrent captures on the hot accounts', () => {
         const posted = BigInt(journals - gaveUp.length)
         expect(await readBalance(ledger.app, accounts.receivable)).toBe(gross * posted)
         expect(await readBalance(ledger.app, accounts.fees)).toBe(-fee * posted)
-        const merchantTotal = (
-          await Promise.all(accounts.merchants.map((m) => readBalance(ledger.app, m)))
-        ).reduce((sum, b) => sum + b, 0n)
+        const merchantTotal = (await Promise.all(accounts.merchants.map((m) => readBalance(ledger.app, m)))).reduce((sum, b) => sum + b, 0n)
         expect(merchantTotal).toBe(-(gross - fee) * posted)
         const leftovers = await ledger.app.query('SELECT 1 FROM journals WHERE external_ref = ANY($1)', [gaveUp])
         expect(leftovers.rowCount).toBe(0)

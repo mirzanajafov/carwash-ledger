@@ -16,16 +16,16 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@carwash/pg": "workspace:*",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.2",
-    "@types/pg": "^8.23.1"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@types/pg": "catalog:"
   }
 }

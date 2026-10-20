@@ -82,7 +82,10 @@ const summary = [...groups.values()].map((group) => {
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
 const dir = join(fileURLToPath(new URL('..', import.meta.url)), values.out!, stamp)
 mkdirSync(dir, { recursive: true })
-writeFileSync(join(dir, 'run.json'), `${JSON.stringify({ experiment: 'e5', options: values, contract: { bps: 120, fixed: 8 }, node: process.version }, null, 2)}\n`)
+writeFileSync(
+  join(dir, 'run.json'),
+  `${JSON.stringify({ experiment: 'e5', options: values, contract: { bps: 120, fixed: 8 }, node: process.version }, null, 2)}\n`,
+)
 writeFileSync(join(dir, 'cells.json'), `${JSON.stringify(cells, null, 2)}\n`)
 writeFileSync(join(dir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
 console.log(`writing to ${dir}`)

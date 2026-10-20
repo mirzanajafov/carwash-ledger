@@ -48,10 +48,13 @@ export class WebhooksService {
     const seen = await this.#db.pool.query<{ outcome: string }>('SELECT outcome FROM webhook_events WHERE id = $1', [event.id])
     if (seen.rows[0]) return { received: true, outcome: seen.rows[0].outcome, duplicate: true }
     const outcome = await this.check(event.attemptKey)
-    await this.#db.pool.query(
-      `INSERT INTO webhook_events (id, type, attempt_id, outcome, payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
-      [event.id, event.type, outcome === 'unmatched' ? null : event.attemptKey, outcome, JSON.stringify(event.payload)],
-    )
+    await this.#db.pool.query(`INSERT INTO webhook_events (id, type, attempt_id, outcome, payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`, [
+      event.id,
+      event.type,
+      outcome === 'unmatched' ? null : event.attemptKey,
+      outcome,
+      JSON.stringify(event.payload),
+    ])
     return { received: true, outcome }
   }
 
@@ -84,10 +87,11 @@ export class WebhooksService {
         await recordAnomaly(this.#db.pool, null, 'unmatched_webhook', { event: row.id, key: row.key })
         outcome = 'reported'
       }
-      await this.#db.pool.query(
-        `UPDATE webhook_events SET outcome = $2, attempt_id = $3, checks = checks + 1, checked_at = now() WHERE id = $1`,
-        [row.id, outcome, outcome === 'unmatched' || outcome === 'reported' ? null : row.key],
-      )
+      await this.#db.pool.query(`UPDATE webhook_events SET outcome = $2, attempt_id = $3, checks = checks + 1, checked_at = now() WHERE id = $1`, [
+        row.id,
+        outcome,
+        outcome === 'unmatched' || outcome === 'reported' ? null : row.key,
+      ])
     }
     return rows.length
   }

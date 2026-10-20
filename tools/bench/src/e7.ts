@@ -209,7 +209,14 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
     await admin.query('SELECT pg_stat_reset()')
     await admin.query('CHECKPOINT')
     const before = await sizes(admin)
-    const load = new Load(new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app))), accounts, Number(values.rate), Number(values['max-in-flight']), Number(values.seed), `e7:${name}`)
+    const load = new Load(
+      new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app))),
+      accounts,
+      Number(values.rate),
+      Number(values['max-in-flight']),
+      Number(values.seed),
+      `e7:${name}`,
+    )
     const mark = (what: string) => {
       marks.push({ at: Math.round(load.now()), what })
       console.log(`${name}: ${what} at ${Math.round(load.now() / 1000)} s`)
@@ -238,7 +245,9 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
     const changeStarted = load.now()
     mark('change')
     if (name === 'naive') {
-      const sql = ['BEGIN', ...[STEPS[0]!, STEPS[1]!, STEPS[3]!].map((step) => migrationSql(step).replace("SET lock_timeout = '2s';", '')), 'COMMIT'].join(';\n')
+      const sql = ['BEGIN', ...[STEPS[0]!, STEPS[1]!, STEPS[3]!].map((step) => migrationSql(step).replace("SET lock_timeout = '2s';", '')), 'COMMIT'].join(
+        ';\n',
+      )
       steps.all = await runStep(owner, sql, 0)
     } else {
       steps.expand = await runStep(owner, migrationSql(STEPS[0]!), 10)
@@ -296,7 +305,13 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
       procedure: name,
       changeMs: Math.round(changeEnded - changeStarted),
       steps,
-      backfill: backfill && { ...backfill, through: backfill.through.toString(), ms: Math.round(backfill.ms), workMs: Math.round(backfill.workMs), pausedMs: Math.round(backfill.pausedMs) },
+      backfill: backfill && {
+        ...backfill,
+        through: backfill.through.toString(),
+        ms: Math.round(backfill.ms),
+        workMs: Math.round(backfill.workMs),
+        pausedMs: Math.round(backfill.pausedMs),
+      },
       baseline: { p50: round(baseline.p50), p99: round(baseline.p99) },
       duringChange: {
         requests: during.length,
@@ -329,15 +344,26 @@ await prepareTemplate()
 const dir = createResultsDir(values.out!)
 const base = await createTestDatabase({ through: BEFORE })
 const accounts = await createSeedAccounts(base.pool('ledger_app', 2))
-writeJson(join(dir, 'run.json'), { experiment: 'e7', options: values, through: BEFORE, steps: STEPS, environment: await describeEnvironment(base.pool('admin', 1)) })
+writeJson(join(dir, 'run.json'), {
+  experiment: 'e7',
+  options: values,
+  through: BEFORE,
+  steps: STEPS,
+  environment: await describeEnvironment(base.pool('admin', 1)),
+})
 const seedMs = await seedJournals(base.pool('admin', 2), accounts, 0, Number(values.journals), { queueAudit: false })
-const { rows } = await base.pool('admin', 1).query<{ entries: string; bytes: string }>(
-  `SELECT (SELECT count(*) FROM entries)::text AS entries, pg_database_size(current_database())::text AS bytes`,
-)
+const { rows } = await base
+  .pool('admin', 1)
+  .query<{ entries: string; bytes: string }>(`SELECT (SELECT count(*) FROM entries)::text AS entries, pg_database_size(current_database())::text AS bytes`)
 console.log(`seeded ${rows[0]!.entries} entries in ${Math.round(seedMs / 1000)} s, database ${Math.round(Number(rows[0]!.bytes) / 1e6)} MB`)
 const seedFound = values['check-seed'] ? violations(await checkLedger(base.pool('ledger_audit', 1))) : []
 if (seedFound.length > 0) throw new Error(`the seed breaks the ledger: ${JSON.stringify(seedFound)}`)
-writeJson(join(dir, 'seed.json'), { journals: Number(values.journals), entries: Number(rows[0]!.entries), databaseBytes: Number(rows[0]!.bytes), seedMs: Math.round(seedMs) })
+writeJson(join(dir, 'seed.json'), {
+  journals: Number(values.journals),
+  entries: Number(rows[0]!.entries),
+  databaseBytes: Number(rows[0]!.bytes),
+  seedMs: Math.round(seedMs),
+})
 await base.close()
 const results = []
 try {

@@ -103,7 +103,13 @@ export function reconcile(lines: readonly FileLine[], items: readonly LedgerItem
     if (item === undefined) {
       breaks.push({ class: 'unknown_line', day: line.day, line, detail: `no ledger item for reference ${line.reference}` })
     } else if (matched.has(item)) {
-      breaks.push({ class: 'duplicate_line', day: item.day, line, item, detail: `${item.journalRef} is already settled by ${matched.get(item)!.fileId} line ${matched.get(item)!.line}` })
+      breaks.push({
+        class: 'duplicate_line',
+        day: item.day,
+        line,
+        item,
+        detail: `${item.journalRef} is already settled by ${matched.get(item)!.fileId} line ${matched.get(item)!.line}`,
+      })
     } else {
       check(line, item, 'reference')
     }
@@ -120,7 +126,8 @@ export function reconcile(lines: readonly FileLine[], items: readonly LedgerItem
     (byAmount.get(`${line.kind}:${line.gross}`) ?? []).filter((item) => !matched.has(item) && Math.abs(item.day - line.day) <= 1)
   for (const line of lines.filter((l) => l.reference === '')) {
     const candidates = options.fallback === 'none' ? [] : candidatesFor(line)
-    const pick = options.fallback === 'unique' ? (candidates.length === 1 ? candidates[0] : undefined) : candidates.sort((a, b) => a.resolvedAt - b.resolvedAt)[0]
+    const pick =
+      options.fallback === 'unique' ? (candidates.length === 1 ? candidates[0] : undefined) : candidates.sort((a, b) => a.resolvedAt - b.resolvedAt)[0]
     if (pick === undefined) {
       breaks.push({ class: 'unknown_line', day: line.day, line, detail: `no reference, ${candidates.length} candidates of ${line.gross}` })
     } else {

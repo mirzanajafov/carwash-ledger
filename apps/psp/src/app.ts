@@ -29,10 +29,7 @@ export async function startPsp(config: Config, log?: (message: string) => void):
     idempotencyWindowSeconds: config.idempotencyWindowSeconds,
     webhooks: config.webhookUrl !== undefined,
   })
-  const webhooks =
-    config.webhookUrl === undefined
-      ? undefined
-      : new WebhookSender(pool, { url: config.webhookUrl, secret: config.webhookSecret!, log })
+  const webhooks = config.webhookUrl === undefined ? undefined : new WebhookSender(pool, { url: config.webhookUrl, secret: config.webhookSecret!, log })
   const settlements = new Settlements(pool, faults, { daySeconds: config.settlementDaySeconds, feeBps: config.feeBps, feeFixed: config.feeFixed })
   const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, log })
   server.listen(config.port, '0.0.0.0')

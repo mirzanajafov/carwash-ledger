@@ -11,9 +11,7 @@ type Tx = Prisma.TransactionClient
 const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 }
 
 function optionsFor(plan: JournalPlan) {
-  return plan.isolation === 'serializable'
-    ? { ...TX_OPTIONS, isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
-    : TX_OPTIONS
+  return plan.isolation === 'serializable' ? { ...TX_OPTIONS, isolationLevel: Prisma.TransactionIsolationLevel.Serializable } : TX_OPTIONS
 }
 
 abstract class PrismaPoster implements Poster {
@@ -66,11 +64,7 @@ export class PrismaSqlPoster extends PrismaPoster {
   readonly name = 'prisma-sql'
 
   protected async write(tx: Tx, plan: JournalPlan): Promise<bigint> {
-    const rows = await tx.$queryRawUnsafe<{ id: bigint }[]>(
-      INSERT_JOURNAL,
-      plan.externalRef,
-      plan.reversesId?.toString() ?? null,
-    )
+    const rows = await tx.$queryRawUnsafe<{ id: bigint }[]>(INSERT_JOURNAL, plan.externalRef, plan.reversesId?.toString() ?? null)
     const id = BigInt(rows[0]!.id)
     await tx.$executeRawUnsafe(INSERT_ENTRIES, id.toString(), ...entryParams(plan))
     if (plan.deltas.length > 0) expectApplied(await tx.$executeRawUnsafe(APPLY_DELTAS, ...deltaParams(plan)), plan)

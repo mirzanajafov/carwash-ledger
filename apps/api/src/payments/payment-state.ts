@@ -27,12 +27,7 @@ const EXPECTED_FROM: Record<CardAttemptKind, PaymentStatus> = {
   cancel: 'authorized',
 }
 
-export function resolveCardAttempt(
-  current: PaymentStatus,
-  kind: CardAttemptKind,
-  status: AnswerStatus,
-  reason: string | null,
-): Resolution {
+export function resolveCardAttempt(current: PaymentStatus, kind: CardAttemptKind, status: AnswerStatus, reason: string | null): Resolution {
   const from = EXPECTED_FROM[kind]
   if (current !== from) return { kind: 'anomaly', reason: `${kind} ${status} while the payment is ${current}` }
   if (status === 'succeeded') {

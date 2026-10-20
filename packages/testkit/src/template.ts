@@ -46,10 +46,7 @@ export async function withAdmin<T>(run: (client: pg.Client) => Promise<T>): Prom
 
 export async function prepareTemplate(): Promise<void> {
   await withAdmin(async (admin) => {
-    const stale = await admin.query<{ datname: string }>(
-      `SELECT datname FROM pg_database WHERE datname = $1 OR datname LIKE 'test\\_%'`,
-      [TEMPLATE_DATABASE],
-    )
+    const stale = await admin.query<{ datname: string }>(`SELECT datname FROM pg_database WHERE datname = $1 OR datname LIKE 'test\\_%'`, [TEMPLATE_DATABASE])
     for (const { datname } of stale.rows) {
       await admin.query(`ALTER DATABASE ${quoteIdent(datname)} WITH IS_TEMPLATE false`)
       await admin.query(`DROP DATABASE ${quoteIdent(datname)} WITH (FORCE)`)

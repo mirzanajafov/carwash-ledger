@@ -36,7 +36,11 @@ export async function callApi(method: string, path: string, key: string | null, 
     signal: AbortSignal.timeout(timeoutMs),
   })
   const retryAfter = Number(response.headers.get('retry-after'))
-  return { status: response.status, body: await response.json().catch(() => null), retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null }
+  return {
+    status: response.status,
+    body: await response.json().catch(() => null),
+    retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
+  }
 }
 
 export function witnessUrl(): string | null {
@@ -45,7 +49,8 @@ export function witnessUrl(): string | null {
 
 export async function callTamper(method: string, path: string, body?: unknown): Promise<Reply> {
   const url = process.env.TAMPER_URL
-  if (!url) return { status: 503, body: { error: { code: 'not_configured', message: 'the tamper service is not configured on this web server' } }, retryAfter: null }
+  if (!url)
+    return { status: 503, body: { error: { code: 'not_configured', message: 'the tamper service is not configured on this web server' } }, retryAfter: null }
   const response = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
     method,
     cache: 'no-store',

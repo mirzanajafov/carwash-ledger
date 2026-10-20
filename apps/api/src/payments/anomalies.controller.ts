@@ -59,9 +59,7 @@ function view(row: AnomalyRow) {
     kind: row.kind,
     created_at: row.created_at.toISOString(),
     problems: row.details?.problems ?? [],
-    attempt: row.attempt_id
-      ? { id: row.attempt_id, kind: row.attempt_kind, status: row.attempt_status, amount: row.amount, currency: row.currency }
-      : null,
+    attempt: row.attempt_id ? { id: row.attempt_id, kind: row.attempt_kind, status: row.attempt_status, amount: row.amount, currency: row.currency } : null,
     bank_amount: bankAmount(row),
     payment_id: row.payment_id,
     refund_id: row.refund_id,
@@ -97,10 +95,7 @@ export class AnomaliesController {
   async list(@Query('state') state = 'open', @Query('limit') limit = '50') {
     if (state !== 'open' && state !== 'resolved') throw new ApiError(400, 'invalid_request', 'state must be open or resolved')
     const n = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 200)
-    const { rows } = await this.#db.pool.query<AnomalyRow>(
-      `${SELECT} WHERE (an.resolved_at IS NULL) = $1 ORDER BY an.id DESC LIMIT $2`,
-      [state === 'open', n],
-    )
+    const { rows } = await this.#db.pool.query<AnomalyRow>(`${SELECT} WHERE (an.resolved_at IS NULL) = $1 ORDER BY an.id DESC LIMIT $2`, [state === 'open', n])
     return { object: 'list', data: rows.map(view) }
   }
 
@@ -138,10 +133,7 @@ export class AnomaliesController {
       if (attempt.kind === 'payout') await this.#adjustPayout(client, attempt.payout_id!, amount)
       const applied = await this.#attempts.apply(client, attempt.id, check.answer)
       if (applied !== 'applied') throw refuse(`the answer could not be applied (${applied})`)
-      await client.query(`UPDATE anomalies SET resolution = 'accepted', resolved_at = now(), resolved_by = $2 WHERE id = $1`, [
-        id,
-        request.client.id,
-      ])
+      await client.query(`UPDATE anomalies SET resolution = 'accepted', resolved_at = now(), resolved_by = $2 WHERE id = $1`, [id, request.client.id])
     })
     return view(await this.#find(id))
   }

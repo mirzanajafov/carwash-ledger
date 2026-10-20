@@ -52,7 +52,13 @@ export function E1Explorer({ points, connections }: { points: E1Point[]; connect
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="min-w-0 rounded-xl border border-line bg-surface p-4">
-          <LineChart title="Journals a second, achieved" series={series((p) => p.achieved)} xLabel="journals a second offered" yLabel="achieved" format={(y) => y.toLocaleString('en', { maximumFractionDigits: 0 })} />
+          <LineChart
+            title="Journals a second, achieved"
+            series={series((p) => p.achieved)}
+            xLabel="journals a second offered"
+            yLabel="achieved"
+            format={(y) => y.toLocaleString('en', { maximumFractionDigits: 0 })}
+          />
         </div>
         <div className="min-w-0 rounded-xl border border-line bg-surface p-4">
           <LineChart title="p99 latency" series={series((p) => p.p99)} xLabel="journals a second offered" yLabel="p99" yLog format={ms} />

@@ -21,9 +21,22 @@ describe('a ledger that existed before the audit log', () => {
     const receivable = await createAccount(app, { ...spec, code: 'receivable', type: 'asset' })
     const merchant = await createAccount(app, { ...spec, code: 'merchant', type: 'liability' })
     const poster = new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app)))
-    for (let i = 0; i < 5; i++) await poster.post({ externalRef: `old:${i}`, entries: [{ accountId: receivable.id, amount: 900n }, { accountId: merchant.id, amount: -900n }] })
+    for (let i = 0; i < 5; i++)
+      await poster.post({
+        externalRef: `old:${i}`,
+        entries: [
+          { accountId: receivable.id, amount: 900n },
+          { accountId: merchant.id, amount: -900n },
+        ],
+      })
     for (const name of NAMES.slice(AUDIT)) await applyMigration(db.url('ledger_owner'), name)
-    await poster.post({ externalRef: 'new:0', entries: [{ accountId: receivable.id, amount: 1500n }, { accountId: merchant.id, amount: -1500n }] })
+    await poster.post({
+      externalRef: 'new:0',
+      entries: [
+        { accountId: receivable.id, amount: 1500n },
+        { accountId: merchant.id, amount: -1500n },
+      ],
+    })
     const audit = db.pool('ledger_audit', 1)
     const { rows } = await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM audit_queue')
     expect(rows[0]!.n).toBe(6)
