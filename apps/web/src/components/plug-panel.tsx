@@ -32,7 +32,7 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
       return { text: `Armed ${step.failpoint} in API process ${step.pid}.`, tone: 'text-ink' }
     case 'refused':
       return {
-        text: step.status === 429 ? `Somebody pulled the plug less than a minute ago; ${step.message.replace(/^this/, 'it')}.` : step.message,
+        text: step.status === 429 ? `Somebody pulled the plug less than a minute ago, so ${step.message.replace(/^this/, 'it')}.` : step.message,
         tone: 'text-warn',
       }
     case 'sent':

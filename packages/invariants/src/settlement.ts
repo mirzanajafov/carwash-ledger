@@ -40,7 +40,7 @@ const SETTLED: readonly Check[] = [
       )
       SELECT 'file ' || f.id || ' says ' || f.gross || ' gross, ' || f.fee || ' fee, ' || f.net || ' net in ' || f.lines
              || ' lines. Its lines add up to ' || x.gross || ', ' || x.fee || ', ' || x.net || ' in ' || x.lines
-             || ', and its journal moved ' || -p.receivable || ', ' || p.fee || ', ' || p.bank AS detail
+             || '. Its journal moved ' || -p.receivable || ', ' || p.fee || ', ' || p.bank AS detail
       FROM settlement_files f JOIN posted p ON p.id = f.id JOIN listed x ON x.id = f.id
       WHERE p.bank <> f.net OR p.fee <> f.fee OR p.receivable <> -f.gross
          OR x.gross <> f.gross OR x.fee <> f.fee OR x.net <> f.net OR x.lines <> f.lines`,

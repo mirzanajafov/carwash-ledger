@@ -63,7 +63,7 @@ export class AttemptsService {
     const check = checkAnswer(expected, body)
     if (!check.ok) {
       await recordAnomaly(this.#db.pool, call.attemptId, 'answer_mismatch', { problems: check.problems, answer: body })
-      throw new ApiError(502, 'psp_answer_rejected', 'the PSP answered something that does not match the request, and it is recorded as an anomaly')
+      throw new ApiError(502, 'psp_answer_rejected', 'the PSP answered something that does not match the request, and the answer is recorded as an anomaly')
     }
     return this.#db.transaction((client) => this.apply(client, call.attemptId, check.answer))
   }

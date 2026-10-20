@@ -28,7 +28,7 @@ function httpExceptionMessage(exception: HttpException): string {
   const response = exception.getResponse()
   if (typeof response === 'string') return response
   const message = (response as { message?: unknown }).message
-  if (Array.isArray(message)) return message.join(', ')
+  if (Array.isArray(message)) return message.join('. ')
   return typeof message === 'string' ? message : exception.message
 }
 
