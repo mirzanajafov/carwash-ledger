@@ -314,7 +314,7 @@ describe('the settlement invariant', () => {
     expect(stranger[0]).toContain('has no attempt')
     const journal = await settlementExamples((c) => c.query('UPDATE settlement_files SET net = net - 1, fee = fee + 1 WHERE id = $1', [auto.file_id]))
     expect(journal).toHaveLength(1)
-    expect(journal[0]).toContain('its journal moved')
+    expect(journal[0]).toContain('Its journal moved')
     expect(await inSettlement(async () => undefined)).toEqual({ L5: 0 })
   })
 })

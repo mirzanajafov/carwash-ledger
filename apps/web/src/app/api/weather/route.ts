@@ -32,7 +32,7 @@ export async function POST(request: Request): Promise<Response> {
     if (!preset.plan) return relay(await callPsp('DELETE', '/admin/weather'))
     if (!(await adminSession())) {
       const wait = turn.take(Date.now())
-      if (wait > 0) return refuse(429, 'rate_limited', `the weather changed less than a minute ago; try again in ${wait} s`, { 'retry-after': String(wait) })
+      if (wait > 0) return refuse(429, 'rate_limited', `the weather changed less than a minute ago, so try again in ${wait} s`, { 'retry-after': String(wait) })
     }
     return relay(await callPsp('PUT', '/admin/weather', { label: preset.name, plan: preset.plan, seconds: VISITOR_SECONDS }))
   } catch {

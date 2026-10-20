@@ -32,7 +32,7 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
       return { text: `Armed ${step.failpoint} in API process ${step.pid}.`, tone: 'text-ink' }
     case 'refused':
       return {
-        text: step.status === 429 ? `Somebody pulled the plug less than a minute ago; ${step.message.replace(/^this/, 'it')}.` : step.message,
+        text: step.status === 429 ? `Somebody pulled the plug less than a minute ago, so ${step.message.replace(/^this/, 'it')}.` : step.message,
         tone: 'text-warn',
       }
     case 'sent':
@@ -159,7 +159,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
           {checking ? 'Checking…' : 'Just run the checks'}
         </button>
         <span className="text-xs text-muted">
-          {admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone; the checks at most every 10 s.'}
+          {admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone, and the checks at most every 10 s.'}
         </span>
       </div>
 

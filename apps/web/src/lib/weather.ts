@@ -27,7 +27,7 @@ export const PRESETS: readonly Preset[] = [
   {
     name: 'flaky',
     title: 'A flaky bank',
-    detail: 'One request in twenty fails or times out after doing the work; webhooks arrive twice, late or out of order.',
+    detail: 'One request in twenty fails or times out after doing the work, and webhooks arrive twice, late or out of order.',
     plan: {
       decline: 0.05,
       fail: 0.05,

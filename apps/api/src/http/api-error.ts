@@ -28,7 +28,7 @@ function httpExceptionMessage(exception: HttpException): string {
   const response = exception.getResponse()
   if (typeof response === 'string') return response
   const message = (response as { message?: unknown }).message
-  if (Array.isArray(message)) return message.join('; ')
+  if (Array.isArray(message)) return message.join('. ')
   return typeof message === 'string' ? message : exception.message
 }
 
@@ -54,7 +54,7 @@ export class ErrorFilter implements ExceptionFilter {
     } else if (databaseUnavailable(exception)) {
       status = 503
       code = 'database_unavailable'
-      message = 'the database could not be reached; retry with the same idempotency key'
+      message = 'the database could not be reached, so retry with the same idempotency key'
       response.setHeader('Retry-After', '1')
       this.#logger.warn(`database unavailable: ${(exception as Error).message}`)
     } else {

@@ -13,7 +13,7 @@ export async function GET(_request: Request, context: { params: Promise<{ seq: s
     const checkpoint = await callApi('GET', '/v1/audit/checkpoint', clientKey())
     if (checkpoint.status !== 200) return refuse(409, 'no_checkpoint', 'the witness has not signed anything yet')
     if (Number(seq) >= checkpoint.body.tree_size)
-      return refuse(409, 'not_witnessed', `the witness has signed ${checkpoint.body.tree_size} leaves; pick a seq below that`)
+      return refuse(409, 'not_witnessed', `the witness has signed ${checkpoint.body.tree_size} leaves, so pick a seq below that`)
     const leaf = await callApi('GET', `/v1/audit/leaves/${seq}`, clientKey())
     if (leaf.status !== 200) return refuse(404, 'no_leaf', `the log has no seq ${seq}`)
     const [journal, proof] = await Promise.all([

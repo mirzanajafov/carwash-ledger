@@ -22,7 +22,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   onApplicationBootstrap(): void {
     const brokers = [...this.#config.kafkaBrokers]
     if (brokers.length === 0) {
-      this.#logger.warn('KAFKA_BROKERS is not set; events stay in the outbox')
+      this.#logger.warn('KAFKA_BROKERS is not set, so events stay in the outbox')
       return
     }
     this.#starting = this.#start(brokers)
