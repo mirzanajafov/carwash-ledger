@@ -13,8 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc",
-    "start": "node --conditions=source src/main.ts",
-    "test": "vitest run"
+    "start": "node --conditions=source src/main.ts"
   },
   "dependencies": {
     "@carwash/audit": "workspace:*"

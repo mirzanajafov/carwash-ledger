@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc",
-    "test": "vitest run",
     "e5": "node --conditions=source src/e5.ts"
   },
   "dependencies": {

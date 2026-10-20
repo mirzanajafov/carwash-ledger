@@ -12,9 +12,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc",
-    "test": "vitest run",
-    "test:db": "vitest run --config vitest.db.config.ts"
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@carwash/failpoints": "workspace:*",

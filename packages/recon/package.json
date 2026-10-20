@@ -12,8 +12,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc",
-    "test": "vitest run"
+    "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -9,8 +9,13 @@
   "scripts": {
     "generate": "pnpm --filter @carwash/db generate",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "test:db": "pnpm -r --workspace-concurrency=1 test:db"
+    "typecheck": "tsc && pnpm -r typecheck",
+    "test": "vitest run --project unit --project web",
+    "test:db": "vitest run --project db"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
