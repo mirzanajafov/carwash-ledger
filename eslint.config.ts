@@ -5,7 +5,7 @@ import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
-  { ignores: ['**/dist', '**/.next', 'apps/web/next-env.d.ts', 'packages/db/src/generated'] },
+  { ignores: ['**/dist', '**/.next', '**/results', 'apps/web/next-env.d.ts', 'packages/db/src/generated'] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
