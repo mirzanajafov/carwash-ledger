@@ -32,9 +32,11 @@ describe('the relay against Kafka', () => {
     const keys = ['wash-1', 'wash-2', 'wash-3', 'wash-4', 'wash-5', 'wash-6']
     const lease = await checkout(app)
     try {
+      await lease.client.query('BEGIN')
       for (let n = 0; n < 20; n++) {
         for (const key of keys) await writeEvent(lease.client, { topic: TOPICS.payments, key, type: 'test.step', payload: { n } })
       }
+      await lease.client.query('COMMIT')
     } finally {
       lease.release()
     }
@@ -69,7 +71,7 @@ describe('the relay against Kafka', () => {
         Array.from({ length: 20 }, (_, n) => n),
       )
     }
-    const { rows } = await app.query<{ event_id: string }>('SELECT event_id::text FROM outbox ORDER BY id LIMIT 1')
+    const { rows } = await app.query<{ event_id: string }>('SELECT event_id::text FROM outbox WHERE topic = $1 ORDER BY id LIMIT 1', [TOPICS.payments])
     const first = received.find((message) => message.envelope.id === rows[0]!.event_id)!
     expect(first.envelope.type).toBe('test.step')
     expect(first.headers).toEqual({ 'event-id': rows[0]!.event_id, 'event-type': 'test.step' })

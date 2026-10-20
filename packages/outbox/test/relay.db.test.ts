@@ -2,7 +2,7 @@ import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, typ
 import { checkout } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { LANES, Relay, RELAY_DEFAULTS, relayOnce, writeEvent, writeJournalEvents, type NewEvent, type OutboxRow, type Publisher } from '../src/index.ts'
 
 let db: TestDatabase
@@ -23,19 +23,19 @@ class Recorder implements Publisher {
   }
 }
 
-async function write(event: NewEvent): Promise<void> {
+async function commit(events: readonly NewEvent[]): Promise<void> {
   const lease = await checkout(app)
   try {
-    await writeEvent(lease.client, event)
+    await lease.client.query('BEGIN')
+    for (const event of events) await writeEvent(lease.client, event)
+    await lease.client.query('COMMIT')
   } finally {
     lease.release()
   }
 }
 
 async function addEvents(keys: readonly string[]): Promise<void> {
-  for (const key of keys) {
-    await write({ topic: 'payments', key, type: 'test.event', payload: { key } })
-  }
+  await commit(keys.map((key) => ({ topic: 'payments', key, type: 'test.event', payload: { key } })))
 }
 
 async function unpublished(): Promise<number> {
@@ -110,6 +110,23 @@ describe('the outbox', () => {
       currency: 'EUR',
       amount: '-1500',
     })
+  })
+
+  it('writes an event on the client it is given, so rolling back the transaction takes the event back', async () => {
+    const lease = await checkout(app)
+    try {
+      await lease.client.query('BEGIN')
+      await writeEvent(lease.client, { topic: 'payments', key: 'rolled-back', type: 'test.event', payload: {} })
+      await lease.client.query('ROLLBACK')
+    } finally {
+      lease.release()
+    }
+    expect(await unpublished()).toBe(0)
+  })
+
+  it('refuses the pool at compile time, so an event cannot be written in an autocommit of its own by accident', () => {
+    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeEvent>[0]>()
+    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeJournalEvents>[0]>()
   })
 
   it('puts every key in one fixed lane', async () => {
@@ -196,7 +213,7 @@ describe('Relay', () => {
     relay.start()
     try {
       for (let n = 0; n < 100; n++) {
-        await write({ topic: 'payments', key: `stream-${n}`, type: 'test.stream', payload: { n } })
+        await commit([{ topic: 'payments', key: `stream-${n}`, type: 'test.stream', payload: { n } }])
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       const deadline = Date.now() + 10_000
@@ -218,7 +235,7 @@ describe('Relay', () => {
     try {
       await Promise.all(
         keys.map(async (key) => {
-          for (let n = 0; n < 15; n++) await write({ topic: 'payments', key, type: 'test.step', payload: { n } })
+          for (let n = 0; n < 15; n++) await commit([{ topic: 'payments', key, type: 'test.step', payload: { n } }])
         }),
       )
       const deadline = Date.now() + 20_000

@@ -1,6 +1,5 @@
-import type pg from 'pg'
-import { describe, expect, expectTypeOf, it } from 'vitest'
-import { envelope, laneSql, LANES, writeEvent, writeJournalEvents } from '../src/index.ts'
+import { describe, expect, it } from 'vitest'
+import { envelope, laneSql, LANES } from '../src/index.ts'
 
 describe('envelope', () => {
   it('carries the event id, type and time of the outbox row around its payload', () => {
@@ -25,12 +24,5 @@ describe('envelope', () => {
   it('masks the key hash down to one of the lanes', () => {
     expect(LANES & (LANES - 1)).toBe(0)
     expect(laneSql('$2')).toBe(`(hashtextextended($2, 0) & ${LANES - 1})::smallint`)
-  })
-})
-
-describe('the outbox writers', () => {
-  it('refuse the pool at compile time, so the pool can no longer put an event in an autocommit of its own by accident', () => {
-    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeEvent>[0]>()
-    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeJournalEvents>[0]>()
   })
 })
