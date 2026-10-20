@@ -210,8 +210,11 @@ describe('PSP simulator', () => {
       expect(verifySignature(SECRET, delivery.body, delivery.signature, Math.floor(Date.now() / 1000))).toBe(true)
     }
     expect(JSON.parse(deliveries[1]!.body)).toMatchObject({ type: 'operation.succeeded', data: { object: { kind: 'payout', destination: 'merchant_7' } } })
-    const { rows } = await sql.query('SELECT attempts, delivered_at IS NOT NULL AS delivered FROM deliveries d JOIN events e ON e.id = d.event_id WHERE e.operation_id = $1', [reply.body.id])
-    expect(rows).toEqual([{ attempts: 2, delivered: true }])
+    const delivered = await waitFor(async () => {
+      const { rows } = await sql.query('SELECT attempts, delivered_at IS NOT NULL AS delivered FROM deliveries d JOIN events e ON e.id = d.event_id WHERE e.operation_id = $1', [reply.body.id])
+      return rows[0]?.delivered ? rows : undefined
+    })
+    expect(delivered).toEqual([{ attempts: 2, delivered: true }])
   })
 
   it('delivers a duplicated webhook twice with one event id and never sends a dropped one', async () => {
