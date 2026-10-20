@@ -2,21 +2,43 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { Conflict, type TamperService } from './service.ts'
 
+const MAX_BODY_BYTES = 10_000
+
+class HttpError extends Error {
+  readonly status: number
+  readonly code: string
+
+  constructor(status: number, code: string, message: string) {
+    super(message)
+    this.name = new.target.name
+    this.status = status
+    this.code = code
+  }
+}
+
 function send(response: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body)
   response.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) })
   response.end(text)
 }
 
-async function readBody(request: IncomingMessage): Promise<unknown> {
+async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   let size = 0
-  for await (const chunk of request) {
-    size += (chunk as Buffer).length
-    if (size > 10_000) throw new SyntaxError('the body is too large')
-    chunks.push(chunk as Buffer)
+  for await (const chunk of request as AsyncIterable<Buffer>) {
+    size += chunk.length
+    if (size <= MAX_BODY_BYTES) chunks.push(chunk)
   }
-  return chunks.length === 0 ? {} : JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  if (size > MAX_BODY_BYTES) throw new HttpError(413, 'too_large', `the body is larger than ${MAX_BODY_BYTES} bytes`)
+  if (size === 0) return {}
+  let body: unknown
+  try {
+    body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    throw new HttpError(400, 'invalid', 'the body is not JSON')
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) throw new HttpError(400, 'invalid', 'the body must be a JSON object')
+  return body as Record<string, unknown>
 }
 
 function authorized(request: IncomingMessage, token: string): boolean {
@@ -33,7 +55,7 @@ export function createTamperServer(service: TamperService, token: string): Serve
     if (!authorized(request, token)) return send(response, 401, { error: { code: 'unauthorized', message: 'the token is missing or wrong' } })
     if (route === 'GET /v1/tamper') return send(response, 200, { tamper: service.current() })
     if (route === 'POST /v1/tamper') {
-      const body = (await readBody(request)) as { class?: unknown }
+      const body = await readBody(request)
       if (body.class !== 1 && body.class !== 2 && body.class !== 3) {
         return send(response, 400, { error: { code: 'invalid', message: 'class must be 1, 2 or 3' } })
       }
@@ -46,7 +68,8 @@ export function createTamperServer(service: TamperService, token: string): Serve
     routes(request, response).catch((error: unknown) => {
       if (response.headersSent) return
       if (error instanceof Conflict) return send(response, 409, { error: { code: error.code, message: error.message } })
-      if (error instanceof SyntaxError) return send(response, 400, { error: { code: 'invalid', message: 'the body is not JSON' } })
+      if (error instanceof HttpError) return send(response, error.status, { error: { code: error.code, message: error.message } })
+      process.stderr.write(`tamper: ${error instanceof Error ? error.stack : String(error)}\n`)
       send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })
   })

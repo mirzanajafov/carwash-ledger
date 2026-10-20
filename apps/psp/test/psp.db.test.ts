@@ -259,6 +259,14 @@ describe('PSP simulator', () => {
     expect((await call('PUT', '/admin/faults', { auth: ADMIN_KEY, body: { decline: 2 } })).status).toBe(400)
   })
 
+  it('answers every body over 16 kB with 413 and stores nothing under its key', async () => {
+    const key = randomUUID()
+    for (let i = 0; i < 10; i++) {
+      expect((await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok', note: 'x'.repeat(2_000_000) } })).status).toBe(413)
+    }
+    expect(await call('POST', '/v1/charges', { key, body: { amount: 100, currency: 'EUR', token: 'tok_ok' } })).toMatchObject({ status: 200, replayed: false })
+  })
+
   it('misstates the amount it did when the token or the plan says so', async () => {
     const chargeId = await authorize('tok_wrong_amount_capture', 1500)
     const capture = await call('POST', `/v1/charges/${chargeId}/capture`, { key: randomUUID(), body: {} })

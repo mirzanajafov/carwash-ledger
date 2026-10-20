@@ -37,7 +37,7 @@ function client(base: string, token = 'tamper-token') {
     const response = await fetch(`${base}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
     })
     return { status: response.status, body: (await response.json()) as any }
   }
@@ -93,6 +93,19 @@ describe('the tamper service', () => {
     expect(await restarted('POST', '/v1/restore')).toMatchObject({ status: 200, body: { restored: { tamper_class: 2, seq: 15 } } })
     expect((await verifyLog(admin, { witness: roots() })).findings).toBe(0)
     expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
+  })
+
+  it('answers every oversized body with 413 and tells a broken body from one that is not an object', async () => {
+    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir), 'tamper-token')))
+    for (let i = 0; i < 10; i++) {
+      expect(await call('POST', '/v1/tamper', { class: 1, note: 'x'.repeat(2_000_000) })).toEqual({
+        status: 413,
+        body: { error: { code: 'too_large', message: 'the body is larger than 10000 bytes' } },
+      })
+    }
+    expect(await call('POST', '/v1/tamper', '{"class": 1')).toEqual({ status: 400, body: { error: { code: 'invalid', message: 'the body is not JSON' } } })
+    expect(await call('POST', '/v1/tamper', 'null')).toEqual({ status: 400, body: { error: { code: 'invalid', message: 'the body must be a JSON object' } } })
+    expect((await call('GET', '/v1/tamper')).body.tamper).toBeNull()
   })
 
   it('restores on its own after the configured time, also after a restart', async () => {

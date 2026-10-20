@@ -123,20 +123,25 @@ describe('the witness', () => {
   })
 })
 
+async function serve(witness: Witness) {
+  const server = createWitnessServer(witness, 'secret-token')
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  const post = (body: unknown, token = 'secret-token') =>
+    fetch(`${base}/v1/checkpoints`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    })
+  return { server, base, post }
+}
+
 describe('the witness server', () => {
   it('serves the key and checkpoints to anyone and takes submissions only with the token', async () => {
     const source = log(8, 100)
     const witness = new Witness(tempDir(), 'test-log')
-    const server = createWitnessServer(witness, 'secret-token')
-    server.listen(0, '127.0.0.1')
-    await once(server, 'listening')
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-    const post = (body: unknown, token = 'secret-token') =>
-      fetch(`${base}/v1/checkpoints`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: typeof body === 'string' ? body : JSON.stringify(body),
-      })
+    const { server, base, post } = await serve(witness)
     try {
       expect(await (await fetch(`${base}/v1/key`)).json()).toEqual({ origin: 'test-log', algorithm: 'ed25519', public_key: witness.publicKey })
       expect((await fetch(`${base}/v1/checkpoints/latest`)).status).toBe(404)
@@ -154,6 +159,17 @@ describe('the witness server', () => {
       expect((await post(submission(source, 60, 10))).status).toBe(201)
       expect(await (await fetch(`${base}/v1/checkpoints/latest`)).json()).toMatchObject({ size: 60, root: toHex(rootOf(60, source)) })
       expect(((await (await fetch(`${base}/v1/checkpoints`)).json()) as { data: Signed[] }).data.map((c) => c.size)).toEqual([10, 60])
+    } finally {
+      server.close()
+    }
+  })
+
+  it('answers every submission over 1 MB with 413 and signs none of them', async () => {
+    const witness = new Witness(tempDir(), 'test-log')
+    const { server, post } = await serve(witness)
+    try {
+      for (let i = 0; i < 10; i++) expect((await post({ ...submission(log(8, 100), 10), note: 'x'.repeat(2_000_000) })).status).toBe(413)
+      expect(witness.latest()).toBeUndefined()
     } finally {
       server.close()
     }
