@@ -4,6 +4,27 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@types/node':
+      specifier: ^24.19.1
+      version: 24.19.1
+    '@types/pg':
+      specifier: ^8.23.1
+      version: 8.23.1
+    fast-check:
+      specifier: ^4.3.0
+      version: 4.10.2
+    pg:
+      specifier: ^8.23.0
+      version: 8.23.1
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
+    vitest:
+      specifier: ^4.1.11
+      version: 4.1.11
+
 importers:
 
   .: {}
@@ -50,7 +71,7 @@ importers:
         specifier: ^0.15.1
         version: 0.15.1
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
@@ -72,19 +93,19 @@ importers:
         specifier: ^5.0.0
         version: 5.0.6
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       fast-check:
-        specifier: ^4.3.0
+        specifier: 'catalog:'
         version: 4.10.2
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   apps/psp:
@@ -93,23 +114,23 @@ importers:
         specifier: workspace:*
         version: link:../../packages/pg
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@carwash/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   apps/tamper:
@@ -121,7 +142,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/pg
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@carwash/ledger':
@@ -134,28 +155,28 @@ importers:
         specifier: workspace:*
         version: link:../witness
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   apps/traffic:
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   apps/web:
@@ -180,7 +201,7 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
       '@types/node':
-        specifier: ^24.19.1
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/react':
         specifier: ^19.3.0
@@ -192,10 +213,10 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.11
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   apps/witness:
@@ -205,13 +226,13 @@ importers:
         version: link:../../packages/audit
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/audit:
@@ -221,16 +242,16 @@ importers:
         version: 2.4.0
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       fast-check:
-        specifier: ^4.3.0
+        specifier: 'catalog:'
         version: 4.10.2
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/audit-pg:
@@ -245,7 +266,7 @@ importers:
         specifier: workspace:*
         version: link:../pg
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@carwash/invariants':
@@ -261,16 +282,16 @@ importers:
         specifier: workspace:*
         version: link:../../apps/witness
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/db:
@@ -282,14 +303,14 @@ importers:
         specifier: ^7.10.0
         version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       dotenv:
         specifier: ^18.0.3
@@ -298,19 +319,19 @@ importers:
         specifier: ^7.10.0
         version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
 
   packages/failpoints:
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/invariants:
@@ -319,23 +340,23 @@ importers:
         specifier: workspace:*
         version: link:../pg
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@carwash/testkit':
         specifier: workspace:*
         version: link:../testkit
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/ledger:
@@ -350,7 +371,7 @@ importers:
         specifier: workspace:*
         version: link:../pg
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@carwash/invariants':
@@ -360,19 +381,19 @@ importers:
         specifier: workspace:*
         version: link:../testkit
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       fast-check:
-        specifier: ^4.3.0
+        specifier: 'catalog:'
         version: 4.10.2
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/outbox:
@@ -387,7 +408,7 @@ importers:
         specifier: 1.10.1
         version: 1.10.1
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@carwash/ledger':
@@ -397,47 +418,47 @@ importers:
         specifier: workspace:*
         version: link:../testkit
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/pg:
     dependencies:
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
 
   packages/recon:
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       fast-check:
-        specifier: ^4.3.0
+        specifier: 'catalog:'
         version: 4.10.2
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   packages/testkit:
@@ -446,17 +467,17 @@ importers:
         specifier: workspace:*
         version: link:../pg
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
 
   tools/bench:
@@ -486,17 +507,17 @@ importers:
         specifier: workspace:*
         version: link:../../apps/witness
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
 
   tools/chaos:
@@ -523,20 +544,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/testkit
       pg:
-        specifier: ^8.23.0
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   tools/recon-eval:
@@ -546,13 +567,13 @@ importers:
         version: link:../../packages/recon
     devDependencies:
       '@types/node':
-        specifier: ^24.0.0
+        specifier: 'catalog:'
         version: 24.19.1
       typescript:
-        specifier: ^6.0.2
+        specifier: 'catalog:'
         version: 6.0.3
       vitest:
-        specifier: ^4.1.2
+        specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
 packages:

@@ -18,13 +18,13 @@
   },
   "dependencies": {
     "@carwash/pg": "workspace:*",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
     "@carwash/testkit": "workspace:*",
-    "@types/pg": "^8.23.1"
+    "@types/pg": "catalog:"
   }
 }

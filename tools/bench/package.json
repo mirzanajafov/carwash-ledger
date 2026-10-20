@@ -22,11 +22,11 @@
     "@carwash/pg": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "@carwash/witness": "workspace:*",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "@types/pg": "^8.23.1",
-    "typescript": "^6.0.2"
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "typescript": "catalog:"
   }
 }

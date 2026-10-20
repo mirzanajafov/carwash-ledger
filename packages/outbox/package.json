@@ -20,14 +20,14 @@
     "@carwash/failpoints": "workspace:*",
     "@carwash/pg": "workspace:*",
     "@confluentinc/kafka-javascript": "1.10.1",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@carwash/ledger": "workspace:*",
     "@carwash/testkit": "workspace:*",
-    "@types/node": "^24.0.0",
-    "@types/pg": "^8.23.1",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

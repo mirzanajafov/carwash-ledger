@@ -20,15 +20,15 @@
   "dependencies": {
     "@carwash/audit-pg": "workspace:*",
     "@carwash/pg": "workspace:*",
-    "pg": "^8.23.0"
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@carwash/ledger": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "@carwash/witness": "workspace:*",
-    "@types/node": "^24.0.0",
-    "@types/pg": "^8.23.1",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
