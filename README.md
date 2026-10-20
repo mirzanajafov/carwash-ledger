@@ -147,7 +147,8 @@ docker compose up -d postgres kafka
 pnpm install
 pnpm -r build
 DATABASE_URL=postgresql://ledger_owner:ledger_owner@localhost:5449/ledger pnpm --filter @carwash/db migrate
-pnpm -r test && pnpm test:db
+pnpm typecheck && pnpm lint && pnpm format:check
+pnpm test && pnpm test:db
 ```
 
 `.github/workflows/ci.yml` runs the same steps on a clean checkout, plus a three-run chaos smoke on every push.
