@@ -48,7 +48,7 @@ async function watch(url: string) {
     async until(found: (events: Event[]) => boolean, timeoutMs = 10_000) {
       const started = Date.now()
       while (!found(events)) {
-        if (Date.now() - started > timeoutMs) throw new Error(`gave up waiting; saw ${JSON.stringify(events.map((e) => e.type))}`)
+        if (Date.now() - started > timeoutMs) throw new Error(`gave up waiting, saw ${JSON.stringify(events.map((e) => e.type))}`)
         await sleep(50)
       }
     },

@@ -226,7 +226,7 @@ describe('incremental verification', () => {
     expect((await tampered(2, 72)).report.findings).toBe(0)
   })
 
-  it('does not see an entry edited below its state with the hashes left alone; that is what a full run is for', async () => {
+  it('does not see an entry edited below its state with the hashes left alone, which is what a full run is for', async () => {
     const full = await verifyLog(app, { witness: witnessed })
     expect((await tampered(1, 20, { from: full.state! })).report.findings).toBe(0)
     expect((await tampered(1, 20)).report.findings).toBeGreaterThan(0)

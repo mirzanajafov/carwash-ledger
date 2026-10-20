@@ -166,7 +166,7 @@ describe('PSP simulator', () => {
     expect(retried).toMatchObject({ status: 200, replayed: false, body: { status: 'succeeded' } })
   })
 
-  it('captures and then hangs past the client timeout; the pull and the retry both see the capture', async () => {
+  it('captures and then hangs past the client timeout, and the pull and the retry both see the capture', async () => {
     const chargeId = await authorize('tok_timeout_after_capture')
     const key = randomUUID()
     await expect(call('POST', `/v1/charges/${chargeId}/capture`, { key, body: {}, timeoutMs: 300 })).rejects.toThrow()

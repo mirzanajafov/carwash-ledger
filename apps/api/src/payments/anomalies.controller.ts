@@ -120,7 +120,7 @@ export class AnomaliesController {
     if (amount > BigInt(attempt.amount)) throw refuse(`the bank says ${amount}, more than the ${attempt.amount} that was asked`)
     const call = await this.#attempts.callFor(attempt)
     const check = checkAnswer({ attemptId: call.attemptId, kind: call.kind, amount, currency: call.currency, chargeId: call.chargeId }, reply.body)
-    if (!check.ok) throw refuse(`the bank's answer differs in more than the amount: ${check.problems.join('; ')}`)
+    if (!check.ok) throw refuse(`the bank's answer differs in more than the amount: ${check.problems.join(', ')}`)
     if (check.answer.status !== 'succeeded') throw refuse('the bank declined this operation, so there is no amount to accept')
     await this.#db.transaction(async (client) => {
       const locked = await client.query('SELECT 1 FROM anomalies WHERE id = $1 AND resolved_at IS NULL FOR UPDATE', [id])

@@ -156,7 +156,7 @@ export function paymentFinal(payment: PaymentRecord, expected: readonly PaymentS
     return { status: 402, body: { error: { code, message: `the payment failed: ${code}` }, payment: paymentView(payment) } }
   }
   if (!expected.includes(payment.status)) {
-    throw new ApiError(502, 'psp_disagreement', `the PSP's answer left the payment ${payment.status}; it is recorded as an anomaly`)
+    throw new ApiError(502, 'psp_disagreement', `the PSP's answer left the payment ${payment.status}, and it is recorded as an anomaly`)
   }
   return { status: 200, body: paymentView(payment) }
 }
