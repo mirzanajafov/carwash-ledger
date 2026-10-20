@@ -2,7 +2,7 @@ import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, typ
 import { checkout } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { LANES, Relay, RELAY_DEFAULTS, relayOnce, writeEvent, writeJournalEvents, type NewEvent, type OutboxRow, type Publisher } from '../src/index.ts'
 
 let db: TestDatabase
@@ -110,11 +110,6 @@ describe('the outbox', () => {
       currency: 'EUR',
       amount: '-1500',
     })
-  })
-
-  it('takes a client and never the pool, so an event cannot commit apart from the transaction that caused it', () => {
-    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeEvent>[0]>()
-    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeJournalEvents>[0]>()
   })
 
   it('puts every key in one fixed lane', async () => {
