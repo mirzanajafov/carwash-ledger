@@ -1,23 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { seqToCheck, type AuditState } from '@/lib/audit'
 import { checkJournal, type CheckpointJson, type JournalJson, type ProofJson, type Verdict } from '@/lib/verify-journal'
-
-interface Tamper {
-  tamper_class: 1 | 2 | 3
-  seq: number
-  journal_id: string
-  witnessed_size: number
-  at: string
-  restores_at: string | null
-}
-
-interface State {
-  tamper: Tamper | null
-  tamperAvailable: boolean
-  checkpoint: (CheckpointJson & { signed_at: string }) | null
-  witnessKey: string | null
-}
 
 interface Report {
   size: number
@@ -64,16 +49,17 @@ function Mark({ ok }: { ok: boolean | null }) {
 }
 
 export function AuditPanel() {
-  const [state, setState] = useState<State | null>(null)
+  const [state, setState] = useState<AuditState | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [report, setReport] = useState<Report | null>(null)
-  const [seq, setSeq] = useState('')
+  const [typed, setTyped] = useState<string | null>(null)
   const [verdicts, setVerdicts] = useState<{ seq: number; journalId: string; verdicts: Verdict[] } | null>(null)
+  const seq = seqToCheck(typed, state)
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    if (response.ok) setState((await response.json()) as State)
+    if (response.ok) setState((await response.json()) as AuditState)
   }, [])
 
   useEffect(() => {
@@ -81,11 +67,6 @@ export function AuditPanel() {
     const timer = setInterval(() => void refresh(), 5000)
     return () => clearInterval(timer)
   }, [refresh])
-
-  useEffect(() => {
-    if (state?.tamper) setSeq(String(state.tamper.seq))
-    else if (state?.checkpoint && seq === '') setSeq(String(state.checkpoint.tree_size - 1))
-  }, [state?.tamper?.seq, state?.checkpoint?.tree_size])
 
   async function act(label: string, url: string, body?: unknown) {
     setBusy(label)
@@ -140,7 +121,15 @@ export function AuditPanel() {
               <span className="font-medium text-bad">Journal {tamper.journal_id} at seq {tamper.seq} is tampered with</span> (class {tamper.tamper_class}).
               {tamper.restores_at ? ` It goes back on its own at ${new Date(tamper.restores_at).toLocaleTimeString()}.` : ''}
             </p>
-            <button type="button" onClick={() => act('restore', '/api/audit/restore')} disabled={busy !== null} className="rounded-lg border border-line px-3 py-1.5 font-medium disabled:opacity-50">
+            <button
+              type="button"
+              onClick={() => {
+                setTyped(String(tamper.seq))
+                void act('restore', '/api/audit/restore')
+              }}
+              disabled={busy !== null}
+              className="rounded-lg border border-line px-3 py-1.5 font-medium disabled:opacity-50"
+            >
               {busy === 'restore' ? 'Restoring…' : 'Restore it'}
             </button>
           </div>
@@ -152,7 +141,10 @@ export function AuditPanel() {
               key={c.tamperClass}
               type="button"
               disabled={busy !== null || !!tamper || !state?.tamperAvailable}
-              onClick={() => act('tamper', '/api/audit/tamper', { class: c.tamperClass })}
+              onClick={() => {
+                setTyped(null)
+                void act('tamper', '/api/audit/tamper', { class: c.tamperClass })
+              }}
               className="rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="block text-sm font-medium">
@@ -182,7 +174,7 @@ export function AuditPanel() {
           <label className="text-sm text-muted" htmlFor="seq">
             Seq
           </label>
-          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => setSeq(e.target.value.replace(/\D/g, ''))} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
+          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => setTyped(e.target.value.replace(/\D/g, ''))} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
           <button type="submit" disabled={busy !== null || seq === ''} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
             {busy === 'check' ? 'Checking…' : 'Check it'}
           </button>
