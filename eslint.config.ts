@@ -19,6 +19,7 @@ export default defineConfig(
       ],
       '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
       '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
+      '@typescript-eslint/no-unused-vars': ['error', { args: 'all', argsIgnorePattern: '^_', ignoreRestSiblings: true }],
     },
   },
   {
@@ -59,7 +60,6 @@ export default defineConfig(
       '@typescript-eslint/no-misused-spread': 'off',
       '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'off',
       '@typescript-eslint/no-unnecessary-template-expression': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/prefer-regexp-exec': 'off',
       '@typescript-eslint/prefer-string-starts-ends-with': 'off',
       'no-useless-assignment': 'off',
