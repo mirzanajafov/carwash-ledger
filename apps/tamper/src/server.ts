@@ -2,6 +2,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { Conflict, type TamperService } from './service.ts'
 
+class BodyTooLarge extends Error {}
+
 function send(response: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body)
   response.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) })
@@ -13,7 +15,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   let size = 0
   for await (const chunk of request) {
     size += (chunk as Buffer).length
-    if (size > 10_000) throw new SyntaxError('the body is too large')
+    if (size > 10_000) throw new BodyTooLarge()
     chunks.push(chunk as Buffer)
   }
   return chunks.length === 0 ? {} : JSON.parse(Buffer.concat(chunks).toString('utf8'))
@@ -46,6 +48,7 @@ export function createTamperServer(service: TamperService, token: string): Serve
     routes(request, response).catch((error: unknown) => {
       if (response.headersSent) return
       if (error instanceof Conflict) return send(response, 409, { error: { code: error.code, message: error.message } })
+      if (error instanceof BodyTooLarge) return send(response, 413, { error: { code: 'too_large', message: 'the body is over 10 kB' } })
       if (error instanceof SyntaxError) return send(response, 400, { error: { code: 'invalid', message: 'the body is not JSON' } })
       send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })

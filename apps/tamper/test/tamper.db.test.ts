@@ -95,6 +95,20 @@ describe('the tamper service', () => {
     expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
   })
 
+  it('answers a body over 10 kB as too large and a broken body as not JSON', async () => {
+    const base = await serve(createTamperServer(new TamperService(admin, stateDir), 'tamper-token'))
+    const post = async (body: string) => {
+      const response = await fetch(`${base}/v1/tamper`, { method: 'POST', headers: { authorization: 'Bearer tamper-token' }, body })
+      return { status: response.status, body: (await response.json()) as unknown }
+    }
+    expect(await post(JSON.stringify({ class: 1, note: 'x'.repeat(20_000) }))).toEqual({
+      status: 413,
+      body: { error: { code: 'too_large', message: 'the body is over 10 kB' } },
+    })
+    expect(await post('{"class": 1')).toEqual({ status: 400, body: { error: { code: 'invalid', message: 'the body is not JSON' } } })
+    expect((await client(base)('GET', '/v1/tamper')).body.tamper).toBeNull()
+  })
+
   it('restores on its own after the configured time, also after a restart', async () => {
     const service = new TamperService(admin, stateDir, { random: () => 0.7, autoRestoreMs: 600 })
     try {
