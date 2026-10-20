@@ -37,7 +37,7 @@ afterAll(async () => {
 
 describe('settlement', () => {
   it('ingests a closed day once, posts what the file says, and finds nothing to report', async () => {
-    const auto = (await stack.call('POST', '/v1/payments', { body: pay(1500) })).body
+    await stack.call('POST', '/v1/payments', { body: pay(1500) })
     const refunded = (await stack.call('POST', '/v1/payments', { body: pay(2400) })).body
     await stack.call('POST', `/v1/payments/${refunded.id}/refunds`, { body: { amount: 400 } })
     const manual = (await stack.call('POST', '/v1/payments', { body: pay(1500, { capture: 'manual' }) })).body

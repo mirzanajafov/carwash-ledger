@@ -75,7 +75,7 @@ describe('the Merkle tree', () => {
         if (proof.length > 0) {
           const bad = proof.map((p) => Uint8Array.from(p))
           const at = flip % bad.length
-          bad[at]![flip % 32] ^= 1 << flip % 8
+          bad[at]![flip % 32]! ^= 1 << flip % 8
           expect(verifyInclusion(leaves[index]!, index, size, bad, root)).toBe(false)
         }
       }),

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc",
     "test": "vitest run",
     "e5": "node --conditions=source src/e5.ts"
   },

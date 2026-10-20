@@ -34,14 +34,22 @@ function round(x: number, digits = 1): number {
   return Math.round(x * f) / f
 }
 
+interface E1Cell {
+  mode: string
+  connections: number
+  rate: number
+  achieved: number[]
+  p99: number[]
+}
+
 function e1() {
-  const cells = new Map<string, { mode: string; connections: number; rate: number; achieved: number[]; p99: number[] }>()
+  const cells = new Map<string, E1Cell>()
   const take = (dir: string, only?: string) => {
     for (const cell of lines(join(BENCH, 'e1', dir, 'cells.jsonl'))) {
       if (!E1_MODES.includes(cell.mode) || (only && cell.mode !== only)) continue
       if (!only && E1_OVERRIDES[cell.mode]) continue
       const key = `${cell.mode}:${cell.connections}:${cell.rate}`
-      const row = cells.get(key) ?? { mode: cell.mode, connections: cell.connections, rate: cell.rate, achieved: [], p99: [] }
+      const row: E1Cell = cells.get(key) ?? { mode: cell.mode, connections: cell.connections, rate: cell.rate, achieved: [], p99: [] }
       row.achieved.push(cell.load.achievedPerSecond)
       row.p99.push(cell.load.latencyMs.p99)
       cells.set(key, row)

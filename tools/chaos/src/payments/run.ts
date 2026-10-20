@@ -31,7 +31,7 @@ import { checkKeys, compareBeliefs, readState, unanswered } from './checks.ts'
 import { Clients } from './client.ts'
 import { Forger } from './forger.ts'
 import { Journeys } from './journeys.ts'
-import { planPayments, PROXIES, SERVICES, type PaymentFault, type ProxyName, type ServiceName } from './plan.ts'
+import { planPayments, PROXIES, SERVICES, type PaymentFault, type ProxyName } from './plan.ts'
 
 export interface PspFaults {
   decline: number

@@ -11,8 +11,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc",
     "test": "vitest run"
   },
   "devDependencies": {
