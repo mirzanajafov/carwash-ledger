@@ -202,19 +202,20 @@ describe('PSP simulator', () => {
     answerWith = (body) => (body.includes('merchant_7') && ++calls === 1 ? 500 : 200)
     const key = randomUUID()
     const reply = await call('POST', '/v1/payouts', { key, body: { amount: 2500, currency: 'EUR', destination: 'merchant_7' } })
-    const deliveries = await waitFor(async () => {
-      const mine = received.filter((r) => JSON.parse(r.body).data.object.id === reply.body.id)
-      return mine.length >= 2 ? mine : undefined
-    })
+    const rows = async () =>
+      (
+        await sql.query<{ attempts: number; delivered: boolean }>(
+          'SELECT attempts, delivered_at IS NOT NULL AS delivered FROM deliveries d JOIN events e ON e.id = d.event_id WHERE e.operation_id = $1',
+          [reply.body.id],
+        )
+      ).rows
+    await expect.poll(rows, { timeout: 10_000 }).toEqual([{ attempts: 2, delivered: true }])
+    const deliveries = received.filter((r) => JSON.parse(r.body).data.object.id === reply.body.id)
+    expect(deliveries).toHaveLength(2)
     for (const delivery of deliveries) {
       expect(verifySignature(SECRET, delivery.body, delivery.signature, Math.floor(Date.now() / 1000))).toBe(true)
     }
     expect(JSON.parse(deliveries[1]!.body)).toMatchObject({ type: 'operation.succeeded', data: { object: { kind: 'payout', destination: 'merchant_7' } } })
-    const delivered = await waitFor(async () => {
-      const { rows } = await sql.query('SELECT attempts, delivered_at IS NOT NULL AS delivered FROM deliveries d JOIN events e ON e.id = d.event_id WHERE e.operation_id = $1', [reply.body.id])
-      return rows[0]?.delivered ? rows : undefined
-    })
-    expect(delivered).toEqual([{ attempts: 2, delivered: true }])
   })
 
   it('delivers a duplicated webhook twice with one event id and never sends a dropped one', async () => {
