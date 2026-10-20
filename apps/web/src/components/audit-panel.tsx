@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { seqToCheck, type AuditState } from '@/lib/audit'
+import { useCallback, useEffect, useReducer, useState } from 'react'
+import { EMPTY, reduce, type AuditState } from '@/lib/audit'
 import { checkJournal, type CheckpointJson, type JournalJson, type ProofJson, type Verdict } from '@/lib/verify-journal'
 
 interface Report {
@@ -49,17 +49,15 @@ function Mark({ ok }: { ok: boolean | null }) {
 }
 
 export function AuditPanel() {
-  const [state, setState] = useState<AuditState | null>(null)
+  const [{ state, seq }, dispatch] = useReducer(reduce, EMPTY)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [report, setReport] = useState<Report | null>(null)
-  const [typed, setTyped] = useState<string | null>(null)
   const [verdicts, setVerdicts] = useState<{ seq: number; journalId: string; verdicts: Verdict[] } | null>(null)
-  const seq = seqToCheck(typed, state)
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    if (response.ok) setState((await response.json()) as AuditState)
+    if (response.ok) dispatch({ type: 'loaded', state: (await response.json()) as AuditState })
   }, [])
 
   useEffect(() => {
@@ -121,15 +119,7 @@ export function AuditPanel() {
               <span className="font-medium text-bad">Journal {tamper.journal_id} at seq {tamper.seq} is tampered with</span> (class {tamper.tamper_class}).
               {tamper.restores_at ? ` It goes back on its own at ${new Date(tamper.restores_at).toLocaleTimeString()}.` : ''}
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                setTyped(String(tamper.seq))
-                void act('restore', '/api/audit/restore')
-              }}
-              disabled={busy !== null}
-              className="rounded-lg border border-line px-3 py-1.5 font-medium disabled:opacity-50"
-            >
+            <button type="button" onClick={() => act('restore', '/api/audit/restore')} disabled={busy !== null} className="rounded-lg border border-line px-3 py-1.5 font-medium disabled:opacity-50">
               {busy === 'restore' ? 'Restoring…' : 'Restore it'}
             </button>
           </div>
@@ -141,10 +131,7 @@ export function AuditPanel() {
               key={c.tamperClass}
               type="button"
               disabled={busy !== null || !!tamper || !state?.tamperAvailable}
-              onClick={() => {
-                setTyped(null)
-                void act('tamper', '/api/audit/tamper', { class: c.tamperClass })
-              }}
+              onClick={() => act('tamper', '/api/audit/tamper', { class: c.tamperClass })}
               className="rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="block text-sm font-medium">
@@ -174,7 +161,7 @@ export function AuditPanel() {
           <label className="text-sm text-muted" htmlFor="seq">
             Seq
           </label>
-          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => setTyped(e.target.value.replace(/\D/g, ''))} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
+          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => dispatch({ type: 'typed', seq: e.target.value.replace(/\D/g, '') })} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
           <button type="submit" disabled={busy !== null || seq === ''} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
             {busy === 'check' ? 'Checking…' : 'Check it'}
           </button>

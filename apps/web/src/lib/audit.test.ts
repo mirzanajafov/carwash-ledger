@@ -1,29 +1,47 @@
 import { describe, expect, it } from 'vitest'
-import { seqToCheck, type AuditState } from './audit'
+import { EMPTY, reduce, type AuditPanelState, type AuditState } from './audit'
 
-function stateWith(tamperSeq: number | null, treeSize = 40): AuditState {
-  const at = '2026-10-20T10:00:00.000Z'
+function server(treeSize: number, tamper: { seq: number; at: string } | null = null): AuditState {
   return {
-    tamper: tamperSeq === null ? null : { tamper_class: 1, seq: tamperSeq, journal_id: '7', witnessed_size: treeSize, at, restores_at: null },
+    tamper: tamper && { tamper_class: 1, seq: tamper.seq, journal_id: '7', witnessed_size: treeSize, at: tamper.at, restores_at: null },
     tamperAvailable: true,
-    checkpoint: { origin: 'carwash-ledger', tree_size: treeSize, root: '00', signature: 'sig', witness_key: 'key', signed_at: at },
+    checkpoint: { origin: 'carwash-ledger', tree_size: treeSize, root: '00', signature: 'sig', witness_key: 'key', signed_at: '2026-10-20T10:00:00.000Z' },
     witnessKey: 'key',
   }
 }
 
-describe('the seq to check', () => {
-  it('is the tampered journal while one is tampered with', () => {
-    expect(seqToCheck(null, stateWith(12))).toBe('12')
+function play(...steps: (AuditState | string)[]): AuditPanelState {
+  return steps.reduce<AuditPanelState>((panel, step) => reduce(panel, typeof step === 'string' ? { type: 'typed', seq: step } : { type: 'loaded', state: step }), EMPTY)
+}
+
+describe('the seq on the audit page', () => {
+  it('starts at the newest journal the witness signed', () => {
+    expect(play(server(40)).seq).toBe('39')
   })
 
-  it('is otherwise the newest journal the witness signed, and empty before the state arrives', () => {
-    expect(seqToCheck(null, stateWith(null, 40))).toBe('39')
-    expect(seqToCheck(null, { ...stateWith(null), checkpoint: null })).toBe('')
-    expect(seqToCheck(null, null)).toBe('')
+  it('waits for the first signed journal instead of offering seq -1', () => {
+    expect(play(server(0)).seq).toBe('')
+    expect(play(server(0), server(3)).seq).toBe('2')
   })
 
-  it('stays what the visitor typed, even an emptied field, whatever the next refresh brings', () => {
-    expect(seqToCheck('5', stateWith(12))).toBe('5')
-    expect(seqToCheck('', stateWith(null, 41))).toBe('')
+  it('stays where it is when later checkpoints land, even after the visitor emptied it', () => {
+    expect(play(server(40), server(45)).seq).toBe('39')
+    expect(play(server(40), '', server(45)).seq).toBe('')
+  })
+
+  it('jumps to a new tamper, whoever made it, over what the visitor typed', () => {
+    expect(play(server(40), '5', server(40, { seq: 12, at: 't1' })).seq).toBe('12')
+  })
+
+  it('keeps the tampered journal after the restore, so it can be checked again', () => {
+    expect(play(server(40, { seq: 12, at: 't1' }), server(41)).seq).toBe('12')
+  })
+
+  it('keeps what the visitor typed while the same tamper is still reported', () => {
+    expect(play(server(40, { seq: 12, at: 't1' }), '30', server(41, { seq: 12, at: 't1' })).seq).toBe('30')
+  })
+
+  it('jumps again for a second tamper of the same journal', () => {
+    expect(play(server(40, { seq: 12, at: 't1' }), server(40), '30', server(40, { seq: 12, at: 't2' })).seq).toBe('12')
   })
 })
