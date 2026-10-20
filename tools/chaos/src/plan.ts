@@ -61,9 +61,7 @@ export function planRun(options: PlanOptions): RunPlan {
   const killRandom = mulberry32(options.seed ^ 0x6b696c6c)
   const kills: Fault[] = arrivals(killRandom, options.killEveryMs, options.durationMs).map((at) => {
     const index = Math.floor(killRandom() * (options.posters + 1))
-    return index === options.posters
-      ? { at, kind: 'kill', worker: 'snapshotter', index: 0 }
-      : { at, kind: 'kill', worker: 'poster', index }
+    return index === options.posters ? { at, kind: 'kill', worker: 'snapshotter', index: 0 } : { at, kind: 'kill', worker: 'poster', index }
   })
 
   const postgresRandom = mulberry32(options.seed ^ 0x70677371)

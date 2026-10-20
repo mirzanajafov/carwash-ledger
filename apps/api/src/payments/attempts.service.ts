@@ -173,10 +173,11 @@ export class AttemptsService {
         { accountId: accounts.fees.id, amount: back },
       ]),
     })
-    await client.query(
-      `UPDATE refunds SET status = 'succeeded', fee_refund = $2, journal_id = $3, resolved_at = now() WHERE id = $1 AND status = 'pending'`,
-      [refundId, back, journalId],
-    )
+    await client.query(`UPDATE refunds SET status = 'succeeded', fee_refund = $2, journal_id = $3, resolved_at = now() WHERE id = $1 AND status = 'pending'`, [
+      refundId,
+      back,
+      journalId,
+    ])
     await journalEvents(client, journalId)
     await refundEvent(client, refundId, 'refund.succeeded')
     const after = before + amount

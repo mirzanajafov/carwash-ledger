@@ -78,63 +78,87 @@ export function LineChart({ title, series, xLabel, yLabel, yLog = false, format 
         </span>
       </figcaption>
       <div className="-mx-1 overflow-x-auto px-1">
-      <div className="relative min-w-[34rem]">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full touch-none select-none" role="img" aria-label={title} onPointerMove={move} onPointerDown={move} onPointerLeave={() => setHover(null)}>
-          {yTicks.map((t) => (
-            <g key={t}>
-              <line x1={M.left} x2={W - M.right} y1={py(t)} y2={py(t)} stroke="var(--line)" strokeWidth={1} />
-              <text x={M.left - 8} y={py(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)">
-                {format(t)}
-              </text>
-            </g>
-          ))}
-          {xs.map((x) => (
-            <text key={x} x={px(x)} y={H - M.bottom + 16} textAnchor="middle" fontSize={11} fill="var(--muted)">
-              {x.toLocaleString('en')}
-            </text>
-          ))}
-          <text x={(M.left + W - M.right) / 2} y={H - 4} textAnchor="middle" fontSize={11} fill="var(--muted)">
-            {xLabel}
-          </text>
-          <text x={12} y={M.top + (H - M.top - M.bottom) / 2} textAnchor="middle" fontSize={11} fill="var(--muted)" transform={`rotate(-90 12 ${M.top + (H - M.top - M.bottom) / 2})`}>
-            {yLabel}
-          </text>
-          {at !== null ? <line x1={px(at)} x2={px(at)} y1={M.top} y2={H - M.bottom} stroke="var(--muted)" strokeWidth={1} strokeDasharray="3 3" /> : null}
-          {series.map((s) => (
-            <g key={s.key}>
-              <polyline points={s.points.map((p) => `${px(p.x)},${py(p.y)}`).join(' ')} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-              {s.points.map((p) => (
-                <circle key={p.x} cx={px(p.x)} cy={py(p.y)} r={p.x === at ? 5 : 3.5} fill={s.color} stroke="var(--surface)" strokeWidth={2} />
-              ))}
-            </g>
-          ))}
-          {ends.map((e) => (
-            <text key={e.key} x={e.x} y={e.y + 4} fontSize={11} fill="var(--ink)">
-              {e.label}
-            </text>
-          ))}
-        </svg>
-        {at !== null ? (
-          <div
-            className="pointer-events-none absolute top-2 z-10 min-w-40 rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-sm"
-            style={px(at) > W / 2 ? { right: `${((W - px(at)) / W) * 100 + 2}%` } : { left: `${(px(at) / W) * 100 + 2}%` }}
+        <div className="relative min-w-[34rem]">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full touch-none select-none"
+            role="img"
+            aria-label={title}
+            onPointerMove={move}
+            onPointerDown={move}
+            onPointerLeave={() => setHover(null)}
           >
-            <p className="mb-1 font-medium">{xLabel.replace(/^./, (c) => c.toUpperCase())}: {at.toLocaleString('en')}</p>
-            {series.map((s) => {
-              const point = s.points.find((p) => p.x === at)
-              return (
-                <p key={s.key} className="flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-1.5 text-muted">
-                    <span className="inline-block size-2 rounded-full" style={{ background: s.color }} aria-hidden />
-                    {s.label}
-                  </span>
-                  <span className="font-mono tabular-nums">{point ? format(point.y) : '—'}</span>
-                </p>
-              )
-            })}
-          </div>
-        ) : null}
-      </div>
+            {yTicks.map((t) => (
+              <g key={t}>
+                <line x1={M.left} x2={W - M.right} y1={py(t)} y2={py(t)} stroke="var(--line)" strokeWidth={1} />
+                <text x={M.left - 8} y={py(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)">
+                  {format(t)}
+                </text>
+              </g>
+            ))}
+            {xs.map((x) => (
+              <text key={x} x={px(x)} y={H - M.bottom + 16} textAnchor="middle" fontSize={11} fill="var(--muted)">
+                {x.toLocaleString('en')}
+              </text>
+            ))}
+            <text x={(M.left + W - M.right) / 2} y={H - 4} textAnchor="middle" fontSize={11} fill="var(--muted)">
+              {xLabel}
+            </text>
+            <text
+              x={12}
+              y={M.top + (H - M.top - M.bottom) / 2}
+              textAnchor="middle"
+              fontSize={11}
+              fill="var(--muted)"
+              transform={`rotate(-90 12 ${M.top + (H - M.top - M.bottom) / 2})`}
+            >
+              {yLabel}
+            </text>
+            {at !== null ? <line x1={px(at)} x2={px(at)} y1={M.top} y2={H - M.bottom} stroke="var(--muted)" strokeWidth={1} strokeDasharray="3 3" /> : null}
+            {series.map((s) => (
+              <g key={s.key}>
+                <polyline
+                  points={s.points.map((p) => `${px(p.x)},${py(p.y)}`).join(' ')}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+                {s.points.map((p) => (
+                  <circle key={p.x} cx={px(p.x)} cy={py(p.y)} r={p.x === at ? 5 : 3.5} fill={s.color} stroke="var(--surface)" strokeWidth={2} />
+                ))}
+              </g>
+            ))}
+            {ends.map((e) => (
+              <text key={e.key} x={e.x} y={e.y + 4} fontSize={11} fill="var(--ink)">
+                {e.label}
+              </text>
+            ))}
+          </svg>
+          {at !== null ? (
+            <div
+              className="pointer-events-none absolute top-2 z-10 min-w-40 rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-sm"
+              style={px(at) > W / 2 ? { right: `${((W - px(at)) / W) * 100 + 2}%` } : { left: `${(px(at) / W) * 100 + 2}%` }}
+            >
+              <p className="mb-1 font-medium">
+                {xLabel.replace(/^./, (c) => c.toUpperCase())}: {at.toLocaleString('en')}
+              </p>
+              {series.map((s) => {
+                const point = s.points.find((p) => p.x === at)
+                return (
+                  <p key={s.key} className="flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-1.5 text-muted">
+                      <span className="inline-block size-2 rounded-full" style={{ background: s.color }} aria-hidden />
+                      {s.label}
+                    </span>
+                    <span className="font-mono tabular-nums">{point ? format(point.y) : '—'}</span>
+                  </p>
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
       </div>
     </figure>
   )

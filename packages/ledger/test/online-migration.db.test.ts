@@ -75,7 +75,9 @@ describe('the entries currency change', () => {
     try {
       await client.query('BEGIN')
       const journal = await client.query<{ id: string }>(`INSERT INTO journals (external_ref) VALUES ('short') RETURNING id::text`)
-      const [eur, usd] = (await client.query<{ id: string }>(`SELECT id::text FROM accounts WHERE code IN ('receivable:EUR', 'merchant:USD') ORDER BY code DESC`)).rows
+      const [eur, usd] = (
+        await client.query<{ id: string }>(`SELECT id::text FROM accounts WHERE code IN ('receivable:EUR', 'merchant:USD') ORDER BY code DESC`)
+      ).rows
       await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, 100), ($1, $3, -100)', [journal.rows[0]!.id, eur!.id, usd!.id])
       expect(await sqlState(client.query('COMMIT'))).toBe('LG002')
     } finally {

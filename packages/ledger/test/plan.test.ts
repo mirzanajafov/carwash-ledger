@@ -20,12 +20,66 @@ describe('planJournal', () => {
 
   it.each([
     ['too few entries', { externalRef: 'x', entries: [{ accountId: a.id, amount: 1n }] }],
-    ['an empty external ref', { externalRef: '', entries: [{ accountId: a.id, amount: 1n }, { accountId: b.id, amount: -1n }] }],
-    ['a zero amount', { externalRef: 'x', entries: [{ accountId: a.id, amount: 0n }, { accountId: b.id, amount: 0n }] }],
-    ['an unknown account', { externalRef: 'x', entries: [{ accountId: 999n, amount: 1n }, { accountId: b.id, amount: -1n }] }],
-    ['an amount out of range', { externalRef: 'x', entries: [{ accountId: a.id, amount: 10n ** 16n }, { accountId: b.id, amount: -(10n ** 16n) }] }],
-    ['an unbalanced journal', { externalRef: 'x', entries: [{ accountId: a.id, amount: 5n }, { accountId: b.id, amount: -4n }] }],
-    ['a journal balanced only across currencies', { externalRef: 'x', entries: [{ accountId: a.id, amount: 5n }, { accountId: usd.id, amount: -5n }] }],
+    [
+      'an empty external ref',
+      {
+        externalRef: '',
+        entries: [
+          { accountId: a.id, amount: 1n },
+          { accountId: b.id, amount: -1n },
+        ],
+      },
+    ],
+    [
+      'a zero amount',
+      {
+        externalRef: 'x',
+        entries: [
+          { accountId: a.id, amount: 0n },
+          { accountId: b.id, amount: 0n },
+        ],
+      },
+    ],
+    [
+      'an unknown account',
+      {
+        externalRef: 'x',
+        entries: [
+          { accountId: 999n, amount: 1n },
+          { accountId: b.id, amount: -1n },
+        ],
+      },
+    ],
+    [
+      'an amount out of range',
+      {
+        externalRef: 'x',
+        entries: [
+          { accountId: a.id, amount: 10n ** 16n },
+          { accountId: b.id, amount: -(10n ** 16n) },
+        ],
+      },
+    ],
+    [
+      'an unbalanced journal',
+      {
+        externalRef: 'x',
+        entries: [
+          { accountId: a.id, amount: 5n },
+          { accountId: b.id, amount: -4n },
+        ],
+      },
+    ],
+    [
+      'a journal balanced only across currencies',
+      {
+        externalRef: 'x',
+        entries: [
+          { accountId: a.id, amount: 5n },
+          { accountId: usd.id, amount: -5n },
+        ],
+      },
+    ],
   ])('rejects %s', (_, input) => {
     expect(() => planJournal(input, accounts)).toThrow(InvalidJournalError)
   })
@@ -36,7 +90,10 @@ describe('planJournal', () => {
   })
 
   it('rejects a number where a bigint is required', () => {
-    const entries = [{ accountId: a.id, amount: 1 as unknown as bigint }, { accountId: b.id, amount: -1n }]
+    const entries = [
+      { accountId: a.id, amount: 1 as unknown as bigint },
+      { accountId: b.id, amount: -1n },
+    ]
     expect(() => planJournal({ externalRef: 'x', entries }, accounts)).toThrow(InvalidJournalError)
   })
 

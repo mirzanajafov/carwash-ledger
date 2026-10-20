@@ -23,12 +23,9 @@ describe('the bank weather', () => {
   })
 
   it('names only the faults a plan turns on', () => {
-    expect(describePlan({ fail: 0.15, timeoutAfterCommit: 0.005, webhook: { duplicate: 0.4, drop: 0 }, settlement: { nextDay: 0.1, missingLine: 0.03 } })).toEqual([
-      '15% fail',
-      '0.5% time out after the work',
-      '40% webhooks twice',
-      '13% settlement lines off',
-    ])
+    expect(
+      describePlan({ fail: 0.15, timeoutAfterCommit: 0.005, webhook: { duplicate: 0.4, drop: 0 }, settlement: { nextDay: 0.1, missingLine: 0.03 } }),
+    ).toEqual(['15% fail', '0.5% time out after the work', '40% webhooks twice', '13% settlement lines off'])
     expect(describePlan({})).toEqual([])
   })
 

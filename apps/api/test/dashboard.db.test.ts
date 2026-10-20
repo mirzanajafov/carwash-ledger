@@ -133,7 +133,13 @@ describe('the live feed', () => {
     const poster = new PgCtePoster(pool, chart.registry)
     const before = BigInt((await pool.query<{ id: string }>('SELECT coalesce(max(id), 0)::text AS id FROM journals')).rows[0]!.id)
     for (let i = 0; i < 700; i++) {
-      await poster.post({ externalRef: `live-backlog:${i}`, entries: [{ accountId: accounts.receivable.id, amount: 1n }, { accountId: accounts.fees.id, amount: -1n }] })
+      await poster.post({
+        externalRef: `live-backlog:${i}`,
+        entries: [
+          { accountId: accounts.receivable.id, amount: 1n },
+          { accountId: accounts.fees.id, amount: -1n },
+        ],
+      })
     }
     const live = await watch(`${stack.url}/v1/live`)
     try {
@@ -169,7 +175,9 @@ describe('the admin side of the dashboard', () => {
       expect(Number(again.retryAfter)).toBeGreaterThan(50)
       const restarted = await startApi(stack.config)
       try {
-        expect((await stack.call('POST', '/v1/admin/plug', { as: 'admin', body: { failpoint: 'post.after_lock' }, key: null, base: restarted.url })).status).toBe(429)
+        expect(
+          (await stack.call('POST', '/v1/admin/plug', { as: 'admin', body: { failpoint: 'post.after_lock' }, key: null, base: restarted.url })).status,
+        ).toBe(429)
       } finally {
         await restarted.app.close()
       }
@@ -208,7 +216,10 @@ describe('admin sessions', () => {
     expect(hours).toBeLessThan(12 + 1 / 60)
     const stored = await stack.admin.query('SELECT token_hash FROM dashboard_sessions WHERE id = $1', [session.id])
     expect(stored.rows[0].token_hash).toEqual(createHash('sha256').update(session.token).digest())
-    expect(await stack.call('GET', '/v1/admin/sessions/current', { bearer: session.token })).toMatchObject({ status: 200, body: { id: session.id, client: expect.any(String) } })
+    expect(await stack.call('GET', '/v1/admin/sessions/current', { bearer: session.token })).toMatchObject({
+      status: 200,
+      body: { id: session.id, client: expect.any(String) },
+    })
     expect((await stack.call('GET', '/v1/reconciliation/days', { bearer: session.token })).status).toBe(200)
     expect((await stack.call('POST', '/v1/admin/sessions', { bearer: session.token, key: null })).status).toBe(403)
     expect((await stack.call('GET', '/v1/admin/sessions/current', { as: 'admin' })).status).toBe(404)

@@ -17,7 +17,8 @@ function fakeApi(script: { pay: (Reply | Error)[]; health: (string | null)[]; ch
       const started = script.health.shift()
       return started === undefined || started === null ? null : { pid: 7, startedAt: started }
     },
-    checks: async () => script.checks?.shift() ?? { status: 200, body: { ms: 12, results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }] }, retryAfter: null },
+    checks: async () =>
+      script.checks?.shift() ?? { status: 200, body: { ms: 12, results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }] }, retryAfter: null },
     key: () => 'key-1',
     sleep: async (ms) => {
       clock += ms
@@ -34,7 +35,7 @@ async function run(deps: PlugDeps): Promise<Step[]> {
 }
 
 describe('pulling the plug', () => {
-  it('waits for a new process, even one with the same pid, retries the same key past the dead request\'s lease, and ends with the checks', async () => {
+  it("waits for a new process, even one with the same pid, retries the same key past the dead request's lease, and ends with the checks", async () => {
     const { deps, sent } = fakeApi({
       pay: [
         new Error('socket hang up'),

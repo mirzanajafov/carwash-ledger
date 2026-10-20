@@ -197,7 +197,9 @@ describe('relayOnce', () => {
     const lease = await checkout(app)
     try {
       await expect(relayOnce(lease.client, publisher)).rejects.toThrow('broker unavailable')
-      const { rows } = await lease.client.query<{ held: number }>("SELECT count(*)::int AS held FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()")
+      const { rows } = await lease.client.query<{ held: number }>(
+        "SELECT count(*)::int AS held FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()",
+      )
       expect(rows[0]!.held).toBe(0)
     } finally {
       lease.release()

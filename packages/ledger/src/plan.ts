@@ -101,9 +101,5 @@ export function entryParams(plan: JournalPlan): [string[], string[]] {
 }
 
 export function deltaParams(plan: JournalPlan): [string[], number[], string[]] {
-  return [
-    plan.deltas.map((d) => d.accountId.toString()),
-    plan.deltas.map((d) => d.shard),
-    plan.deltas.map((d) => d.delta.toString()),
-  ]
+  return [plan.deltas.map((d) => d.accountId.toString()), plan.deltas.map((d) => d.shard), plan.deltas.map((d) => d.delta.toString())]
 }

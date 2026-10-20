@@ -148,7 +148,11 @@ describe('the payment invariants', () => {
         `SELECT e.account_id::text, e.amount::int FROM entries e JOIN journals j ON j.id = e.journal_id WHERE j.external_ref = $1`,
         [`capture:${payments.auto}`],
       )
-      await postJournal(client, `capture:${payments.auto}`, rows.map((r) => [r.account_id, r.amount]))
+      await postJournal(
+        client,
+        `capture:${payments.auto}`,
+        rows.map((r) => [r.account_id, r.amount]),
+      )
     })
     expect(second).toMatchObject({ S3: 2, S5: 0, S6: 0 })
     const unbooked = await inLedger((client) =>
@@ -156,10 +160,9 @@ describe('the payment invariants', () => {
     )
     expect(unbooked).toMatchObject({ S3: 1 })
     const beyond = await inLedger(async (client) => {
-      const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO refunds (payment_id, amount, status) VALUES ($1, 1000, 'succeeded') RETURNING id`,
-        [payments.manual],
-      )
+      const { rows } = await client.query<{ id: string }>(`INSERT INTO refunds (payment_id, amount, status) VALUES ($1, 1000, 'succeeded') RETURNING id`, [
+        payments.manual,
+      ])
       await postJournal(client, `refund:${rows[0]!.id}`, [
         [await accountId('psp_receivable:EUR'), -1000],
         [await accountId('merchant_payable:wash_1'), 1000],
@@ -169,9 +172,7 @@ describe('the payment invariants', () => {
   })
 
   it('catch a payment that no key created, or that two keys did (S5)', async () => {
-    const orphan = await inLedger((client) =>
-      client.query(`DELETE FROM idempotency_keys WHERE payment_id = $1 AND path = '/v1/payments'`, [payments.auto]),
-    )
+    const orphan = await inLedger((client) => client.query(`DELETE FROM idempotency_keys WHERE payment_id = $1 AND path = '/v1/payments'`, [payments.auto]))
     expect(orphan).toMatchObject({ S3: 0, S5: 1 })
     const twice = await inLedger((client) =>
       client.query(
@@ -219,15 +220,13 @@ describe('the payment invariants', () => {
     expect(await atPsp((psp) => psp.query('DELETE FROM operations WHERE idempotency_key = $1', [refund]))).toEqual({ S4: 2 })
     expect(
       await atPsp((psp) =>
-        psp.query(
-          `INSERT INTO operations (id, idempotency_key, kind, status, amount, currency) VALUES ($1, $2, 'capture', 'succeeded', 1500, 'EUR')`,
-          [`op_${randomUUID()}`, randomUUID()],
-        ),
+        psp.query(`INSERT INTO operations (id, idempotency_key, kind, status, amount, currency) VALUES ($1, $2, 'capture', 'succeeded', 1500, 'EUR')`, [
+          `op_${randomUUID()}`,
+          randomUUID(),
+        ]),
       ),
     ).toEqual({ S4: 1 })
-    expect(
-      await atPsp((psp) => psp.query(`UPDATE operations SET status = 'declined' WHERE idempotency_key = $1`, [payouts[0]!.id])),
-    ).toEqual({ S4: 2 })
+    expect(await atPsp((psp) => psp.query(`UPDATE operations SET status = 'declined' WHERE idempotency_key = $1`, [payouts[0]!.id]))).toEqual({ S4: 2 })
     expect(await atPsp(async () => undefined)).toEqual({ S4: 0 })
   })
 })
@@ -266,12 +265,14 @@ describe('the event invariants', () => {
         await client.query(`UPDATE receipt_counters SET last_number = last_number - 1 WHERE merchant = 'wash_1'`)
       }),
     ).toEqual({ L2: 0, L3: 1 })
-    expect(
-      await inEvents((client) => client.query(`UPDATE receipts SET number = number + 10 WHERE payment_id = $1`, [payments.manual])),
-    ).toEqual({ L2: 0, L3: 1 })
-    expect(
-      await inEvents((client) => client.query('UPDATE statements SET credits = credits + 1 WHERE ctid = (SELECT ctid FROM statements LIMIT 1)')),
-    ).toEqual({ L2: 0, L3: 1 })
+    expect(await inEvents((client) => client.query(`UPDATE receipts SET number = number + 10 WHERE payment_id = $1`, [payments.manual]))).toEqual({
+      L2: 0,
+      L3: 1,
+    })
+    expect(await inEvents((client) => client.query('UPDATE statements SET credits = credits + 1 WHERE ctid = (SELECT ctid FROM statements LIMIT 1)'))).toEqual({
+      L2: 0,
+      L3: 1,
+    })
     expect(await inEvents(async () => undefined)).toEqual({ L2: 0, L3: 0 })
   })
 })

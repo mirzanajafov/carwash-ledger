@@ -154,10 +154,11 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
   const pspSql = new pg.Pool({ connectionString: pspDb.url, max: 2 })
   const clientIds = {} as Record<keyof typeof KEYS, string>
   for (const [name, key] of Object.entries(KEYS) as [keyof typeof KEYS, string][]) {
-    const { rows } = await owner.query<{ id: string }>(
-      'INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text',
-      [name, hashApiKey(key), name === 'admin' ? 'admin' : 'client'],
-    )
+    const { rows } = await owner.query<{ id: string }>('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text', [
+      name,
+      hashApiKey(key),
+      name === 'admin' ? 'admin' : 'client',
+    ])
     clientIds[name] = rows[0]!.id
   }
   const apiPort = await freePort()
@@ -179,7 +180,10 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
     },
     () => undefined,
   )
-  const config = apiConfig(ledgerDb.url('ledger_app'), psp.url, { webhookSecret: options.webhooks ? WEBHOOK_SECRET : undefined, auditDatabaseUrl: ledgerDb.url('ledger_audit') })
+  const config = apiConfig(ledgerDb.url('ledger_app'), psp.url, {
+    webhookSecret: options.webhooks ? WEBHOOK_SECRET : undefined,
+    auditDatabaseUrl: ledgerDb.url('ledger_audit'),
+  })
   const { app, url } = await startApi(config, apiPort)
   const stack: Stack = {
     ledgerDb,
@@ -223,7 +227,12 @@ export async function outboxEvents(pool: pg.Pool, which: 'unpublished' | 'all' =
 
 export async function deliver(pool: pg.Pool, batches: readonly (readonly OutboxEvent[])[]): Promise<void> {
   for (const batch of batches) {
-    for (const spec of CONSUMERS) await applyOnce(pool, spec, batch.filter((event) => event.topic === spec.topic))
+    for (const spec of CONSUMERS)
+      await applyOnce(
+        pool,
+        spec,
+        batch.filter((event) => event.topic === spec.topic),
+      )
   }
   const ids = [...new Set(batches.flat().map((event) => event.id))]
   await pool.query('UPDATE outbox SET published_at = now() WHERE event_id = ANY($1::uuid[]) AND published_at IS NULL', [ids])

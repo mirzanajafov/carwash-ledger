@@ -49,10 +49,7 @@ async function createAccount(app: pg.Pool, code: string, type: string, mode: Mod
   )
   const accountId = inserted.rows[0]!.id
   if (mode !== 'derived') {
-    await app.query('INSERT INTO balances (account_id, shard) SELECT $1::bigint, generate_series(0, $2::int - 1)', [
-      accountId,
-      shards,
-    ])
+    await app.query('INSERT INTO balances (account_id, shard) SELECT $1::bigint, generate_series(0, $2::int - 1)', [accountId, shards])
   }
   return { id: BigInt(accountId) }
 }
@@ -62,13 +59,13 @@ async function postCapture(app: pg.Pool, ref: string, set: { receivable: Account
   try {
     await client.query('BEGIN')
     const journal = await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [ref])
-    const moves: [Account, number][] = [[set.receivable, 1000], [set.merchant, -970], [set.fees, -30]]
+    const moves: [Account, number][] = [
+      [set.receivable, 1000],
+      [set.merchant, -970],
+      [set.fees, -30],
+    ]
     for (const [account, amount] of moves) {
-      await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [
-        journal.rows[0]!.id,
-        account.id.toString(),
-        amount,
-      ])
+      await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [journal.rows[0]!.id, account.id.toString(), amount])
       const accountMode = account === set.merchant ? 'locked' : mode
       if (accountMode === 'derived') continue
       await client.query(

@@ -74,9 +74,7 @@ export async function createModeAccounts(
     receivable: await createAccount(pool, { ...spec, code: code('psp_receivable'), type: 'asset' }),
     fees: await createAccount(pool, { ...spec, code: code('platform_fees'), type: 'revenue' }),
     merchants: await Promise.all(
-      Array.from({ length: merchants }, (_, i) =>
-        createAccount(pool, { ...spec, balanceMode: 'locked', code: code(`merchant_${i}`), type: 'liability' }),
-      ),
+      Array.from({ length: merchants }, (_, i) => createAccount(pool, { ...spec, balanceMode: 'locked', code: code(`merchant_${i}`), type: 'liability' })),
     ),
   }
 }

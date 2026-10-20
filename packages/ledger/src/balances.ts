@@ -24,16 +24,12 @@ export async function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null> 
   let broken = false
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
-    const lock = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [
-      SNAPSHOT_LOCK_KEY,
-    ])
+    const lock = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SNAPSHOT_LOCK_KEY])
     if (!lock.rows[0]!.locked) {
       await client.query('ROLLBACK')
       return null
     }
-    const horizon = await client.query<{ horizon: string }>(
-      'SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon',
-    )
+    const horizon = await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')
     const value = horizon.rows[0]!.horizon
     const written = await client.query(TAKE_SNAPSHOTS, [value])
     failpoint('snapshot.before_commit')

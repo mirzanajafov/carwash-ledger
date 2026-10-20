@@ -52,7 +52,13 @@ beforeAll(async () => {
   const merchant = await createAccount(app, { ...spec, code: 'merchant', type: 'liability' })
   const poster = new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app)))
   for (let i = 0; i < 30; i++) {
-    await poster.post({ externalRef: `capture:${i}`, entries: [{ accountId: receivable.id, amount: 1500n }, { accountId: merchant.id, amount: -1500n }] })
+    await poster.post({
+      externalRef: `capture:${i}`,
+      entries: [
+        { accountId: receivable.id, amount: 1500n },
+        { accountId: merchant.id, amount: -1500n },
+      ],
+    })
   }
   const lease = await app.connect()
   try {
@@ -130,11 +136,15 @@ describe('the tamper service', () => {
 
   it('puts a deleted journal back with its own ids', async () => {
     const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.1 }), 'tamper-token')))
-    const before = await admin.query('SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id')
+    const before = await admin.query(
+      'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
+    )
     const { body } = await call('POST', '/v1/tamper', { class: 3 })
     expect((await verifyLog(admin, { witness: roots() })).examples).toEqual([{ kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id }])
     await call('POST', '/v1/restore')
-    const after = await admin.query('SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id')
+    const after = await admin.query(
+      'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
+    )
     expect(after.rows).toEqual(before.rows)
     expect((await verifyLog(admin, { witness: roots() })).findings).toBe(0)
   })

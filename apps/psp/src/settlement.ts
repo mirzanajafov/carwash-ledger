@@ -93,9 +93,9 @@ export function renderCsv(file: Omit<SettlementFile, 'csv'>, lines: readonly Pla
     'file,day,currency,lines,gross,fee,net',
     [file.id, file.day, file.currency, file.lines, file.gross, file.fee, file.net].join(','),
     'line,operation,reference,kind,gross,fee,net,operated_at',
-    ...lines.filter((line) => line.listed).map((line, i) =>
-      [i + 1, line.shownOperation, line.reference, line.kind, line.gross, line.fee, line.net, line.operatedAt.toISOString()].join(','),
-    ),
+    ...lines
+      .filter((line) => line.listed)
+      .map((line, i) => [i + 1, line.shownOperation, line.reference, line.kind, line.gross, line.fee, line.net, line.operatedAt.toISOString()].join(',')),
   ]
   return `${rows.join('\n')}\n`
 }

@@ -1,13 +1,11 @@
-diff --git a/packages/ledger/src/balances.ts b/packages/ledger/src/balances.ts
-index 7b9b711..c9be35e 100644
 --- a/packages/ledger/src/balances.ts
 +++ b/packages/ledger/src/balances.ts
-@@ -32,7 +32,7 @@ export async function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null>
+@@ -29,7 +29,7 @@
+       await client.query('ROLLBACK')
        return null
      }
-     const horizon = await client.query<{ horizon: string }>(
--      'SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon',
-+      'SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon',
-     )
+-    const horizon = await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')
++    const horizon = await client.query<{ horizon: string }>('SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon')
      const value = horizon.rows[0]!.horizon
      const written = await client.query(TAKE_SNAPSHOTS, [value])
+     failpoint('snapshot.before_commit')

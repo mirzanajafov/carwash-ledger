@@ -22,7 +22,10 @@ export function bookOf(code: string): Book | undefined {
 }
 
 export function merchantName(code: string): string {
-  const name = code.replace(/^merchant_payable:/, '').replace(/^wash_/, '').replaceAll('_', ' ')
+  const name = code
+    .replace(/^merchant_payable:/, '')
+    .replace(/^wash_/, '')
+    .replaceAll('_', ' ')
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
 

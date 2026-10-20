@@ -44,7 +44,11 @@ export function AdminLogin() {
           placeholder="cw_admin_…"
         />
       </label>
-      <button type="submit" disabled={busy || key.length === 0} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
+      <button
+        type="submit"
+        disabled={busy || key.length === 0}
+        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg"
+      >
         {busy ? 'Checking…' : 'Log in'}
       </button>
       {note ? <p className="text-sm text-warn">{note}</p> : null}
@@ -67,7 +71,12 @@ export function AdminLogout() {
   }
 
   return (
-    <button type="button" onClick={logout} disabled={busy} className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50">
+    <button
+      type="button"
+      onClick={logout}
+      disabled={busy}
+      className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50"
+    >
       {busy ? 'Logging out…' : 'Log out'}
     </button>
   )

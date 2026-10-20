@@ -61,7 +61,12 @@ export function leafOf(journal: JournalJson): string {
   )
 }
 
-export async function checkJournal(input: { journal: JournalJson | null; proof: ProofJson; checkpoint: CheckpointJson; witnessKey: string }): Promise<Verdict[]> {
+export async function checkJournal(input: {
+  journal: JournalJson | null
+  proof: ProofJson
+  checkpoint: CheckpointJson
+  witnessKey: string
+}): Promise<Verdict[]> {
   const { journal, proof, checkpoint, witnessKey } = input
   const verdicts: Verdict[] = []
   const signature = await signed(checkpoint, witnessKey)
@@ -78,7 +83,10 @@ export async function checkJournal(input: { journal: JournalJson | null; proof: 
   verdicts.push({
     name: 'key',
     ok: checkpoint.witness_key === witnessKey,
-    detail: checkpoint.witness_key === witnessKey ? 'The ledger kept the same key the witness publishes.' : 'The ledger kept a different key from the one the witness publishes.',
+    detail:
+      checkpoint.witness_key === witnessKey
+        ? 'The ledger kept the same key the witness publishes.'
+        : 'The ledger kept a different key from the one the witness publishes.',
   })
   const computed = journal ? leafOf(journal) : null
   verdicts.push({

@@ -218,7 +218,13 @@ async function steadyCell(rate: number, repeat: number, warmupMs: number, durati
       repeat,
       valid: writerValid(load) && drained,
       drained,
-      writer: { achievedPerSecond: load.achievedPerSecond, lagMs: load.lagMs, dropped: load.dropped, errors: load.errors, cpuPercent: load.generatorCpuPercent },
+      writer: {
+        achievedPerSecond: load.achievedPerSecond,
+        lagMs: load.lagMs,
+        dropped: load.dropped,
+        errors: load.errors,
+        cpuPercent: load.generatorCpuPercent,
+      },
       ackMs: lags(timed.map((t) => t.publishedMs - t.createdMs)),
       consumedMs: lags(timed.map((t) => t.consumedMs - t.createdMs)),
       transactionsPerEvent: committed.commits / Math.max(1, timed.length),
@@ -299,7 +305,9 @@ async function outage(rate: number, outageAtMs: number, totalMs: number, seed: n
     const drainEndMs = Math.max(...backlog.map((t) => t.publishedMs))
     const consumedEndMs = Math.max(...backlog.map((t) => t.consumedMs))
     const window = (from: number) => timed.filter((t) => t.createdMs >= from && t.createdMs < from + 5000).map((t) => t.publishedMs - t.createdMs)
-    const recoveredAt = series.find((row) => row.second * 1000 >= backMs && row.second * 1000 + 5000 <= totalMs && lags(window(row.second * 1000)).p99 <= 2 * steadyP99)
+    const recoveredAt = series.find(
+      (row) => row.second * 1000 >= backMs && row.second * 1000 + 5000 <= totalMs && lags(window(row.second * 1000)).p99 <= 2 * steadyP99,
+    )
     return {
       startedAt,
       rate,

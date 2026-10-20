@@ -26,10 +26,21 @@ export async function runPgbench(options: PgbenchOptions): Promise<PgbenchResult
   const url = new URL(options.url)
   const prefix = join(tmpdir(), stamp)
   const args = [
-    '-n', '-M', 'extended', '-f', script,
-    '-R', String(options.rate), '-c', String(options.connections), '-j', String(Math.min(4, options.connections)),
-    '-T', String(Math.round((options.warmupMs + options.durationMs) / 1000)),
-    '--log', `--log-prefix=${prefix}`,
+    '-n',
+    '-M',
+    'extended',
+    '-f',
+    script,
+    '-R',
+    String(options.rate),
+    '-c',
+    String(options.connections),
+    '-j',
+    String(Math.min(4, options.connections)),
+    '-T',
+    String(Math.round((options.warmupMs + options.durationMs) / 1000)),
+    '--log',
+    `--log-prefix=${prefix}`,
     ...Object.entries(options.defines ?? {}).flatMap(([name, value]) => ['-D', `${name}=${value}`]),
     url.pathname.slice(1),
   ]
@@ -68,8 +79,6 @@ export async function runPgbench(options: PgbenchOptions): Promise<PgbenchResult
   }
   rmSync(script)
   const start = Math.min(...rows.map((r) => r.epochUs - r.latencyUs))
-  const latenciesMs = Float64Array.from(
-    rows.filter((r) => r.epochUs - r.latencyUs >= start + options.warmupMs * 1000).map((r) => r.latencyUs / 1000),
-  ).sort()
+  const latenciesMs = Float64Array.from(rows.filter((r) => r.epochUs - r.latencyUs >= start + options.warmupMs * 1000).map((r) => r.latencyUs / 1000)).sort()
   return { latenciesMs, failures, output }
 }

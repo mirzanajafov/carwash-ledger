@@ -67,10 +67,7 @@ export class PayoutsService {
   }
 
   async merchant(code: string) {
-    const { rows } = await this.#db.pool.query<MerchantRow>(
-      'SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1',
-      [code],
-    )
+    const { rows } = await this.#db.pool.query<MerchantRow>('SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1', [code])
     const merchant = rows[0]
     if (!merchant) throw notFound(`merchant ${code}`)
     const [account] = (await this.#chart.registry.resolve([BigInt(merchant.account_id)])).values()
@@ -80,10 +77,9 @@ export class PayoutsService {
   async create(owned: OwnedKey, input: PayoutInput): Promise<Final> {
     if (owned.payoutId === null) {
       await this.#db.transaction(async (client) => {
-        const { rows } = await client.query<MerchantRow>(
-          'SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1',
-          [input.merchant],
-        )
+        const { rows } = await client.query<MerchantRow>('SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1', [
+          input.merchant,
+        ])
         const merchant = rows[0]
         if (!merchant) throw notFound(`merchant ${input.merchant}`)
         if (merchant.currency !== input.currency) {
@@ -102,10 +98,11 @@ export class PayoutsService {
         if (amount > payable) {
           throw new ApiError(409, 'insufficient_funds', `merchant ${input.merchant} has ${payable} available for payout`)
         }
-        const inserted = await client.query<{ id: string }>(
-          'INSERT INTO payouts (merchant_id, amount, currency) VALUES ($1, $2, $3) RETURNING id',
-          [merchant.id, amount, input.currency],
-        )
+        const inserted = await client.query<{ id: string }>('INSERT INTO payouts (merchant_id, amount, currency) VALUES ($1, $2, $3) RETURNING id', [
+          merchant.id,
+          amount,
+          input.currency,
+        ])
         const payoutId = inserted.rows[0]!.id
         const journalId = await postInTransaction(client, this.#chart.registry, {
           externalRef: `payout:${payoutId}`,
@@ -116,11 +113,7 @@ export class PayoutsService {
         })
         await client.query('UPDATE payouts SET journal_id = $2 WHERE id = $1', [payoutId, journalId])
         await journalEvents(client, journalId)
-        await client.query(`INSERT INTO attempts (kind, payout_id, amount, currency) VALUES ('payout', $1, $2, $3)`, [
-          payoutId,
-          amount,
-          input.currency,
-        ])
+        await client.query(`INSERT INTO attempts (kind, payout_id, amount, currency) VALUES ('payout', $1, $2, $3)`, [payoutId, amount, input.currency])
         await this.#idempotency.recordPoint(client, owned, 'payout_created', { payoutId })
       })
     }

@@ -110,7 +110,9 @@ describe('the audit log', () => {
 
   it('gives anyone with a key the rows of a journal, from which the leaf the log holds can be computed again', async () => {
     await sequenceAll()
-    const { rows } = await stack.admin.query<{ journal_id: string; seq: string; leaf: Buffer }>('SELECT a.journal_id::text, a.seq::text, a.leaf FROM audit_log a ORDER BY a.seq DESC LIMIT 3')
+    const { rows } = await stack.admin.query<{ journal_id: string; seq: string; leaf: Buffer }>(
+      'SELECT a.journal_id::text, a.seq::text, a.leaf FROM audit_log a ORDER BY a.seq DESC LIMIT 3',
+    )
     for (const row of rows) {
       const journal = (await stack.call('GET', `/v1/journals/${row.journal_id}`)).body
       expect(journal).toMatchObject({ object: 'journal', id: row.journal_id, seq: Number(row.seq) })
@@ -119,7 +121,11 @@ describe('the audit log', () => {
           id: BigInt(journal.id),
           externalRef: journal.external_ref,
           createdAtMicros: BigInt(journal.created_at_micros),
-          entries: journal.entries.map((e: { id: string; account_id: string; amount: string }) => ({ id: BigInt(e.id), accountId: BigInt(e.account_id), amount: BigInt(e.amount) })),
+          entries: journal.entries.map((e: { id: string; account_id: string; amount: string }) => ({
+            id: BigInt(e.id),
+            accountId: BigInt(e.account_id),
+            amount: BigInt(e.amount),
+          })),
         }),
       )
       expect(toHex(leaf)).toBe(toHex(new Uint8Array(row.leaf)))

@@ -10,5 +10,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function requestHash(method: string, path: string, body: unknown): Buffer {
-  return createHash('sha256').update(`${method} ${path}\n${canonicalJson(body)}`).digest()
+  return createHash('sha256')
+    .update(`${method} ${path}\n${canonicalJson(body)}`)
+    .digest()
 }

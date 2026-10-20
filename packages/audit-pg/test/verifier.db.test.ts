@@ -10,7 +10,18 @@ import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Checkpointer, head, restore, sequenceBatch, tamper, verifyLog, WitnessClient, type TamperClass, type VerifierState, type WitnessedRoots } from '../src/index.ts'
+import {
+  Checkpointer,
+  head,
+  restore,
+  sequenceBatch,
+  tamper,
+  verifyLog,
+  WitnessClient,
+  type TamperClass,
+  type VerifierState,
+  type WitnessedRoots,
+} from '../src/index.ts'
 
 let db: TestDatabase
 let app: pg.Pool
@@ -77,7 +88,11 @@ beforeAll(async () => {
   app = db.pool('ledger_app', 4)
   admin = db.pool('admin', 2)
   accounts = []
-  for (const [code, type] of [['receivable', 'asset'], ['merchant', 'liability'], ['fees', 'revenue']] as const) {
+  for (const [code, type] of [
+    ['receivable', 'asset'],
+    ['merchant', 'liability'],
+    ['fees', 'revenue'],
+  ] as const) {
     const { rows } = await app.query<{ id: string }>(
       `INSERT INTO accounts (code, type, currency, balance_mode, shards) VALUES ($1, $2::account_type, 'EUR', 'derived', 1) RETURNING id::text`,
       [code, type],

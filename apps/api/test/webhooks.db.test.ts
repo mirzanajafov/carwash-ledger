@@ -67,10 +67,7 @@ async function paymentIdForKey(key: string): Promise<string> {
 }
 
 async function attemptOf(paymentId: string, kind: string): Promise<string> {
-  const { rows } = await stack.admin.query<{ id: string }>('SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind', [
-    paymentId,
-    kind,
-  ])
+  const { rows } = await stack.admin.query<{ id: string }>('SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind', [paymentId, kind])
   return rows[0]!.id
 }
 
@@ -137,10 +134,7 @@ describe('webhooks', () => {
     const id = JSON.parse(body).id
     expect((await postWebhook(body, sign(body))).body).toEqual({ received: true, outcome: 'unmatched' })
     expect((await postWebhook(body, sign(body))).body).toEqual({ received: true, outcome: 'unmatched', duplicate: true })
-    await stack.owner.query(
-      `UPDATE webhook_events SET received_at = now() - interval '2 hours', checked_at = now() - interval '1 minute' WHERE id = $1`,
-      [id],
-    )
+    await stack.owner.query(`UPDATE webhook_events SET received_at = now() - interval '2 hours', checked_at = now() - interval '1 minute' WHERE id = $1`, [id])
     await worker.get(WebhooksService).recheckUnmatched(3600)
     const { rows } = await stack.admin.query<{ outcome: string; checks: number }>('SELECT outcome, checks FROM webhook_events WHERE id = $1', [id])
     expect(rows).toEqual([{ outcome: 'reported', checks: 2 }])
@@ -183,10 +177,9 @@ describe('the recovery job', () => {
   })
 
   it('runs on its own in the worker process, which answers health', async () => {
-    const live: INestApplication = await NestFactory.create(
-      WorkerModule.register({ ...stack.config, recoveryEveryMs: 200, recoveryAfterSeconds: 0 }),
-      { logger: false },
-    )
+    const live: INestApplication = await NestFactory.create(WorkerModule.register({ ...stack.config, recoveryEveryMs: 200, recoveryAfterSeconds: 0 }), {
+      logger: false,
+    })
     await live.listen(0, '127.0.0.1')
     try {
       const health = await fetch(`http://127.0.0.1:${(live.getHttpServer().address() as AddressInfo).port}/health`)

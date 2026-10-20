@@ -11,7 +11,10 @@ import type { JournalInput, PostedJournal, Poster } from '../types.ts'
 import { beginStatement, expectApplied, postWith } from './common.ts'
 
 export async function postInTransaction(client: pg.ClientBase, registry: AccountRegistry, input: JournalInput): Promise<bigint> {
-  const accounts = await registry.resolve(input.entries.map((e) => e.accountId), pgAccountLoader(client))
+  const accounts = await registry.resolve(
+    input.entries.map((e) => e.accountId),
+    pgAccountLoader(client),
+  )
   const plan = planJournal(input, accounts)
   if (plan.isolation === 'serializable') {
     throw new InvalidJournalError('a journal touching serializable accounts needs its own transaction')

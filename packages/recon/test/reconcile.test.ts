@@ -10,7 +10,18 @@ function item(id: string, kind: 'capture' | 'refund', amount: bigint, day = 10, 
 
 function lineFor(it: LedgerItem, extra: Partial<FileLine> = {}): FileLine {
   const fee = contractFee(it.kind, it.gross, contract)
-  return { fileId: `stl_EUR_${it.day}`, day: it.day, line: 1, operation: `op-${it.attemptId}`, reference: it.attemptId, kind: it.kind, gross: it.gross, fee, net: it.gross - fee, ...extra }
+  return {
+    fileId: `stl_EUR_${it.day}`,
+    day: it.day,
+    line: 1,
+    operation: `op-${it.attemptId}`,
+    reference: it.attemptId,
+    kind: it.kind,
+    gross: it.gross,
+    fee,
+    net: it.gross - fee,
+    ...extra,
+  }
 }
 
 const classes = (result: ReturnType<typeof reconcile>) => result.breaks.map((b) => b.class)

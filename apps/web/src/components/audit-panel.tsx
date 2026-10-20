@@ -70,7 +70,11 @@ export function AuditPanel() {
     setBusy(label)
     setNote(null)
     try {
-      const response = await fetch(url, { method: 'POST', headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: body ? { 'content-type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+      })
       const answer = await response.json().catch(() => null)
       if (!response.ok) setNote(answer?.error?.message ?? `That answered ${response.status}.`)
       return response.ok ? answer : null
@@ -116,10 +120,18 @@ export function AuditPanel() {
         {tamper ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/40 bg-surface p-4 text-sm">
             <p>
-              <span className="font-medium text-bad">Journal {tamper.journal_id} at seq {tamper.seq} is tampered with</span> (class {tamper.tamper_class}).
+              <span className="font-medium text-bad">
+                Journal {tamper.journal_id} at seq {tamper.seq} is tampered with
+              </span>{' '}
+              (class {tamper.tamper_class}).
               {tamper.restores_at ? ` It goes back on its own at ${new Date(tamper.restores_at).toLocaleTimeString()}.` : ''}
             </p>
-            <button type="button" onClick={() => act('restore', '/api/audit/restore')} disabled={busy !== null} className="rounded-lg border border-line px-3 py-1.5 font-medium disabled:opacity-50">
+            <button
+              type="button"
+              onClick={() => act('restore', '/api/audit/restore')}
+              disabled={busy !== null}
+              className="rounded-lg border border-line px-3 py-1.5 font-medium disabled:opacity-50"
+            >
               {busy === 'restore' ? 'Restoring…' : 'Restore it'}
             </button>
           </div>
@@ -147,8 +159,8 @@ export function AuditPanel() {
         <div>
           <h2 className="text-base font-semibold">Check one journal in your browser</h2>
           <p className="text-sm text-muted">
-            Your browser recomputes the leaf from the journal's rows, follows the server's proof to the root, and checks the witness's Ed25519 signature on
-            that root itself. The server only supplies data.
+            Your browser recomputes the leaf from the journal's rows, follows the server's proof to the root, and checks the witness's Ed25519 signature on that
+            root itself. The server only supplies data.
           </p>
         </div>
         <form
@@ -161,15 +173,27 @@ export function AuditPanel() {
           <label className="text-sm text-muted" htmlFor="seq">
             Seq
           </label>
-          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => dispatch({ type: 'typed', seq: e.target.value.replace(/\D/g, '') })} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
-          <button type="submit" disabled={busy !== null || seq === ''} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
+          <input
+            id="seq"
+            inputMode="numeric"
+            value={seq}
+            onChange={(e) => dispatch({ type: 'typed', seq: e.target.value.replace(/\D/g, '') })}
+            className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm"
+          />
+          <button
+            type="submit"
+            disabled={busy !== null || seq === ''}
+            className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg"
+          >
             {busy === 'check' ? 'Checking…' : 'Check it'}
           </button>
         </form>
         {verdicts ? (
           <div className="rounded-xl border border-line bg-surface">
             <p className={`border-b border-line px-4 py-3 text-sm font-medium ${caught ? 'text-bad' : 'text-ok'}`}>
-              {caught ? `Your browser caught it: seq ${verdicts.seq} (journal ${verdicts.journalId}) does not add up.` : `Seq ${verdicts.seq} (journal ${verdicts.journalId}) checks out in your browser.`}
+              {caught
+                ? `Your browser caught it: seq ${verdicts.seq} (journal ${verdicts.journalId}) does not add up.`
+                : `Seq ${verdicts.seq} (journal ${verdicts.journalId}) checks out in your browser.`}
             </p>
             <ul className="divide-y divide-line">
               {verdicts.verdicts.map((v) => (
@@ -191,9 +215,16 @@ export function AuditPanel() {
       <section className="space-y-3">
         <div>
           <h2 className="text-base font-semibold">Verify the whole log</h2>
-          <p className="text-sm text-muted">The server recomputes every leaf from the current rows, rebuilds the tree on its own and compares the root at every size the witness signed.</p>
+          <p className="text-sm text-muted">
+            The server recomputes every leaf from the current rows, rebuilds the tree on its own and compares the root at every size the witness signed.
+          </p>
         </div>
-        <button type="button" onClick={verify} disabled={busy !== null} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium disabled:opacity-50">
+        <button
+          type="button"
+          onClick={verify}
+          disabled={busy !== null}
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+        >
           {busy === 'verify' ? 'Verifying…' : 'Verify everything'}
         </button>
         {report ? (

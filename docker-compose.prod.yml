@@ -77,7 +77,12 @@ services:
     container_name: carwash-migrate
     restart: "no"
     working_dir: /app/packages/db
-    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && cd /app/apps/api && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin"]
+    command:
+      [
+        "sh",
+        "-c",
+        "node node_modules/prisma/build/index.js migrate deploy && cd /app/apps/api && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin",
+      ]
     environment:
       DATABASE_URL: postgresql://ledger_owner:${LEDGER_OWNER_PASSWORD}@postgres:5432/ledger
       TRAFFIC_KEY: ${TRAFFIC_KEY:?set TRAFFIC_KEY}

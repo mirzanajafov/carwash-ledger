@@ -49,7 +49,16 @@ export function parseSettlementFile(csv: string): ParsedFile {
     lines.push(parsed)
     operatedAt.push(time)
   }
-  const file = { id, day: dayNumber, currency: currency!, lines, gross: integer(gross, 'gross'), fee: integer(fee, 'fee'), net: integer(net, 'net'), operatedAt }
+  const file = {
+    id,
+    day: dayNumber,
+    currency: currency!,
+    lines,
+    gross: integer(gross, 'gross'),
+    fee: integer(fee, 'fee'),
+    net: integer(net, 'net'),
+    operatedAt,
+  }
   if (Number(integer(count, 'lines')) !== lines.length) throw new Error('settlement file: line count does not match')
   const sum = (pick: (l: FileLine) => bigint) => lines.reduce((total, l) => total + pick(l), 0n)
   if (sum((l) => l.gross) !== file.gross || sum((l) => l.fee) !== file.fee || sum((l) => l.net) !== file.net) {

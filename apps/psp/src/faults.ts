@@ -122,8 +122,7 @@ export class Faults {
     const tokenFor = (effect: TokenEffect['kind']) => token.kind === effect && 'operation' in token && token.operation === kind
 
     const decline =
-      (kind === 'authorize' && (token.kind === 'decline' || draw('decline') < plan.decline)) ||
-      (kind === 'payout' && draw('decline') < plan.decline)
+      (kind === 'authorize' && (token.kind === 'decline' || draw('decline') < plan.decline)) || (kind === 'payout' && draw('decline') < plan.decline)
     const fail = tokenFor('fail') || (tokenFor('fail_once') && n === 0) || draw('fail') < plan.fail
     let afterCommit: Behaviour['afterCommit'] = 'answer'
     if (tokenFor('timeout_after')) afterCommit = 'hang'
@@ -131,8 +130,7 @@ export class Faults {
     else if (draw('timeout') < plan.timeoutAfterCommit) afterCommit = draw('timeout.kind') < 0.5 ? 'hang' : 'drop'
     const [low, high] = plan.slowMs
     const slowMs = tokenFor('slow') || draw('slow') < plan.slow ? low + Math.floor(draw('slow.ms') * (high - low + 1)) : 0
-    const wrongAmount =
-      (kind === 'capture' || kind === 'refund' || kind === 'payout') && (tokenFor('wrong_amount') || draw('wrong_amount') < plan.wrongAmount)
+    const wrongAmount = (kind === 'capture' || kind === 'refund' || kind === 'payout') && (tokenFor('wrong_amount') || draw('wrong_amount') < plan.wrongAmount)
     const webhook = new Set<WebhookFault>()
     for (const fault of WEBHOOK_FAULTS) {
       if ((token.kind === 'webhook' && token.fault === fault) || draw(`webhook.${fault}`) < plan.webhook[fault]) webhook.add(fault)
@@ -175,12 +173,7 @@ export function parseFaultPlan(input: unknown): FaultPlan {
   const seed = source.seed ?? 0
   if (!Number.isSafeInteger(seed)) throw new Error('seed must be an integer')
   const slowMs = source.slowMs ?? NO_FAULTS.slowMs
-  if (
-    !Array.isArray(slowMs) ||
-    slowMs.length !== 2 ||
-    !slowMs.every((ms) => Number.isSafeInteger(ms) && ms >= 0) ||
-    slowMs[0] > slowMs[1]
-  ) {
+  if (!Array.isArray(slowMs) || slowMs.length !== 2 || !slowMs.every((ms) => Number.isSafeInteger(ms) && ms >= 0) || slowMs[0] > slowMs[1]) {
     throw new Error('slowMs must be [low, high] in milliseconds')
   }
   const settlement = (source.settlement ?? {}) as Record<string, unknown>
@@ -201,10 +194,7 @@ export function parseFaultPlan(input: unknown): FaultPlan {
     slow: probability(source.slow, 'slow'),
     slowMs: [slowMs[0], slowMs[1]],
     wrongAmount: probability(source.wrongAmount, 'wrongAmount'),
-    webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<
-      WebhookFault,
-      number
-    >,
+    webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<WebhookFault, number>,
     settlement: Object.fromEntries(SETTLEMENT_FAULTS.map((fault) => [fault, probability(settlement[fault], `settlement.${fault}`)])) as Record<
       SettlementFault,
       number

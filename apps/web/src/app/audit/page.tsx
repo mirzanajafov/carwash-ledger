@@ -13,7 +13,11 @@ interface Checkpoint {
 
 async function load() {
   try {
-    const [head, checkpoints, key] = await Promise.all([callApi('GET', '/v1/audit/head', clientKey()), callApi('GET', '/v1/audit/checkpoints', clientKey()), witnessKey()])
+    const [head, checkpoints, key] = await Promise.all([
+      callApi('GET', '/v1/audit/head', clientKey()),
+      callApi('GET', '/v1/audit/checkpoints', clientKey()),
+      witnessKey(),
+    ])
     return {
       size: head.status === 200 ? (head.body.tree_size as number) : null,
       checkpoints: checkpoints.status === 200 ? (checkpoints.body.data as Checkpoint[]).slice(0, 6) : [],

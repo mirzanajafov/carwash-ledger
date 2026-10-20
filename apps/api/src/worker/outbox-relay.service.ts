@@ -51,7 +51,9 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
           topicPrefix: this.#config.kafkaTopicPrefix,
         })
         if (this.#stop.signal.aborted) return
-        this.#relay = new Relay(this.#db.pool, this.#publisher, { workers: this.#config.relayWorkers, idleMaxMs: this.#config.relayIdleMaxMs }, (message) => this.#logger.warn(message))
+        this.#relay = new Relay(this.#db.pool, this.#publisher, { workers: this.#config.relayWorkers, idleMaxMs: this.#config.relayIdleMaxMs }, (message) =>
+          this.#logger.warn(message),
+        )
         this.#relay.start()
         return
       } catch (error) {

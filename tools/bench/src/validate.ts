@@ -124,9 +124,7 @@ async function main(): Promise<void> {
             try {
               const accounts = await seedCaptureAccounts(db.pool('ledger_app', 1), mode, 1, merchantCount)
               const result: ToolResult =
-                tool === 'pgbench'
-                  ? await pgbench(db, accounts, mode, connections, rate)
-                  : await runLoadgen(db, accounts, connections, rate, repeat)
+                tool === 'pgbench' ? await pgbench(db, accounts, mode, connections, rate) : await runLoadgen(db, accounts, connections, rate, repeat)
               samples.push({ repeat, tool, mode, connections, rate, ...result } as Sample)
               console.log(
                 `${repeat} ${mode.padEnd(8)} c=${connections} rate ${rate} ${tool.padEnd(8)} ` +

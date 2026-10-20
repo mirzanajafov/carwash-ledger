@@ -204,11 +204,15 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     const p99Every5s: number[] = []
     for (let from = 0; readLog.some((r) => r.at >= from); from += 5000) {
       const bucket = readLog.filter((r) => r.at >= from && r.at < from + 5000).map((r) => r.ms)
-      p99Every5s.push(percentile(bucket.sort((a, b) => a - b), 99))
+      p99Every5s.push(
+        percentile(
+          bucket.sort((a, b) => a - b),
+          99,
+        ),
+      )
     }
     snapshots.sort((a, b) => a - b)
-    const saturated =
-      load.achievedPerSecond * (durationMs / 1000) < load.measured * 0.95 || load.dropped > 0 || load.errors > 0 || load.latencyMs.p99 > 1000
+    const saturated = load.achievedPerSecond * (durationMs / 1000) < load.measured * 0.95 || load.dropped > 0 || load.errors > 0 || load.latencyMs.p99 > 1000
     return {
       repeat,
       startedAt,
@@ -248,9 +252,7 @@ function summarize(cells: readonly Cell[]) {
       connections: Number(connections),
       sustained: highest((c) => c.load.latencyMs.p99 <= p99Limit),
       ceiling: highest(() => true),
-      capacity: repeatsSeen.map((repeat) =>
-        Math.round(Math.max(...group.filter((c) => c.repeat === repeat).map((c) => c.load.achievedPerSecond))),
-      ),
+      capacity: repeatsSeen.map((repeat) => Math.round(Math.max(...group.filter((c) => c.repeat === repeat).map((c) => c.load.achievedPerSecond)))),
     }
   })
 }

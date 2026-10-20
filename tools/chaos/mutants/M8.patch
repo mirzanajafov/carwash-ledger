@@ -6,10 +6,10 @@
      if (seen.rows[0]) return { received: true, outcome: seen.rows[0].outcome, duplicate: true }
 -    const outcome = await this.check(event.attemptKey)
 +    const outcome = await this.check(event.attemptKey, event.payload)
-     await this.#db.pool.query(
-       `INSERT INTO webhook_events (id, type, attempt_id, outcome, payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
-       [event.id, event.type, outcome === 'unmatched' ? null : event.attemptKey, outcome, JSON.stringify(event.payload)],
-@@ -55,11 +55,12 @@
+     await this.#db.pool.query(`INSERT INTO webhook_events (id, type, attempt_id, outcome, payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`, [
+       event.id,
+       event.type,
+@@ -58,11 +58,12 @@
      return { received: true, outcome }
    }
  

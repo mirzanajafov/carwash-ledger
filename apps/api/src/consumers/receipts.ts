@@ -25,15 +25,7 @@ export const receipts: ConsumerSpec = {
     captured.sort((a, b) => (a.data as CapturedPayment).merchant.localeCompare((b.data as CapturedPayment).merchant))
     for (const event of captured) {
       const payment = event.data as CapturedPayment
-      await client.query(ISSUE, [
-        payment.merchant,
-        payment.id,
-        payment.captured_amount,
-        payment.fee,
-        payment.currency,
-        event.occurredAt,
-        event.id,
-      ])
+      await client.query(ISSUE, [payment.merchant, payment.id, payment.captured_amount, payment.fee, payment.currency, event.occurredAt, event.id])
     }
   },
 }

@@ -46,7 +46,13 @@ describe('settlement', () => {
     const first = await ingest(today)
     expect(first).toMatchObject({
       outcome: 'ingested',
-      reconciliation: { lines: 4, matched: 4, late: 0, pending: 0, breaks: { missing_line: 0, duplicate_line: 0, wrong_amount: 0, fee_difference: 0, unknown_line: 0 } },
+      reconciliation: {
+        lines: 4,
+        matched: 4,
+        late: 0,
+        pending: 0,
+        breaks: { missing_line: 0, duplicate_line: 0, wrong_amount: 0, fee_difference: 0, unknown_line: 0 },
+      },
     })
     const { rows: files } = await stack.admin.query<{ id: string; gross: string; fee: string; net: string }>(
       'SELECT id, gross::text, fee::text, net::text FROM settlement_files WHERE day = $1',

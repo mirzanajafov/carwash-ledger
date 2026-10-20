@@ -17,7 +17,8 @@ export function checkKeys(records: Iterable<RequestRecord>, probes: Iterable<Req
   const found: string[] = []
   for (const record of records) {
     const distinct = [...new Set(record.stored)]
-    if (distinct.length > 1) found.push(`key ${record.key} (${record.kind}) was answered ${distinct.length} different ways: ${distinct.join(' | ').slice(0, 400)}`)
+    if (distinct.length > 1)
+      found.push(`key ${record.key} (${record.kind}) was answered ${distinct.length} different ways: ${distinct.join(' | ').slice(0, 400)}`)
   }
   for (const probe of probes) {
     const final = probe.final

@@ -47,7 +47,9 @@ const CLASSES: Record<string, string> = {
 function when(day: number, daySeconds: number | null): string {
   if (!daySeconds) return `day ${day}`
   const start = new Date(day * daySeconds * 1000)
-  return daySeconds >= 86_400 ? start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : `${start.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+  return daySeconds >= 86_400
+    ? start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : `${start.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
 }
 
 async function load(requested: number | null) {
@@ -56,7 +58,12 @@ async function load(requested: number | null) {
   const list = days.body.data as Day[]
   const pick = requested ?? list[0]?.day ?? null
   const detail = pick === null ? null : await callApi('GET', `/v1/reconciliation/days/${pick}`, adminKey())
-  return { list, daySeconds: days.body.day_seconds as number | null, pick, detail: detail?.status === 200 ? (detail.body as { file: Day | null; lines: Line[]; breaks: Break[] }) : null }
+  return {
+    list,
+    daySeconds: days.body.day_seconds as number | null,
+    pick,
+    detail: detail?.status === 200 ? (detail.body as { file: Day | null; lines: Line[]; breaks: Break[] }) : null,
+  }
 }
 
 export default async function ReconciliationPage({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
@@ -67,9 +74,8 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
       <div className="max-w-2xl space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">The bank&apos;s file against the books.</h1>
         <p className="text-muted">
-          At the end of each day the payment provider sends a settlement file: every capture and refund it settled, with its fee. The matcher pairs each
-          line with the ledger by reference. Whatever doesn&apos;t pair is a break, and a person looks at it. In the demo a day is compressed to a few
-          minutes.
+          At the end of each day the payment provider sends a settlement file: every capture and refund it settled, with its fee. The matcher pairs each line
+          with the ledger by reference. Whatever doesn&apos;t pair is a break, and a person looks at it. In the demo a day is compressed to a few minutes.
         </p>
       </div>
 
@@ -86,10 +92,15 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
                 const breaks = Object.values(d.breaks).reduce((a, b) => a + b, 0)
                 return (
                   <li key={d.day}>
-                    <Link href={`/reconciliation?day=${d.day}`} className={`grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-2 hover:bg-surface-2 ${d.day === data.pick ? 'bg-surface-2' : ''}`}>
+                    <Link
+                      href={`/reconciliation?day=${d.day}`}
+                      className={`grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-2 hover:bg-surface-2 ${d.day === data.pick ? 'bg-surface-2' : ''}`}
+                    >
                       <span>{when(d.day, data.daySeconds)}</span>
                       <span className="font-mono tabular-nums text-muted">{d.lines} lines</span>
-                      <span className={`w-20 text-right ${breaks === 0 ? 'text-ok' : 'text-warn'}`}>{breaks === 0 ? 'clean' : `${breaks} break${breaks === 1 ? '' : 's'}`}</span>
+                      <span className={`w-20 text-right ${breaks === 0 ? 'text-ok' : 'text-warn'}`}>
+                        {breaks === 0 ? 'clean' : `${breaks} break${breaks === 1 ? '' : 's'}`}
+                      </span>
                     </Link>
                   </li>
                 )
@@ -131,39 +142,47 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
                 </div>
               ) : (
                 <p className="text-sm text-ok">
-                  {data.detail.file.lines === 0 ? 'Nothing settled that day, and the books agree.' : 'Every line paired with the books, and every capture and refund of the day is in the file.'}
+                  {data.detail.file.lines === 0
+                    ? 'Nothing settled that day, and the books agree.'
+                    : 'Every line paired with the books, and every capture and refund of the day is in the file.'}
                 </p>
               )}
 
               {data.detail.lines.length === 0 ? null : (
-              <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-                <table className="w-full min-w-[34rem] text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wide text-muted">
-                    <tr className="border-b border-line">
-                      <th className="px-4 py-2 font-medium">Line</th>
-                      <th className="px-2 py-2 font-medium">Kind</th>
-                      <th className="px-2 py-2 font-medium">Reference</th>
-                      <th className="px-2 py-2 text-right font-medium">Gross</th>
-                      <th className="px-2 py-2 text-right font-medium">Fee</th>
-                      <th className="px-4 py-2 text-right font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {data.detail.lines.map((l) => (
-                      <tr key={l.line}>
-                        <td className="px-4 py-1.5 font-mono tabular-nums text-muted">{l.line}</td>
-                        <td className="px-2 py-1.5">{l.kind}</td>
-                        <td className="max-w-40 truncate px-2 py-1.5 font-mono text-xs text-muted">{l.reference || '—'}</td>
-                        <td className="px-2 py-1.5 text-right font-mono tabular-nums">{money(l.gross)}</td>
-                        <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted">{money(l.fee)}</td>
-                        <td className={`px-4 py-1.5 text-right text-xs ${l.break ? 'text-warn' : 'text-ok'}`}>{l.break ? l.break.replace('_', ' ') : 'matched'}</td>
+                <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+                  <table className="w-full min-w-[34rem] text-sm">
+                    <thead className="text-left text-xs uppercase tracking-wide text-muted">
+                      <tr className="border-b border-line">
+                        <th className="px-4 py-2 font-medium">Line</th>
+                        <th className="px-2 py-2 font-medium">Kind</th>
+                        <th className="px-2 py-2 font-medium">Reference</th>
+                        <th className="px-2 py-2 text-right font-medium">Gross</th>
+                        <th className="px-2 py-2 text-right font-medium">Fee</th>
+                        <th className="px-4 py-2 text-right font-medium">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {data.detail.lines.map((l) => (
+                        <tr key={l.line}>
+                          <td className="px-4 py-1.5 font-mono tabular-nums text-muted">{l.line}</td>
+                          <td className="px-2 py-1.5">{l.kind}</td>
+                          <td className="max-w-40 truncate px-2 py-1.5 font-mono text-xs text-muted">{l.reference || '—'}</td>
+                          <td className="px-2 py-1.5 text-right font-mono tabular-nums">{money(l.gross)}</td>
+                          <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted">{money(l.fee)}</td>
+                          <td className={`px-4 py-1.5 text-right text-xs ${l.break ? 'text-warn' : 'text-ok'}`}>
+                            {l.break ? l.break.replace('_', ' ') : 'matched'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-              {data.detail.file.lines > data.detail.lines.length ? <p className="text-xs text-muted">Showing {data.detail.lines.length} of {data.detail.file.lines} lines, breaks first.</p> : null}
+              {data.detail.file.lines > data.detail.lines.length ? (
+                <p className="text-xs text-muted">
+                  Showing {data.detail.lines.length} of {data.detail.file.lines} lines, breaks first.
+                </p>
+              ) : null}
             </section>
           ) : null}
         </>

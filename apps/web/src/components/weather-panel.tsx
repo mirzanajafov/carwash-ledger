@@ -77,8 +77,8 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
           The bank&apos;s weather.
         </h2>
         <p className="text-muted">
-          The bank is simulated, so it can be told to misbehave. Make it flaky or start a storm, then watch the live page: payments still settle once,
-          the recovery job asks the bank what really happened, and the next settlement day shows the breaks reconciliation found.
+          The bank is simulated, so it can be told to misbehave. Make it flaky or start a storm, then watch the live page: payments still settle once, the
+          recovery job asks the bank what really happened, and the next settlement day shows the breaks reconciliation found.
         </p>
       </div>
 
@@ -144,7 +144,12 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
                 className="w-24 rounded-lg border border-line bg-bg px-3 py-2 text-sm tabular-nums"
               />
             </label>
-            <button type="button" onClick={apply} disabled={busy !== null} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
+            <button
+              type="button"
+              onClick={apply}
+              disabled={busy !== null}
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg"
+            >
               {busy === 'custom' ? 'Setting…' : 'Set this weather'}
             </button>
           </div>

@@ -118,7 +118,11 @@ describe('checkpoints and the witness', () => {
        VALUES ($1, decode(repeat('ab', 32), 'hex'), decode(repeat('cd', 64), 'hex'), 'k', now())`,
       [bigger],
     )
-    expect((await stack.call('GET', '/v1/audit/checkpoints')).body.data.map((c: { tree_size: number }) => c.tree_size)).toEqual([bigger, second.size, first.size])
+    expect((await stack.call('GET', '/v1/audit/checkpoints')).body.data.map((c: { tree_size: number }) => c.tree_size)).toEqual([
+      bigger,
+      second.size,
+      first.size,
+    ])
     expect((await stack.call('GET', '/v1/audit/checkpoint')).body.tree_size).toBe(bigger)
     await stack.admin.query('DELETE FROM audit_checkpoints WHERE size = $1', [bigger])
     const checkpoint = (await stack.call('GET', '/v1/audit/checkpoint')).body
@@ -150,8 +154,13 @@ describe('checkpoints and the witness', () => {
     expect(witnessed.count).toBe(signed.length)
     expect(witnessed.examples.every((e) => /^the root at size \d+ is [0-9a-f]{64}, the witness signed [0-9a-f]{64}$/.test(e))).toBe(true)
 
-    const forged: WitnessView = { ...witness, checkpoints: witness.checkpoints.map((c) => ({ ...c, root: c.root.replace(/^./, (d) => (d === '0' ? '1' : '0')) })) }
-    expect((await checkAudit(stack.admin, forged)).examples).toEqual(signed.map((size) => `the checkpoint at size ${size} does not carry the witness's signature`))
+    const forged: WitnessView = {
+      ...witness,
+      checkpoints: witness.checkpoints.map((c) => ({ ...c, root: c.root.replace(/^./, (d) => (d === '0' ? '1' : '0')) })),
+    }
+    expect((await checkAudit(stack.admin, forged)).examples).toEqual(
+      signed.map((size) => `the checkpoint at size ${size} does not carry the witness's signature`),
+    )
 
     const client = await stack.admin.connect()
     try {

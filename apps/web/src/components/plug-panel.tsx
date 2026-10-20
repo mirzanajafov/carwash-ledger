@@ -40,7 +40,10 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
     case 'lost':
       return { text: `The connection dropped (${step.error}). The process died at the crash point.`, tone: 'text-bad' }
     case 'back':
-      return { text: `A new API process, started at ${new Date(step.startedAt).toLocaleTimeString('en-GB')}, answers ${(step.downMs / 1000).toFixed(1)} s later.`, tone: 'text-ok' }
+      return {
+        text: `A new API process, started at ${new Date(step.startedAt).toLocaleTimeString('en-GB')}, answers ${(step.downMs / 1000).toFixed(1)} s later.`,
+        tone: 'text-ok',
+      }
     case 'retry': {
       const which = tries > 1 ? `Tries ${step.attempt} to ${step.attempt + tries - 1}` : `Try ${step.attempt}`
       const over = tries > 1 ? ` for ${((until - step.at) / 1000 + step.waitMs / 1000).toFixed(0)} s` : ''
@@ -120,7 +123,14 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
               key={crash.failpoint}
               className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition-colors ${point === crash.failpoint ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:border-muted'}`}
             >
-              <input type="radio" name="crash" className="mt-1 accent-[var(--accent)]" checked={point === crash.failpoint} onChange={() => setPoint(crash.failpoint)} disabled={running} />
+              <input
+                type="radio"
+                name="crash"
+                className="mt-1 accent-[var(--accent)]"
+                checked={point === crash.failpoint}
+                onChange={() => setPoint(crash.failpoint)}
+                disabled={running}
+              />
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{crash.title}</span>
                 <span className="block text-xs text-muted">{crash.detail}</span>
@@ -132,13 +142,25 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
       </fieldset>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={pull} disabled={running} className="rounded-lg bg-bad px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
+        <button
+          type="button"
+          onClick={pull}
+          disabled={running}
+          className="rounded-lg bg-bad px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg"
+        >
           {running ? 'Pulling…' : 'Pull the plug'}
         </button>
-        <button type="button" onClick={check} disabled={checking || running} className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50">
+        <button
+          type="button"
+          onClick={check}
+          disabled={checking || running}
+          className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50"
+        >
           {checking ? 'Checking…' : 'Just run the checks'}
         </button>
-        <span className="text-xs text-muted">{admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone; the checks at most every 10 s.'}</span>
+        <span className="text-xs text-muted">
+          {admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone; the checks at most every 10 s.'}
+        </span>
       </div>
 
       {note ? <p className="text-sm text-warn">{note}</p> : null}
@@ -158,7 +180,11 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
         </ol>
       ) : null}
 
-      {finalChecks ? <ChecksTable results={finalChecks.results} ms={finalChecks.ms} /> : checks ? <ChecksTable results={checks.results} ms={checks.ms} /> : null}
+      {finalChecks ? (
+        <ChecksTable results={finalChecks.results} ms={finalChecks.ms} />
+      ) : checks ? (
+        <ChecksTable results={checks.results} ms={checks.ms} />
+      ) : null}
     </div>
   )
 }

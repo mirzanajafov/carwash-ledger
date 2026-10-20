@@ -16,7 +16,8 @@ export async function POST(request: Request): Promise<Response> {
   if (!/^cw_admin_[\w-]{16,200}$/.test(key)) return Response.json({ error: { code: 'invalid', message: 'that is not an admin key' } }, { status: 400 })
   try {
     const reply = await callApi('POST', '/v1/admin/sessions', key)
-    if (reply.status === 401 || reply.status === 403) return Response.json({ error: { code: 'unauthorized', message: 'that key is not an admin key here' } }, { status: 401 })
+    if (reply.status === 401 || reply.status === 403)
+      return Response.json({ error: { code: 'unauthorized', message: 'that key is not an admin key here' } }, { status: 401 })
     if (reply.status !== 201) return Response.json(reply.body, { status: reply.status })
     ;(await cookies()).set(SESSION_COOKIE, String(reply.body.token), cookieOptions(String(reply.body.expires_at)))
     return Response.json({ admin: true, client: reply.body.client, expires_at: reply.body.expires_at }, { status: 201 })

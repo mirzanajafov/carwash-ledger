@@ -58,7 +58,9 @@ export default function EvidencePage() {
   const e2 = evidence.e2.rows.filter((r) => r.mode === 'locked' && r.concurrency === 1)
   const pending = [
     ...(evidence.e6.trials.length > 0 ? [] : [['Audit log', 'Verifying a million journals, proofs, the sequencer, and a thousand tamper trials per class.']]),
-    ...(evidence.e7.rows.length > 0 ? [] : [['Schema change', 'Adding a column to 20 million entries under live payments, naive against expand and contract.']]),
+    ...(evidence.e7.rows.length > 0
+      ? []
+      : [['Schema change', 'Adding a column to 20 million entries under live payments, naive against expand and contract.']]),
     ...(total((r) => r.runs) >= 200 ? [] : [['A long chaos campaign', 'A few hundred runs instead of five, on the final code.']]),
   ]
   return (
@@ -71,7 +73,10 @@ export default function EvidencePage() {
         </p>
       </div>
 
-      <Section title="Chaos" note="Payments run while processes are killed with SIGKILL, Postgres and Kafka crash, the network misbehaves and the bank lies. After each run an independent checker reads the books.">
+      <Section
+        title="Chaos"
+        note="Payments run while processes are killed with SIGKILL, Postgres and Kafka crash, the network misbehaves and the bank lies. After each run an independent checker reads the books."
+      >
         <div className="grid gap-3 sm:grid-cols-4">
           {[
             ['Runs', total((r) => r.runs).toLocaleString('en')],
@@ -81,13 +86,15 @@ export default function EvidencePage() {
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-line bg-surface p-4">
               <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-              <p className={`mt-1 font-mono text-2xl tabular-nums ${label === 'Runs with a violation' ? (violations === 0 ? 'text-ok' : 'text-bad') : ''}`}>{value}</p>
+              <p className={`mt-1 font-mono text-2xl tabular-nums ${label === 'Runs with a violation' ? (violations === 0 ? 'text-ok' : 'text-bad') : ''}`}>
+                {value}
+              </p>
             </div>
           ))}
         </div>
         <p className="text-sm text-muted">
-          A zero only means something if the harness can see a violation. So each guard gets a mutant: the same code with that one guard removed. Every one
-          has to be caught, except where another guard is meant to cover for it.
+          A zero only means something if the harness can see a violation. So each guard gets a mutant: the same code with that one guard removed. Every one has
+          to be caught, except where another guard is meant to cover for it.
         </p>
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-sm">
@@ -119,8 +126,8 @@ export default function EvidencePage() {
           </table>
         </div>
         <p className="text-xs text-muted">
-          M1 survives on purpose: the conditional state update still stops a double capture, and M1 with M2 together is caught at once. M7a is a control: in
-          the ledger harness it changes nothing, and in the payments harness S6 still catches the order it gets wrong. The first M6 campaign needed five runs,
+          M1 survives on purpose: the conditional state update still stops a double capture, and M1 with M2 together is caught at once. M7a is a control: in the
+          ledger harness it changes nothing, and in the payments harness S6 still catches the order it gets wrong. The first M6 campaign needed five runs,
           because wrong amounts at 0.2% were too rare to test the guard; at 0.5% it was caught in every run.
         </p>
       </Section>
@@ -132,12 +139,15 @@ export default function EvidencePage() {
         <E1Explorer points={evidence.e1.points} connections={evidence.e1.connections} />
         <p className="text-sm text-muted">
           A locked row tops out near 150 journals a second, whatever the connection count, because each commit waits for the one before it to flush.
-          Serializable is worse at every count. Derived balances and a balance split into 16 rows both sustain about 700 at 32 connections, with p99 under
-          50 ms. The ledger uses the 16 rows, because their reads stay cheap.
+          Serializable is worse at every count. Derived balances and a balance split into 16 rows both sustain about 700 at 32 connections, with p99 under 50
+          ms. The ledger uses the 16 rows, because their reads stay cheap.
         </p>
       </Section>
 
-      <Section title="The posting path" note="One journal of three entries, one connection, the locked mode. The same work through four ways of talking to Postgres.">
+      <Section
+        title="The posting path"
+        note="One journal of three entries, one connection, the locked mode. The same work through four ways of talking to Postgres."
+      >
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full min-w-[30rem] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted">
@@ -186,10 +196,16 @@ export default function EvidencePage() {
                     <td className="px-4 py-2 font-mono tabular-nums">{r.rate.toLocaleString('en')}</td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50?.median.toFixed(1)} ms</td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.ackP99?.median.toFixed(1)} ms <span className="text-xs text-muted">({r.ackP99?.min.toFixed(0)}–{r.ackP99?.max.toFixed(0)})</span>
+                      {r.ackP99?.median.toFixed(1)} ms{' '}
+                      <span className="text-xs text-muted">
+                        ({r.ackP99?.min.toFixed(0)}–{r.ackP99?.max.toFixed(0)})
+                      </span>
                     </td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.consumedP99?.median.toFixed(1)} ms <span className="text-xs text-muted">({r.consumedP99?.min.toFixed(0)}–{r.consumedP99?.max.toFixed(0)})</span>
+                      {r.consumedP99?.median.toFixed(1)} ms{' '}
+                      <span className="text-xs text-muted">
+                        ({r.consumedP99?.min.toFixed(0)}–{r.consumedP99?.max.toFixed(0)})
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent?.median.toFixed(2)}</td>
                   </tr>
@@ -203,8 +219,8 @@ export default function EvidencePage() {
                 <li key={o.dir} className="rounded-xl border border-line bg-surface p-3">
                   <p className="font-medium">Broker killed, run {i + 1}</p>
                   <p className="text-xs text-muted">
-                    Back after {o.kafkaBackS} s, first publish {o.firstPublishS} s later. {o.peakBacklog.toLocaleString('en')} events waited and drained in {o.drainS} s at{' '}
-                    {o.drainPerSecond.toLocaleString('en')} a second; latency was normal again {o.settledS} s after the broker came back.
+                    Back after {o.kafkaBackS} s, first publish {o.firstPublishS} s later. {o.peakBacklog.toLocaleString('en')} events waited and drained in{' '}
+                    {o.drainS} s at {o.drainPerSecond.toLocaleString('en')} a second; latency was normal again {o.settledS} s after the broker came back.
                   </p>
                 </li>
               ))}
@@ -248,7 +264,9 @@ export default function EvidencePage() {
             {evidence.e6.incremental.length > 0
               ? `Checking only what was added on top of a million: ${evidence.e6.incremental.map((r) => `${r.journals.toLocaleString('en')} journals in ${r.ms.toLocaleString('en')} ms`).join(', ')}. `
               : ''}
-            {evidence.e6.lag ? `Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.` : ''}
+            {evidence.e6.lag
+              ? `Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.`
+              : ''}
           </p>
           {evidence.e6.trials.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -306,7 +324,8 @@ export default function EvidencePage() {
                       {r.errors.toLocaleString('en')} <span className="text-xs text-muted">({((100 * r.errors) / r.requests).toFixed(1)}%)</span>
                     </td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.p99 >= 1000 ? `${(r.p99 / 1000).toFixed(1)} s` : `${r.p99.toFixed(1)} ms`} <span className="text-xs text-muted">(was {r.baselineP99} ms)</span>
+                      {r.p99 >= 1000 ? `${(r.p99 / 1000).toFixed(1)} s` : `${r.p99.toFixed(1)} ms`}{' '}
+                      <span className="text-xs text-muted">(was {r.baselineP99} ms)</span>
                     </td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums">{r.longestLockS.toFixed(1)} s</td>
                   </tr>
@@ -352,7 +371,9 @@ export default function EvidencePage() {
                       )
                     })}
                     <td className="px-2 py-2 text-right font-mono tabular-nums">{r.falseBreaks}</td>
-                    <td className={`px-4 py-2 text-right font-mono tabular-nums ${r.dropped.wrong > 0 ? 'text-bad' : ''}`}>{placed === 0 ? '—' : `${Math.round((100 * r.dropped.wrong) / placed)}%`}</td>
+                    <td className={`px-4 py-2 text-right font-mono tabular-nums ${r.dropped.wrong > 0 ? 'text-bad' : ''}`}>
+                      {placed === 0 ? '—' : `${Math.round((100 * r.dropped.wrong) / placed)}%`}
+                    </td>
                   </tr>
                 )
               })}

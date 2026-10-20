@@ -24,11 +24,7 @@ let armed: ReadonlyMap<FailpointName, number> = new Map()
 let onHit: FailpointAction = () => undefined
 let random: () => number = Math.random
 
-export function armFailpoints(
-  probabilities: ReadonlyMap<FailpointName, number>,
-  action: FailpointAction,
-  rng: () => number = Math.random,
-): void {
+export function armFailpoints(probabilities: ReadonlyMap<FailpointName, number>, action: FailpointAction, rng: () => number = Math.random): void {
   armed = new Map(probabilities)
   onHit = action
   random = rng
@@ -46,7 +42,10 @@ export function failpoint(name: FailpointName): void {
 
 export function parseFailpoints(spec: string): Map<FailpointName, number> {
   const parsed = new Map<FailpointName, number>()
-  for (const part of spec.split(',').map((p) => p.trim()).filter(Boolean)) {
+  for (const part of spec
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)) {
     const [name, value] = part.split('=')
     if (!(FAILPOINTS as readonly string[]).includes(name!)) throw new Error(`unknown failpoint ${name}`)
     const probability = Number(value)

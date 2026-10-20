@@ -16,7 +16,12 @@ export function Nav() {
   return (
     <nav className="-mx-1 flex items-center gap-4 overflow-x-auto px-1 text-sm whitespace-nowrap">
       {LINKS.map((link) => (
-        <Link key={link.href} href={link.href} className={path === link.href ? 'font-medium text-ink' : 'text-muted hover:text-ink'} aria-current={path === link.href ? 'page' : undefined}>
+        <Link
+          key={link.href}
+          href={link.href}
+          className={path === link.href ? 'font-medium text-ink' : 'text-muted hover:text-ink'}
+          aria-current={path === link.href ? 'page' : undefined}
+        >
           {link.label}
         </Link>
       ))}

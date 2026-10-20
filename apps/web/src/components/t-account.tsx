@@ -17,7 +17,17 @@ function Column({ side, postings }: { side: 'debit' | 'credit'; postings: readon
   )
 }
 
-export function TAccount({ book, total, postings, fresh }: { book: Book; total: BookTotal | undefined; postings: readonly Posting[]; fresh: number | undefined }) {
+export function TAccount({
+  book,
+  total,
+  postings,
+  fresh,
+}: {
+  book: Book
+  total: BookTotal | undefined
+  postings: readonly Posting[]
+  fresh: number | undefined
+}) {
   const amount = total?.amount ?? 0n
   const shown = book.normal === 'debit' ? amount : -amount
   const side = shown < 0n ? (book.normal === 'debit' ? 'Cr' : 'Dr') : book.normal === 'debit' ? 'Dr' : 'Cr'

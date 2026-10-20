@@ -10,13 +10,7 @@ services:
       LEDGER_APP_PASSWORD: ledger_app
       LEDGER_AUDIT_PASSWORD: ledger_audit
       PSP_DB_PASSWORD: psp
-    command:
-      [
-        "postgres",
-        "-c", "max_connections=200",
-        "-c", "shared_buffers=256MB",
-        "-c", "shared_preload_libraries=pg_stat_statements",
-      ]
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB", "-c", "shared_preload_libraries=pg_stat_statements"]
     ports:
       - "127.0.0.1:5449:5432"
     volumes:

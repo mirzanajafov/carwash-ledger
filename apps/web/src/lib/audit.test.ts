@@ -14,7 +14,10 @@ function server(treeSize: number | null, tamper: { seq: number; at: string } | n
 }
 
 function play(...steps: (AuditState | string)[]): AuditPanelState {
-  return steps.reduce<AuditPanelState>((panel, step) => reduce(panel, typeof step === 'string' ? { type: 'typed', seq: step } : { type: 'loaded', server: step }), EMPTY)
+  return steps.reduce<AuditPanelState>(
+    (panel, step) => reduce(panel, typeof step === 'string' ? { type: 'typed', seq: step } : { type: 'loaded', server: step }),
+    EMPTY,
+  )
 }
 
 describe('the seq on the audit page', () => {

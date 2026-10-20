@@ -1,12 +1,6 @@
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  AlreadyReversedError,
-  DuplicateJournalError,
-  InvalidJournalError,
-  readBalance,
-  reversalOf,
-} from '../src/index.ts'
+import { AlreadyReversedError, DuplicateJournalError, InvalidJournalError, readBalance, reversalOf } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
 let ledger: LedgerFixture
@@ -33,11 +27,7 @@ async function insertJournal(client: pg.PoolClient, ref: string): Promise<string
 }
 
 async function insertEntry(client: pg.PoolClient, journalId: string, accountId: bigint, amount: bigint): Promise<void> {
-  await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [
-    journalId,
-    accountId.toString(),
-    amount.toString(),
-  ])
+  await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [journalId, accountId.toString(), amount.toString()])
 }
 
 beforeAll(async () => {
@@ -146,9 +136,7 @@ describe('posting', () => {
     for (const poster of ledger.posters) {
       const ref = `dup-${poster.name}`
       await poster.post({ externalRef: ref, entries: capture(eur, 2, 2000n, 50n) })
-      await expect(poster.post({ externalRef: ref, entries: capture(eur, 2, 2000n, 50n) })).rejects.toBeInstanceOf(
-        DuplicateJournalError,
-      )
+      await expect(poster.post({ externalRef: ref, entries: capture(eur, 2, 2000n, 50n) })).rejects.toBeInstanceOf(DuplicateJournalError)
     }
   })
 
@@ -159,8 +147,6 @@ describe('posting', () => {
     for (const account of [accounts.receivable, accounts.fees, accounts.merchants[0]!]) {
       expect(await readBalance(ledger.app, account)).toBe(0n)
     }
-    await expect(ledger.poster.post(await reversalOf(ledger.app, posted.id, 'reverse-2'))).rejects.toBeInstanceOf(
-      AlreadyReversedError,
-    )
+    await expect(ledger.poster.post(await reversalOf(ledger.app, posted.id, 'reverse-2'))).rejects.toBeInstanceOf(AlreadyReversedError)
   })
 })

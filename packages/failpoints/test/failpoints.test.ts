@@ -14,7 +14,11 @@ describe('failpoints', () => {
   it('fire an armed point with its probability and leave the others alone', () => {
     const hits: FailpointName[] = []
     const draws = [0.05, 0.2]
-    armFailpoints(new Map([['post.before_commit', 0.1]]), (name) => hits.push(name), () => draws.shift()!)
+    armFailpoints(
+      new Map([['post.before_commit', 0.1]]),
+      (name) => hits.push(name),
+      () => draws.shift()!,
+    )
     failpoint('post.after_commit')
     failpoint('post.before_commit')
     failpoint('post.before_commit')

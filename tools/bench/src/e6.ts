@@ -47,7 +47,6 @@ const { values } = parseArgs({
   },
 })
 
-
 interface Lab {
   db: TestDatabase
   admin: pg.Pool
@@ -202,7 +201,12 @@ async function proofs(lab: Lab, size: number, count: number, random: () => numbe
     ms.push(performance.now() - started)
     lengths.push(proof.length)
   }
-  return { size, ms: stats(ms), hashes: { min: Math.min(...lengths), max: Math.max(...lengths) }, bytes: { min: 32 * Math.min(...lengths), max: 32 * Math.max(...lengths) } }
+  return {
+    size,
+    ms: stats(ms),
+    hashes: { min: Math.min(...lengths), max: Math.max(...lengths) },
+    bytes: { min: 32 * Math.min(...lengths), max: 32 * Math.max(...lengths) },
+  }
 }
 
 async function scale(dir: string) {

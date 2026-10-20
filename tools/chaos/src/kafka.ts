@@ -48,9 +48,12 @@ export class LocalKafka {
       BINARY,
       [
         'setup',
-        '--default-configs-dir', join(this.#root, 'defaults'),
-        '--mounted-configs-dir', join(this.#root, 'mounted'),
-        '--final-configs-dir', join(this.#root, 'config'),
+        '--default-configs-dir',
+        join(this.#root, 'defaults'),
+        '--mounted-configs-dir',
+        join(this.#root, 'mounted'),
+        '--final-configs-dir',
+        join(this.#root, 'config'),
       ],
       { env: { ...process.env, CLUSTER_ID }, stdio: ['ignore', 'ignore', 'inherit'] },
     )
@@ -63,7 +66,8 @@ export class LocalKafka {
       BINARY,
       [
         'start',
-        '--config', join(this.#root, 'config', 'server.properties'),
+        '--config',
+        join(this.#root, 'config', 'server.properties'),
         `-Dkafka.logs.dir=${join(this.#root, 'logs')}`,
         `-Dlog4j2.configurationFile=file:${LOG4J}`,
       ],

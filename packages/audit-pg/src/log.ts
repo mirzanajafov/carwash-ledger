@@ -105,7 +105,10 @@ export async function sequenceBatch(client: pg.ClientBase, limit: number): Promi
   )
   if (journals.length !== ids.length) throw new Error(`${ids.length - journals.length} queued journals have no rows`)
   const size = await treeSize(client)
-  const frontier = await readNodes(client, nodesFor((source) => rootOf(size, source)))
+  const frontier = await readNodes(
+    client,
+    nodesFor((source) => rootOf(size, source)),
+  )
   const { rows: last } = await client.query<{ chain: Buffer }>('SELECT chain FROM audit_log ORDER BY seq DESC LIMIT 1')
   let chain: Hash = last[0] ? new Uint8Array(last[0].chain) : EMPTY_CHAIN
   const source = sourceOf(frontier)
@@ -129,10 +132,12 @@ export async function sequenceBatch(client: pg.ClientBase, limit: number): Promi
       hashes.push(Buffer.from(node.hash))
     }
   })
-  await client.query(
-    'INSERT INTO audit_log (seq, journal_id, leaf, chain) SELECT * FROM unnest($1::bigint[], $2::bigint[], $3::bytea[], $4::bytea[])',
-    [seqs, journals.map((j) => j.id), leaves, chains],
-  )
+  await client.query('INSERT INTO audit_log (seq, journal_id, leaf, chain) SELECT * FROM unnest($1::bigint[], $2::bigint[], $3::bytea[], $4::bytea[])', [
+    seqs,
+    journals.map((j) => j.id),
+    leaves,
+    chains,
+  ])
   await client.query('INSERT INTO audit_nodes (level, idx, hash) SELECT * FROM unnest($1::smallint[], $2::bigint[], $3::bytea[])', [levels, indexes, hashes])
   await client.query('DELETE FROM audit_queue WHERE journal_id = ANY($1::bigint[])', [ids])
   return journals.length

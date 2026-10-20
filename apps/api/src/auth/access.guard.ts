@@ -55,10 +55,9 @@ export class AccessGuard implements CanActivate {
   }
 
   async #key(key: string): Promise<ApiClientIdentity | undefined> {
-    const { rows } = await this.#db.pool.query<ApiClientIdentity>(
-      'SELECT id::text, scope::text FROM api_clients WHERE key_hash = $1 AND revoked_at IS NULL',
-      [hashApiKey(key)],
-    )
+    const { rows } = await this.#db.pool.query<ApiClientIdentity>('SELECT id::text, scope::text FROM api_clients WHERE key_hash = $1 AND revoked_at IS NULL', [
+      hashApiKey(key),
+    ])
     return rows[0]
   }
 
