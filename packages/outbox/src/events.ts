@@ -24,7 +24,7 @@ export function laneSql(key: string): string {
   return `(hashtextextended(${key}, 0) & ${LANES - 1})::smallint`
 }
 
-export async function writeEvent(client: pg.ClientBase | pg.Pool, event: NewEvent): Promise<void> {
+export async function writeEvent(client: pg.ClientBase, event: NewEvent): Promise<void> {
   await client.query(`INSERT INTO outbox (topic, key, lane, type, payload) VALUES ($1, $2, ${laneSql('$2')}, $3, $4)`, [
     event.topic,
     event.key,

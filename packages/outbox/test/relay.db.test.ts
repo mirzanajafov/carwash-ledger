@@ -2,8 +2,8 @@ import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, typ
 import { checkout } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { LANES, Relay, RELAY_DEFAULTS, relayOnce, writeEvent, writeJournalEvents, type OutboxRow, type Publisher } from '../src/index.ts'
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
+import { LANES, Relay, RELAY_DEFAULTS, relayOnce, writeEvent, writeJournalEvents, type NewEvent, type OutboxRow, type Publisher } from '../src/index.ts'
 
 let db: TestDatabase
 let app: pg.Pool
@@ -23,9 +23,18 @@ class Recorder implements Publisher {
   }
 }
 
+async function write(event: NewEvent): Promise<void> {
+  const lease = await checkout(app)
+  try {
+    await writeEvent(lease.client, event)
+  } finally {
+    lease.release()
+  }
+}
+
 async function addEvents(keys: readonly string[]): Promise<void> {
   for (const key of keys) {
-    await writeEvent(app, { topic: 'payments', key, type: 'test.event', payload: { key } })
+    await write({ topic: 'payments', key, type: 'test.event', payload: { key } })
   }
 }
 
@@ -101,6 +110,11 @@ describe('the outbox', () => {
       currency: 'EUR',
       amount: '-1500',
     })
+  })
+
+  it('takes a client and never the pool, so an event cannot commit apart from the transaction that caused it', () => {
+    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeEvent>[0]>()
+    expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeJournalEvents>[0]>()
   })
 
   it('puts every key in one fixed lane', async () => {
@@ -187,7 +201,7 @@ describe('Relay', () => {
     relay.start()
     try {
       for (let n = 0; n < 100; n++) {
-        await writeEvent(app, { topic: 'payments', key: `stream-${n}`, type: 'test.stream', payload: { n } })
+        await write({ topic: 'payments', key: `stream-${n}`, type: 'test.stream', payload: { n } })
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       const deadline = Date.now() + 10_000
@@ -209,7 +223,7 @@ describe('Relay', () => {
     try {
       await Promise.all(
         keys.map(async (key) => {
-          for (let n = 0; n < 15; n++) await writeEvent(app, { topic: 'payments', key, type: 'test.step', payload: { n } })
+          for (let n = 0; n < 15; n++) await write({ topic: 'payments', key, type: 'test.step', payload: { n } })
         }),
       )
       const deadline = Date.now() + 20_000
