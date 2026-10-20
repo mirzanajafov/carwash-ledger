@@ -98,10 +98,12 @@ beforeEach(async () => {
   }
   await app.query(
     `INSERT INTO balance_snapshots (account_id, amount, horizon)
-     SELECT a.id, coalesce(sum(e.amount), 0), pg_snapshot_xmin(pg_current_snapshot())
-     FROM accounts a LEFT JOIN entries e ON e.account_id = a.id
+     SELECT a.id, coalesce(sum(e.amount) FILTER (WHERE e.created_xid < h.horizon), 0), h.horizon
+     FROM accounts a
+     CROSS JOIN (SELECT pg_snapshot_xmin(pg_current_snapshot()) AS horizon) h
+     LEFT JOIN entries e ON e.account_id = a.id
      WHERE a.balance_mode = 'derived'
-     GROUP BY a.id`,
+     GROUP BY a.id, h.horizon`,
   )
   fixture = { db, admin: db.pool('admin', 1), audit: db.pool('ledger_audit', 1), accounts }
 })
