@@ -24,6 +24,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @carwash/db generate
       - run: pnpm format:check
+      - run: for patch in tools/chaos/mutants/*.patch; do git apply --check "$patch"; done
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test

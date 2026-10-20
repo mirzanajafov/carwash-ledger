@@ -24,7 +24,7 @@ COPY packages packages
 COPY apps apps
 COPY tools/chaos tools/chaos
 ARG MUTANT=
-RUN for m in $(echo "$MUTANT" | tr '+' ' '); do patch -p1 --forward < "tools/chaos/mutants/$m.patch"; done
+RUN set -e; for m in $(echo "$MUTANT" | tr '+' ' '); do patch -p1 --forward --fuzz=0 < "tools/chaos/mutants/$m.patch"; done
 RUN pnpm --filter @carwash/db generate && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." build
 
 FROM postgres:18
