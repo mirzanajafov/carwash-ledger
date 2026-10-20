@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
+import { checkout } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { ensureTopics, kafkaClient, KafkaPublisher, laneSql, Relay, type Envelope } from '../src/index.ts'
+import { ensureTopics, kafkaClient, KafkaPublisher, Relay, TOPICS, writeEvent, type Envelope } from '../src/index.ts'
 
 const BROKERS = (process.env.KAFKA_BROKERS ?? '127.0.0.1:9194').split(',')
 
 let db: TestDatabase
 let app: pg.Pool
-const topic = `test-${randomUUID()}`
+const prefix = `test-${randomUUID()}.`
+const topic = `${prefix}${TOPICS.payments}`
 const kafka = kafkaClient({ brokers: BROKERS, clientId: 'outbox-test' })
 
 beforeAll(async () => {
@@ -28,16 +30,17 @@ afterAll(async () => {
 describe('the relay against Kafka', () => {
   it('delivers every event with its id and type, in order per key', async () => {
     const keys = ['wash-1', 'wash-2', 'wash-3', 'wash-4', 'wash-5', 'wash-6']
-    for (let n = 0; n < 20; n++) {
-      for (const key of keys) {
-        await app.query(`INSERT INTO outbox (topic, key, lane, type, payload) VALUES ($1, $2, ${laneSql('$2')}, 'test.step', $3)`, [
-          topic,
-          key,
-          JSON.stringify({ n }),
-        ])
+    const lease = await checkout(app)
+    try {
+      await lease.client.query('BEGIN')
+      for (let n = 0; n < 20; n++) {
+        for (const key of keys) await writeEvent(lease.client, { topic: TOPICS.payments, key, type: 'test.step', payload: { n } })
       }
+      await lease.client.query('COMMIT')
+    } finally {
+      lease.release()
     }
-    const publisher = await KafkaPublisher.connect({ brokers: BROKERS, clientId: 'outbox-test', deliveryTimeoutMs: 10_000 })
+    const publisher = await KafkaPublisher.connect({ brokers: BROKERS, clientId: 'outbox-test', deliveryTimeoutMs: 10_000, topicPrefix: prefix })
     const relay = new Relay(app, publisher, { workers: 3, batch: 16, pollMs: 10 })
     relay.start()
     const received: { key: string; envelope: Envelope; headers: Record<string, string> }[] = []
@@ -68,7 +71,7 @@ describe('the relay against Kafka', () => {
         Array.from({ length: 20 }, (_, n) => n),
       )
     }
-    const { rows } = await app.query<{ event_id: string }>('SELECT event_id::text FROM outbox WHERE topic = $1 ORDER BY id LIMIT 1', [topic])
+    const { rows } = await app.query<{ event_id: string }>('SELECT event_id::text FROM outbox WHERE topic = $1 ORDER BY id LIMIT 1', [TOPICS.payments])
     const first = received.find((message) => message.envelope.id === rows[0]!.event_id)!
     expect(first.envelope.type).toBe('test.step')
     expect(first.headers).toEqual({ 'event-id': rows[0]!.event_id, 'event-type': 'test.step' })
