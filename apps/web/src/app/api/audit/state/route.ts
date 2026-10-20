@@ -1,3 +1,4 @@
+import type { AuditState } from '@/lib/audit'
 import { callApi, callTamper, clientKey, unreachable, witnessKey } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,7 @@ export async function GET(): Promise<Response> {
       tamperAvailable: tamper !== null && tamper.status !== 503,
       checkpoint: checkpoint.status === 200 ? checkpoint.body : null,
       witnessKey: key,
-    })
+    } satisfies AuditState)
   } catch {
     return unreachable()
   }

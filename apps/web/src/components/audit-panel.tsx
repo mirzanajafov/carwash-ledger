@@ -1,23 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useReducer, useState } from 'react'
+import { EMPTY, reduce, type AuditState } from '@/lib/audit'
 import { checkJournal, type CheckpointJson, type JournalJson, type ProofJson, type Verdict } from '@/lib/verify-journal'
-
-interface Tamper {
-  tamper_class: 1 | 2 | 3
-  seq: number
-  journal_id: string
-  witnessed_size: number
-  at: string
-  restores_at: string | null
-}
-
-interface State {
-  tamper: Tamper | null
-  tamperAvailable: boolean
-  checkpoint: (CheckpointJson & { signed_at: string }) | null
-  witnessKey: string | null
-}
 
 interface Report {
   size: number
@@ -64,16 +49,15 @@ function Mark({ ok }: { ok: boolean | null }) {
 }
 
 export function AuditPanel() {
-  const [state, setState] = useState<State | null>(null)
+  const [{ server, seq }, dispatch] = useReducer(reduce, EMPTY)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [report, setReport] = useState<Report | null>(null)
-  const [seq, setSeq] = useState('')
   const [verdicts, setVerdicts] = useState<{ seq: number; journalId: string; verdicts: Verdict[] } | null>(null)
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    if (response.ok) setState((await response.json()) as State)
+    if (response.ok) dispatch({ type: 'loaded', server: (await response.json()) as AuditState })
   }, [])
 
   useEffect(() => {
@@ -81,11 +65,6 @@ export function AuditPanel() {
     const timer = setInterval(() => void refresh(), 5000)
     return () => clearInterval(timer)
   }, [refresh])
-
-  useEffect(() => {
-    if (state?.tamper) setSeq(String(state.tamper.seq))
-    else if (state?.checkpoint && seq === '') setSeq(String(state.checkpoint.tree_size - 1))
-  }, [state?.tamper?.seq, state?.checkpoint?.tree_size])
 
   async function act(label: string, url: string, body?: unknown) {
     setBusy(label)
@@ -114,18 +93,18 @@ export function AuditPanel() {
     try {
       const response = await fetch(`/api/audit/seq/${encodeURIComponent(seq)}`, { cache: 'no-store' })
       const answer = await response.json()
-      if (!response.ok || !state?.witnessKey) {
-        setNote(answer?.error?.message ?? (state?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
+      if (!response.ok || !server?.witnessKey) {
+        setNote(answer?.error?.message ?? (server?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
         return
       }
       const input = answer as { journal: JournalJson | null; proof: ProofJson; checkpoint: CheckpointJson }
-      setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: state.witnessKey }) })
+      setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: server.witnessKey }) })
     } finally {
       setBusy(null)
     }
   }
 
-  const tamper = state?.tamper
+  const tamper = server?.tamper
   const caught = verdicts?.verdicts.some((v) => v.ok === false)
   return (
     <div className="space-y-10">
@@ -145,13 +124,13 @@ export function AuditPanel() {
             </button>
           </div>
         ) : null}
-        {state && !state.tamperAvailable ? <p className="text-sm text-muted">The tamper service is not running here.</p> : null}
+        {server && !server.tamperAvailable ? <p className="text-sm text-muted">The tamper service is not running here.</p> : null}
         <div className="grid gap-2 sm:grid-cols-3">
           {CLASSES.map((c) => (
             <button
               key={c.tamperClass}
               type="button"
-              disabled={busy !== null || !!tamper || !state?.tamperAvailable}
+              disabled={busy !== null || !!tamper || !server?.tamperAvailable}
               onClick={() => act('tamper', '/api/audit/tamper', { class: c.tamperClass })}
               className="rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -182,7 +161,7 @@ export function AuditPanel() {
           <label className="text-sm text-muted" htmlFor="seq">
             Seq
           </label>
-          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => setSeq(e.target.value.replace(/\D/g, ''))} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
+          <input id="seq" inputMode="numeric" value={seq} onChange={(e) => dispatch({ type: 'typed', seq: e.target.value.replace(/\D/g, '') })} className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-sm" />
           <button type="submit" disabled={busy !== null || seq === ''} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg">
             {busy === 'check' ? 'Checking…' : 'Check it'}
           </button>
