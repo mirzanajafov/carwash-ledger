@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY, reduce, type AuditPanelState, type AuditState } from './audit'
 
-function server(treeSize: number, tamper: { seq: number; at: string } | null = null): AuditState {
+function server(treeSize: number | null, tamper: { seq: number; at: string } | null = null): AuditState {
   return {
-    tamper: tamper && { tamper_class: 1, seq: tamper.seq, journal_id: '7', witnessed_size: treeSize, at: tamper.at, restores_at: null },
+    tamper: tamper && { tamper_class: 1, seq: tamper.seq, journal_id: '7', witnessed_size: treeSize ?? 0, at: tamper.at, restores_at: null },
     tamperAvailable: true,
-    checkpoint: { origin: 'carwash-ledger', tree_size: treeSize, root: '00', signature: 'sig', witness_key: 'key', signed_at: '2026-10-20T10:00:00.000Z' },
+    checkpoint:
+      treeSize === null
+        ? null
+        : { origin: 'carwash-ledger', tree_size: treeSize, root: '00', signature: 'sig', witness_key: 'key', signed_at: '2026-10-20T10:00:00.000Z' },
     witnessKey: 'key',
   }
 }
 
 function play(...steps: (AuditState | string)[]): AuditPanelState {
-  return steps.reduce<AuditPanelState>((panel, step) => reduce(panel, typeof step === 'string' ? { type: 'typed', seq: step } : { type: 'loaded', state: step }), EMPTY)
+  return steps.reduce<AuditPanelState>((panel, step) => reduce(panel, typeof step === 'string' ? { type: 'typed', seq: step } : { type: 'loaded', server: step }), EMPTY)
 }
 
 describe('the seq on the audit page', () => {
@@ -29,6 +32,10 @@ describe('the seq on the audit page', () => {
     expect(play(server(40), '', server(45)).seq).toBe('')
   })
 
+  it('stays empty when a poll without a checkpoint comes between two with one', () => {
+    expect(play(server(40), '', server(null), server(45)).seq).toBe('')
+  })
+
   it('jumps to a new tamper, whoever made it, over what the visitor typed', () => {
     expect(play(server(40), '5', server(40, { seq: 12, at: 't1' })).seq).toBe('12')
   })
@@ -37,8 +44,9 @@ describe('the seq on the audit page', () => {
     expect(play(server(40, { seq: 12, at: 't1' }), server(41)).seq).toBe('12')
   })
 
-  it('keeps what the visitor typed while the same tamper is still reported', () => {
+  it('keeps what the visitor typed while the same tamper is reported, even across a poll that missed it', () => {
     expect(play(server(40, { seq: 12, at: 't1' }), '30', server(41, { seq: 12, at: 't1' })).seq).toBe('30')
+    expect(play(server(40, { seq: 12, at: 't1' }), '30', server(41), server(41, { seq: 12, at: 't1' })).seq).toBe('30')
   })
 
   it('jumps again for a second tamper of the same journal', () => {

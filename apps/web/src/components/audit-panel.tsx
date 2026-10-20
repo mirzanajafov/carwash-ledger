@@ -49,7 +49,7 @@ function Mark({ ok }: { ok: boolean | null }) {
 }
 
 export function AuditPanel() {
-  const [{ state, seq }, dispatch] = useReducer(reduce, EMPTY)
+  const [{ server, seq }, dispatch] = useReducer(reduce, EMPTY)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [report, setReport] = useState<Report | null>(null)
@@ -57,7 +57,7 @@ export function AuditPanel() {
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    if (response.ok) dispatch({ type: 'loaded', state: (await response.json()) as AuditState })
+    if (response.ok) dispatch({ type: 'loaded', server: (await response.json()) as AuditState })
   }, [])
 
   useEffect(() => {
@@ -93,18 +93,18 @@ export function AuditPanel() {
     try {
       const response = await fetch(`/api/audit/seq/${encodeURIComponent(seq)}`, { cache: 'no-store' })
       const answer = await response.json()
-      if (!response.ok || !state?.witnessKey) {
-        setNote(answer?.error?.message ?? (state?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
+      if (!response.ok || !server?.witnessKey) {
+        setNote(answer?.error?.message ?? (server?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
         return
       }
       const input = answer as { journal: JournalJson | null; proof: ProofJson; checkpoint: CheckpointJson }
-      setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: state.witnessKey }) })
+      setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: server.witnessKey }) })
     } finally {
       setBusy(null)
     }
   }
 
-  const tamper = state?.tamper
+  const tamper = server?.tamper
   const caught = verdicts?.verdicts.some((v) => v.ok === false)
   return (
     <div className="space-y-10">
@@ -124,13 +124,13 @@ export function AuditPanel() {
             </button>
           </div>
         ) : null}
-        {state && !state.tamperAvailable ? <p className="text-sm text-muted">The tamper service is not running here.</p> : null}
+        {server && !server.tamperAvailable ? <p className="text-sm text-muted">The tamper service is not running here.</p> : null}
         <div className="grid gap-2 sm:grid-cols-3">
           {CLASSES.map((c) => (
             <button
               key={c.tamperClass}
               type="button"
-              disabled={busy !== null || !!tamper || !state?.tamperAvailable}
+              disabled={busy !== null || !!tamper || !server?.tamperAvailable}
               onClick={() => act('tamper', '/api/audit/tamper', { class: c.tamperClass })}
               className="rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
