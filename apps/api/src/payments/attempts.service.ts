@@ -15,7 +15,7 @@ import { ATTEMPT_COLUMNS, loadPayment, loadPayout, type AttemptRecord, type Paym
 export type Applied = 'applied' | 'already' | 'anomaly'
 
 export function pspUnavailable(reason: string): ApiError {
-  return new ApiError(503, 'psp_unavailable', `the PSP did not give an answer (${reason}); retry with the same idempotency key`, {
+  return new ApiError(503, 'psp_unavailable', `the PSP did not give an answer (${reason}), so retry with the same idempotency key`, {
     'retry-after': '1',
   })
 }
@@ -63,7 +63,7 @@ export class AttemptsService {
     const check = checkAnswer(expected, body)
     if (!check.ok) {
       await recordAnomaly(this.#db.pool, call.attemptId, 'answer_mismatch', { problems: check.problems, answer: body })
-      throw new ApiError(502, 'psp_answer_rejected', 'the PSP answered something that does not match the request; it is recorded as an anomaly')
+      throw new ApiError(502, 'psp_answer_rejected', 'the PSP answered something that does not match the request, and it is recorded as an anomaly')
     }
     return this.#db.transaction((client) => this.apply(client, call.attemptId, check.answer))
   }

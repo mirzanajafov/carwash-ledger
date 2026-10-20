@@ -61,7 +61,7 @@ export function AnomaliesPanel({ open, resolved }: { open: Anomaly[]; resolved: 
         </h2>
         <p className="text-sm text-muted">
           Answers from the bank the API refused to apply. Accepting one pulls the operation from the bank again, takes its amount and posts it through the
-          normal path; disputing one records the decision and moves no money.
+          normal path. Disputing one records the decision and moves no money.
         </p>
       </div>
       {note ? <p className="text-sm text-warn">{note}</p> : null}

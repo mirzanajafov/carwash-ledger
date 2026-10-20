@@ -1,9 +1,9 @@
 export const CRASH_POINTS = [
-  { failpoint: 'post.after_lock', title: 'Balances locked', detail: 'The balance rows are locked; the journal is not written yet.' },
-  { failpoint: 'attempt.after_psp', title: 'The bank said yes', detail: 'The provider captured the money; nothing is recorded yet.' },
+  { failpoint: 'post.after_lock', title: 'Balances locked', detail: 'The balance rows are locked, but the journal is not written yet.' },
+  { failpoint: 'attempt.after_psp', title: 'The bank said yes', detail: 'The provider captured the money, but nothing is recorded yet.' },
   { failpoint: 'transaction.before_commit', title: 'Before the first COMMIT', detail: 'The idempotency key is claimed but the claim is not committed yet.' },
-  { failpoint: 'transaction.after_commit', title: 'After the first COMMIT', detail: 'The key is claimed and committed; nothing else has happened.' },
-  { failpoint: 'request.before_finish', title: 'Before the key remembers', detail: 'The payment is done; its idempotency key has not stored the answer.' },
+  { failpoint: 'transaction.after_commit', title: 'After the first COMMIT', detail: 'The key is claimed and committed, and nothing else has happened.' },
+  { failpoint: 'request.before_finish', title: 'Before the key remembers', detail: 'The payment is done, but its idempotency key has not stored the answer.' },
 ] as const
 
 export type CrashPoint = (typeof CRASH_POINTS)[number]['failpoint']

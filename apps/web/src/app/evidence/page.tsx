@@ -128,7 +128,7 @@ export default function EvidencePage() {
         <p className="text-xs text-muted">
           M1 survives on purpose: the conditional state update still stops a double capture, and M1 with M2 together is caught at once. M7a is a control: in the
           ledger harness it changes nothing, and in the payments harness S6 still catches the order it gets wrong. The first M6 campaign needed five runs,
-          because wrong amounts at 0.2% were too rare to test the guard; at 0.5% it was caught in every run.
+          because wrong amounts at 0.2% were too rare to test the guard. At 0.5% it was caught in every run.
         </p>
       </Section>
 
@@ -220,7 +220,7 @@ export default function EvidencePage() {
                   <p className="font-medium">Broker killed, run {i + 1}</p>
                   <p className="text-xs text-muted">
                     Back after {o.kafkaBackS} s, first publish {o.firstPublishS} s later. {o.peakBacklog.toLocaleString('en')} events waited and drained in{' '}
-                    {o.drainS} s at {o.drainPerSecond.toLocaleString('en')} a second; latency was normal again {o.settledS} s after the broker came back.
+                    {o.drainS} s at {o.drainPerSecond.toLocaleString('en')} a second, and latency was normal again {o.settledS} s after the broker came back.
                   </p>
                 </li>
               ))}

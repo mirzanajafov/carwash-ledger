@@ -159,7 +159,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
           {checking ? 'Checking…' : 'Just run the checks'}
         </button>
         <span className="text-xs text-muted">
-          {admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone; the checks at most every 10 s.'}
+          {admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone, and the checks at most every 10 s.'}
         </span>
       </div>
 

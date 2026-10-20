@@ -69,7 +69,7 @@ export class TamperService {
 
   tamper(tamperClass: TamperClass): Promise<Tamper> {
     return this.#serial(async () => {
-      if (this.#current) throw new Conflict('already_tampered', `journal ${this.#current.journalId} is tampered with already; restore it first`)
+      if (this.#current) throw new Conflict('already_tampered', `journal ${this.#current.journalId} is tampered with already, so restore it first`)
       const { rows } = await this.#pool.query<{ size: string | null }>('SELECT max(size)::text AS size FROM audit_checkpoints')
       const witnessedSize = Number(rows[0]!.size ?? 0)
       if (witnessedSize === 0) throw new Conflict('nothing_witnessed', 'the witness has not signed a checkpoint yet')

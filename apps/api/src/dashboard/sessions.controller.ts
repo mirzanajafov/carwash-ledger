@@ -30,7 +30,7 @@ export class SessionsController {
   @Post()
   @HttpCode(201)
   async open(@Req() request: AuthedRequest) {
-    if (request.client.session) throw new ApiError(403, 'forbidden', 'a session cannot open another session; log in with the key')
+    if (request.client.session) throw new ApiError(403, 'forbidden', 'a session cannot open another session, so log in with the key')
     const token = generateSessionToken()
     const { rows } = await this.#db.pool.query<SessionRow>(
       `WITH opened AS (

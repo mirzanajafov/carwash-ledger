@@ -3,7 +3,7 @@ import { createPool } from '@carwash/pg'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
-  process.stderr.write('usage: check   (DATABASE_URL, ideally the ledger_audit role; WITNESS_URL to check S7 against the witness)\n')
+  process.stderr.write('usage: check   (DATABASE_URL, ideally the ledger_audit role, and WITNESS_URL to check S7 against the witness)\n')
   process.exit(2)
 }
 

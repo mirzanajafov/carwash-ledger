@@ -107,7 +107,7 @@ export class AnomaliesController {
       throw refuse(
         row.resolved_at
           ? 'this anomaly is already resolved'
-          : 'only a refused amount on a capture, a refund or a payout that is still pending can be accepted; dispute anything else',
+          : 'only a refused amount on a capture, a refund or a payout that is still pending can be accepted, and anything else can only be disputed',
       )
     }
     const attempt = await this.#attempt(row.attempt_id!)

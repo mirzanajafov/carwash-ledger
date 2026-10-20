@@ -13,7 +13,7 @@ export function proxy(request: NextRequest) {
   const wait = buckets.take(`${rule}:${ip}`, RULES[rule], Date.now())
   if (wait === 0) return NextResponse.next()
   return NextResponse.json(
-    { error: { code: 'rate_limited', message: `slow down; try again in ${wait} s` } },
+    { error: { code: 'rate_limited', message: `slow down and try again in ${wait} s` } },
     { status: 429, headers: { 'retry-after': String(wait) } },
   )
 }
