@@ -7,7 +7,7 @@
     "dev": "next dev -p 3147",
     "build": "next build",
     "start": "next start -p 3147",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc",
     "evidence": "node scripts/collect-evidence.ts"
   },
   "dependencies": {

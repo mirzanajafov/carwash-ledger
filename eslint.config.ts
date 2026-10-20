@@ -5,12 +5,12 @@ import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
-  { ignores: ['**/dist', '**/.next', '**/results', 'apps/web/next-env.d.ts', 'packages/db/src/generated'] },
+  { ignores: ['**/dist', '**/.next', 'apps/web/next-env.d.ts', 'packages/db/src/generated'] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
   {
-    linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: 'error' },
+    linterOptions: { noInlineConfig: true },
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
       '@typescript-eslint/restrict-template-expressions': [

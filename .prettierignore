@@ -1,8 +1,4 @@
 *.md
 pnpm-lock.yaml
-**/dist
-**/.next
 **/results
-packages/db/src/generated
-apps/web/next-env.d.ts
 apps/web/src/data/evidence.json
