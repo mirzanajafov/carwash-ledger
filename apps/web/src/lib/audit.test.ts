@@ -36,6 +36,11 @@ describe('the seq on the audit page', () => {
     expect(play(server(40), '', server(null), server(45)).seq).toBe('')
   })
 
+  it('keeps what the visitor typed before the first checkpoint, even an emptied field', () => {
+    expect(play(server(null), '5', server(40)).seq).toBe('5')
+    expect(play(server(null), '5', '', server(40)).seq).toBe('')
+  })
+
   it('jumps to a new tamper, whoever made it, over what the visitor typed', () => {
     expect(play(server(40), '5', server(40, { seq: 12, at: 't1' })).seq).toBe('12')
   })

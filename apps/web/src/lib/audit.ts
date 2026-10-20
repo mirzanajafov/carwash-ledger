@@ -28,13 +28,13 @@ export type AuditPanelAction = { type: 'loaded'; server: AuditState } | { type: 
 export const EMPTY: AuditPanelState = { server: null, seq: '', seeded: false, tamperAt: null }
 
 export function reduce(panel: AuditPanelState, action: AuditPanelAction): AuditPanelState {
-  if (action.type === 'typed') return { ...panel, seq: action.seq }
+  if (action.type === 'typed') return { ...panel, seq: action.seq, seeded: true }
   const { server } = action
   if (server.tamper && server.tamper.at !== panel.tamperAt) {
-    return { server, seq: String(server.tamper.seq), seeded: true, tamperAt: server.tamper.at }
+    return { ...panel, server, seq: String(server.tamper.seq), seeded: true, tamperAt: server.tamper.at }
   }
   if (!panel.seeded && server.checkpoint && server.checkpoint.tree_size > 0) {
-    return { ...panel, server, seq: panel.seq === '' ? String(server.checkpoint.tree_size - 1) : panel.seq, seeded: true }
+    return { ...panel, server, seq: String(server.checkpoint.tree_size - 1), seeded: true }
   }
   return { ...panel, server }
 }
