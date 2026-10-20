@@ -11,11 +11,20 @@
     "build": "pnpm -r build",
     "typecheck": "tsc && pnpm -r typecheck",
     "test": "vitest run --project unit --project web",
-    "test:db": "vitest run --project db"
+    "test:db": "vitest run --project db",
+    "lint": "eslint --max-warnings 0 .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "16.3.6",
     "@types/node": "catalog:",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "3.9.10",
     "typescript": "catalog:",
+    "typescript-eslint": "^8.71.2",
     "vitest": "catalog:"
   }
 }
