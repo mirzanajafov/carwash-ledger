@@ -43,6 +43,12 @@ function submission(source: SubtreeSource, size: number, fromSize = 0) {
   }
 }
 
+async function signedHistory(witness: Witness): Promise<Signed[]> {
+  const signed: Signed[] = []
+  for await (const line of witness.history()) signed.push(JSON.parse(line) as Signed)
+  return signed
+}
+
 async function refusal(promise: Promise<unknown>): Promise<string> {
   try {
     await promise
@@ -75,7 +81,7 @@ describe('the witness', () => {
     expect((await witness.submit(submission(source, 90, 5))).fresh).toBe(true)
     expect((await witness.submit(submission(source, 256, 90))).fresh).toBe(true)
     expect((await witness.submit(submission(source, 300, 256))).fresh).toBe(true)
-    expect(witness.history().map((c) => c.size)).toEqual([5, 90, 256, 300])
+    expect((await signedHistory(witness)).map((c) => c.size)).toEqual([5, 90, 256, 300])
   })
 
   it('refuses a log that was rewritten under a size it already signed, even with a proof that fits the new log', async () => {
@@ -89,7 +95,7 @@ describe('the witness', () => {
     const again = await witness.submit(submission(honest, 120))
     expect(again.fresh).toBe(false)
     expect(again.signed).toEqual(witness.latest())
-    expect(witness.history()).toHaveLength(1)
+    expect(await signedHistory(witness)).toHaveLength(1)
   })
 
   it('handles one submission at a time, so two extensions of the same checkpoint cannot both win', async () => {
@@ -102,7 +108,7 @@ describe('the witness', () => {
     expect(((results[1] as PromiseRejectedResult).reason as Refusal).code).toBe('stale')
   })
 
-  it('keeps its key and history across a restart and refuses to start from a log it did not sign', async () => {
+  it('keeps its key and history across a restart and refuses to start from a log whose newest line it did not sign', async () => {
     const dir = tempDir()
     const source = log(6, 50)
     const first = new Witness(dir, 'test-log')
@@ -111,7 +117,8 @@ describe('the witness', () => {
     if (process.platform !== 'win32') expect(statSync(join(dir, 'witness.key')).mode & 0o777).toBe(0o600)
     const second = new Witness(dir, 'test-log')
     expect(second.publicKey).toBe(first.publicKey)
-    expect(second.history()).toEqual(first.history())
+    expect(second.latest()).toEqual(first.latest())
+    expect(await signedHistory(second)).toEqual(await signedHistory(first))
     expect(await refusal(second.submit(submission(source, 49)))).toBe('rollback')
     const lines = readFileSync(join(dir, 'checkpoints.jsonl'), 'utf8').trim().split('\n')
     const forged = { ...(JSON.parse(lines[1]!) as Signed), root: toHex(rootOf(50, log(7, 50))) }
@@ -120,6 +127,21 @@ describe('the witness', () => {
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${lines[0]}\n`)
     appendFileSync(join(dir, 'checkpoints.jsonl'), '\n')
     expect(new Witness(dir, 'test-log').latest()?.size).toBe(20)
+  })
+
+  it('starts from the newest line alone, so a line changed further back is left to whoever reads the history', async () => {
+    const dir = tempDir()
+    const source = log(10, 80)
+    const witness = new Witness(dir, 'test-log')
+    await witness.submit(submission(source, 30))
+    await witness.submit(submission(source, 80, 30))
+    const lines = readFileSync(join(dir, 'checkpoints.jsonl'), 'utf8').trim().split('\n')
+    const forged = { ...(JSON.parse(lines[0]!) as Signed), root: toHex(rootOf(30, log(11, 30))) }
+    writeFileSync(join(dir, 'checkpoints.jsonl'), `${JSON.stringify(forged)}\n${lines[1]}\n`)
+    const restarted = new Witness(dir, 'test-log')
+    expect(restarted.latest()).toEqual(witness.latest())
+    const [first] = await signedHistory(restarted)
+    expect(first && restarted.verify(first)).toBe(false)
   })
 })
 
@@ -145,6 +167,7 @@ describe('the witness server', () => {
     try {
       expect(await (await fetch(`${base}/v1/key`)).json()).toEqual({ origin: 'test-log', algorithm: 'ed25519', public_key: witness.publicKey })
       expect((await fetch(`${base}/v1/checkpoints/latest`)).status).toBe(404)
+      expect(await (await fetch(`${base}/v1/checkpoints`)).json()).toEqual({ data: [] })
       expect((await post(submission(source, 10), 'wrong-token-1')).status).toBe(401)
       expect((await post(submission(source, 10), 'secret-token-but-longer')).status).toBe(401)
       expect((await post('{"size":')).status).toBe(400)

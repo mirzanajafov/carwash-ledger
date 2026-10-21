@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { Refusal, Witness, type Submission } from './witness.ts'
 
 const MAX_BODY_BYTES = 1_000_000
@@ -53,6 +55,16 @@ function submission(input: unknown): Submission {
   return { size: size as number, root: body.root, from_size: fromSize as number, proof: proof as string[] }
 }
 
+async function* historyDocument(witness: Witness): AsyncGenerator<string> {
+  yield '{"data":['
+  let separator = ''
+  for await (const line of witness.history()) {
+    yield separator + line
+    separator = ','
+  }
+  yield ']}'
+}
+
 export function createWitnessServer(witness: Witness, token: string): Server {
   const routes = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const url = new URL(request.url ?? '/', 'http://witness')
@@ -64,7 +76,10 @@ export function createWitnessServer(witness: Witness, token: string): Server {
       if (!latest) return send(response, 404, { error: { code: 'none', message: 'nothing is signed yet' } })
       return send(response, 200, latest)
     }
-    if (route === 'GET /v1/checkpoints') return send(response, 200, { data: witness.history() })
+    if (route === 'GET /v1/checkpoints') {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      return pipeline(Readable.from(historyDocument(witness)), response)
+    }
     if (route === 'POST /v1/checkpoints') {
       if (!authorized(request, token)) return send(response, 401, { error: { code: 'unauthorized', message: 'the submitter token is missing or wrong' } })
       const { signed, fresh } = await witness.submit(submission(await readBody(request)))
