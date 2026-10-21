@@ -124,12 +124,11 @@ const BALANCES = `
   FROM (SELECT account_id, sum(amount) AS total FROM entries GROUP BY account_id) t
   WHERE b.account_id = t.account_id AND b.shard = 0`
 
-async function inTransaction(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
-  const lease = await checkout(admin)
+async function inTransaction(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
+  const lease = await checkout(pool)
   let broken = false
   try {
     await lease.client.query('BEGIN')
-    await lease.client.query('SET LOCAL session_replication_role = replica')
     await work(lease.client)
     await lease.client.query('COMMIT')
   } catch (error) {
@@ -140,6 +139,13 @@ async function inTransaction(admin: pg.Pool, work: (client: pg.ClientBase) => Pr
   } finally {
     lease.release(broken)
   }
+}
+
+function withTriggersOff(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
+  return inTransaction(admin, async (client) => {
+    await client.query('SET LOCAL session_replication_role = replica')
+    await work(client)
+  })
 }
 
 interface Chart {
@@ -228,7 +234,7 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
   const fees = accounts.fees.id.toString()
   const bank = accounts.bank.id.toString()
   for (let from = 0; from < payments; from += BATCH) {
-    await inTransaction(admin, async (client) => {
+    await withTriggersOff(admin, async (client) => {
       await client.query(BATCH_ROWS, [from, Math.min(from + BATCH, payments) - 1, start, spacing, merchants.map((m) => m.id), merchants.map((m) => m.account)])
       await client.query(PAYMENTS, [traffic])
       await client.query(CAPTURES, [receivable, fees])
@@ -236,7 +242,7 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
       await client.query(PAYOUTS, [bank])
     })
   }
-  await inTransaction(admin, async (client) => {
+  await withTriggersOff(admin, async (client) => {
     await client.query(KEYS, [traffic, adminClient])
     await client.query(BALANCES)
     await client.query('INSERT INTO audit_queue (journal_id) SELECT j.id FROM journals j ORDER BY j.id')
