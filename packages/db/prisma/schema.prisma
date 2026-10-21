@@ -512,7 +512,7 @@ model VerificationRun {
   finishedAt  DateTime?          @map("finished_at") @db.Timestamptz(6)
   lockedUntil DateTime?          @map("locked_until") @db.Timestamptz(6)
   attempts    Int                @default(0)
-  done        BigInt             @default(0)
+  checked     BigInt             @default(0)
   size        BigInt?
   report      Json?
   error       String?

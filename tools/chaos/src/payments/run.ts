@@ -103,9 +103,14 @@ export interface PaymentsReport {
   pspOperations: Record<string, number>
   checks: { periodic: number; resumed: number; skipped: number }
   witness: { checkpoints: number; size: number; compared: number }
+  verification: { requested: number; runs: Record<string, number>; maxAttempts: number }
   harnessErrors: string[]
   violations: Violation[]
 }
+
+type VerificationRunAnswer = { id: string; requested_at: string; error: string | null } & (
+  { status: 'queued' | 'running' | 'failed'; report: null } | { status: 'done'; report: { findings: number; examples: unknown[] } }
+)
 
 const ROOT = new URL('../../../../', import.meta.url)
 const API_MAIN = fileURLToPath(new URL('apps/api/dist/main.js', ROOT))
@@ -218,6 +223,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     pspOperations: {},
     checks: { periodic: 0, resumed: 0, skipped: 0 },
     witness: { checkpoints: 0, size: 0, compared: 0 },
+    verification: { requested: 0, runs: {}, maxAttempts: 0 },
     harnessErrors: [],
     violations: found.list,
   }
@@ -338,6 +344,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           ...shared,
           WORKER_PORT: String(WORKER_PORT),
           DATABASE_URL: ledgerUrl('worker-db'),
+          AUDIT_DATABASE_URL: withPort(ledgerDb.url('ledger_audit'), PROXY_PORTS['worker-db']),
           KAFKA_BROKERS: `127.0.0.1:${PROXY_PORTS['worker-kafka']}`,
           RELAY_WORKERS: '4',
           WITNESS_URL: `http://127.0.0.1:${PROXY_PORTS.witness}`,
@@ -420,6 +427,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
 
     let checking = false
     const periodicCheck = async () => {
+      void askForVerification(keys.admin!).then((asked) => {
+        if (asked) report.verification.requested++
+      })
       log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, ledgerDb.name)}`)
       try {
         found.addResults(await checkLedger(audit), 'during')
@@ -550,6 +560,20 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const witnessed = witness.latest?.size ?? 0
     const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
     report.witness = { checkpoints, size: witnessed, compared: 0 }
+    const finalRun = await finalVerificationRun(keys.admin!)
+    found.add(
+      'verify-job',
+      'final',
+      'a verification run in the worker, asked for once the faults stop, ends done and finds nothing',
+      finalRun?.status === 'done' ? finalRun.report.findings : 1,
+      finalRun?.status === 'done' ? finalRun.report.examples.slice(0, 5).map((finding) => JSON.stringify(finding)) : [JSON.stringify(finalRun)],
+    )
+    const { rows: runs } = await owner.query<{ status: string; n: number; attempts: number }>(
+      'SELECT status::text, count(*)::int AS n, max(attempts) AS attempts FROM verification_runs GROUP BY status',
+    )
+    report.verification.runs = Object.fromEntries(runs.map((row) => [row.status, row.n]))
+    report.verification.maxAttempts = Math.max(0, ...runs.map((row) => row.attempts))
+    log(`verification runs ${JSON.stringify(report.verification)}, the last one ${finalRun?.status ?? 'never finished'}`)
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))
@@ -649,6 +673,36 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       journeys.learnAccepted(body)
     }
     return result
+  }
+
+  async function askForVerification(adminKey: string): Promise<VerificationRunAnswer | null> {
+    const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/admin/verify`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${adminKey}` },
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null)
+    return response?.status === 202 ? ((await response.json()) as VerificationRunAnswer) : null
+  }
+
+  async function finalVerificationRun(adminKey: string): Promise<VerificationRunAnswer | null> {
+    const since = Date.now()
+    const deadline = performance.now() + 120_000
+    let id: string | undefined
+    while (performance.now() < deadline) {
+      if (id === undefined) {
+        const asked = await askForVerification(adminKey)
+        if (asked && Date.parse(asked.requested_at) >= since) id = asked.id
+      } else {
+        const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/audit/verification`, {
+          headers: { authorization: `Bearer ${adminKey}` },
+          signal: AbortSignal.timeout(5000),
+        }).catch(() => null)
+        const latest = response?.status === 200 ? ((await response.json()) as VerificationRunAnswer) : null
+        if (latest?.id === id && (latest.status === 'done' || latest.status === 'failed')) return latest
+      }
+      await sleep(500)
+    }
+    return null
   }
 
   async function settleDay(day: number, adminKey: string): Promise<{ outcome: string; reconciliation?: { breaks: Record<string, number> } }> {
@@ -802,6 +856,9 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     periodicChecksResumed: sum((r) => r.checks.resumed),
     witnessCheckpoints: sum((r) => r.witness.checkpoints),
     witnessRootsCompared: sum((r) => r.witness.compared),
+    verificationRequests: sum((r) => r.verification.requested),
+    verificationRuns: merged((r) => r.verification.runs),
+    verificationMaxAttempts: Math.max(...reports.map((r) => r.verification.maxAttempts)),
     events: merged((r) => r.events),
     toxics: merged((r) => r.toxics),
     toxicsByProxy: merged((r) => r.toxicsByProxy),

@@ -5,6 +5,7 @@ import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
 import { PgCtePoster } from '@carwash/ledger'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { VerificationJob } from '../src/audit/verification-job.ts'
+import { VerificationRuns } from '../src/audit/verification-runs.ts'
 import type { ApiConfig } from '../src/config.ts'
 import { Database } from '../src/db/database.ts'
 import { Chart } from '../src/ledger/chart.service.ts'
@@ -225,21 +226,24 @@ describe('verification runs', () => {
   const request = () => stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
   const latest = () => stack.call('GET', '/v1/audit/verification')
 
-  it('queues one run however often it is asked for, and the worker runs it to the end with its progress', async () => {
+  it('queues one run however often and however many at once ask for it, and the worker runs it to the end with its progress', async () => {
     await sequenceAll()
     expect((await latest()).status).toBe(404)
-    const first = await request()
-    expect(first).toMatchObject({ status: 202, body: { object: 'verification_run', status: 'queued', progress: null, report: null } })
-    expect((await request()).body.id).toBe(first.body.id)
+    const asked = await Promise.all([request(), request(), request(), request(), request()])
+    expect(asked[0]).toMatchObject({ status: 202, body: { object: 'verification_run', status: 'queued', progress: null, report: null } })
+    const ids = new Set(asked.map((answer) => answer.body.id))
+    expect(ids.size).toBe(1)
+    const [id] = ids
+    expect((await request()).body.id).toBe(id)
     await withWorker(async (job) => {
-      expect((await job.runNext())?.id).toBe(first.body.id)
+      expect((await job.runNext())?.id).toBe(id)
       expect(await job.runNext()).toBeUndefined()
     })
-    const done = await latest()
-    expect(done.body).toMatchObject({ id: first.body.id, status: 'done', attempts: 1, error: null, report: { mode: 'full', findings: 0 } })
-    expect(done.body.report.journals).toBeGreaterThan(0)
-    expect(done.body.progress).toEqual({ done: done.body.report.size, size: done.body.report.size })
-    expect((await request()).body.id).not.toBe(first.body.id)
+    const finished = await latest()
+    expect(finished.body).toMatchObject({ id, status: 'done', attempts: 1, error: null, report: { mode: 'full', findings: 0 } })
+    expect(finished.body.report.journals).toBeGreaterThan(0)
+    expect(finished.body.progress).toEqual({ checked: finished.body.report.size, size: finished.body.report.size })
+    expect((await request()).body.id).not.toBe(id)
   })
 
   it('finds a tamper committed before the run, and nothing once it is restored', async () => {
@@ -277,6 +281,51 @@ describe('verification runs', () => {
       expect(await job.runNext()).toBeUndefined()
     })
     expect((await latest()).body).toMatchObject({ id: stuck, status: 'failed', error: 'the worker stopped during this run 3 times' })
+  })
+
+  it('ignores a worker whose run was taken over after its lease ran out', async () => {
+    const runs = stack.app.get(VerificationRuns)
+    await request()
+    const stale = await runs.claim()
+    await stack.admin.query(`UPDATE verification_runs SET locked_until = now() - interval '1 second' WHERE status = 'running'`)
+    const current = await runs.claim()
+    if (!stale || !current) throw new Error('no run was claimed')
+    expect(current).toMatchObject({ id: stale.id, attempts: 2 })
+    expect(await runs.progress(stale, 5, 10)).toBe(false)
+    await runs.fail(stale, 'the stale worker failed')
+    expect((await latest()).body).toMatchObject({ id: stale.id, status: 'running', attempts: 2, progress: null })
+    expect(await runs.progress(current, 5, 10)).toBe(true)
+    await runs.fail(current, 'the current worker failed')
+    expect((await latest()).body).toMatchObject({ status: 'failed', progress: { checked: 5, size: 10 }, error: 'the current worker failed' })
+  })
+
+  it('leaves its run to the next worker when it stops in the middle, instead of failing it', async () => {
+    await sequenceAll()
+    const run = (await request()).body.id
+    const blocker = await stack.admin.connect()
+    try {
+      await blocker.query('BEGIN')
+      await blocker.query('LOCK TABLE audit_log IN ACCESS EXCLUSIVE MODE')
+      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, verifyEveryMs: 20 }), { logger: false })
+      await vi.waitFor(async () => expect((await latest()).body.status).toBe('running'), { timeout: 5000 })
+      const stopping = worker.close()
+      await blocker.query('COMMIT')
+      await stopping
+    } finally {
+      blocker.release()
+    }
+    expect((await latest()).body).toMatchObject({ id: run, status: 'running', attempts: 1, progress: null })
+    await stack.admin.query(`UPDATE verification_runs SET locked_until = now() - interval '1 second' WHERE id = $1`, [run])
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({ id: run, status: 'done', attempts: 2 })
+  })
+
+  it('will not start a worker that cannot read the ledger as the audit role', async () => {
+    const starting = NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, auditDatabaseUrl: undefined }), {
+      logger: false,
+      abortOnError: false,
+    })
+    await expect(starting).rejects.toThrow('AUDIT_DATABASE_URL is required in the worker')
   })
 
   it('fails a run whose witness cannot be read, without saying where it lives', async () => {

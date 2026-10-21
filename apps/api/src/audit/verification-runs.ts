@@ -13,7 +13,7 @@ export interface VerificationRun {
   startedAt: Date | null
   finishedAt: Date | null
   attempts: number
-  done: number
+  checked: number
   size: number | null
   report: VerificationResult | null
   error: string | null
@@ -26,13 +26,13 @@ interface Row {
   started_at: Date | null
   finished_at: Date | null
   attempts: number
-  done: string
+  checked: string
   size: string | null
   report: VerificationResult | null
   error: string | null
 }
 
-const COLUMNS = `r.id::text, r.status::text, r.requested_at, r.started_at, r.finished_at, r.attempts, r.done::text, r.size::text, r.report, r.error`
+const COLUMNS = `r.id::text, r.status::text, r.requested_at, r.started_at, r.finished_at, r.attempts, r.checked::text, r.size::text, r.report, r.error`
 
 const LEASE = "interval '60 seconds'"
 const ATTEMPTS = 3
@@ -45,7 +45,7 @@ function toRun(row: Row): VerificationRun {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     attempts: row.attempts,
-    done: Number(row.done),
+    checked: Number(row.checked),
     size: row.size === null ? null : Number(row.size),
     report: row.report,
     error: row.error,
@@ -61,7 +61,7 @@ export function runView(run: VerificationRun) {
     started_at: run.startedAt?.toISOString() ?? null,
     finished_at: run.finishedAt?.toISOString() ?? null,
     attempts: run.attempts,
-    progress: run.size === null ? null : { done: run.done, size: run.size },
+    progress: run.size === null ? null : { checked: run.checked, size: run.size },
     report: run.report,
     error: run.error,
   }
@@ -88,23 +88,23 @@ export class VerificationRuns {
   async request(): Promise<VerificationRun> {
     await this.#db.pool.query(`DELETE FROM verification_runs WHERE status IN ('done', 'failed') AND requested_at < now() - interval '1 day'`)
     await this.#db.pool.query(`INSERT INTO verification_runs DEFAULT VALUES ON CONFLICT ((true)) WHERE status IN ('queued', 'running') DO NOTHING`)
-    const open = await this.open()
-    if (!open) throw new Error('a verification run was requested but none is open')
-    return open
+    const run = (await this.open()) ?? (await this.latest())
+    if (!run) throw new Error('a verification run was requested but none exists')
+    return run
   }
 
   async claim(): Promise<VerificationRun | undefined> {
-    await this.#db.pool.query(
-      `UPDATE verification_runs SET status = 'failed', finished_at = now(), locked_until = NULL,
-              error = 'the worker stopped during this run ${ATTEMPTS} times'
-       WHERE status = 'running' AND locked_until < now() AND attempts >= ${ATTEMPTS}`,
-    )
     const { rows } = await this.#db.pool.query<Row>(
-      `UPDATE verification_runs r SET status = 'running', started_at = now(), locked_until = now() + ${LEASE},
-              attempts = r.attempts + 1, done = 0, size = NULL
+      `WITH exhausted AS (
+         UPDATE verification_runs SET status = 'failed', finished_at = now(), locked_until = NULL,
+                error = 'the worker stopped during this run ${ATTEMPTS} times'
+         WHERE status = 'running' AND locked_until < now() AND attempts >= ${ATTEMPTS}
+       )
+       UPDATE verification_runs r SET status = 'running', started_at = now(), locked_until = now() + ${LEASE},
+              attempts = r.attempts + 1, checked = 0, size = NULL
        WHERE r.id = (
          SELECT id FROM verification_runs
-         WHERE status = 'queued' OR (status = 'running' AND locked_until < now())
+         WHERE status = 'queued' OR (status = 'running' AND locked_until < now() AND attempts < ${ATTEMPTS})
          ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED
        )
        RETURNING ${COLUMNS}`,
@@ -112,26 +112,27 @@ export class VerificationRuns {
     return rows.map(toRun)[0]
   }
 
-  async progress(id: string, done: number, size: number): Promise<void> {
-    await this.#db.pool.query(`UPDATE verification_runs SET done = $2, size = $3, locked_until = now() + ${LEASE} WHERE id = $1 AND status = 'running'`, [
-      id,
-      done,
-      size,
-    ])
+  async progress(run: VerificationRun, checked: number, size: number): Promise<boolean> {
+    const { rowCount } = await this.#db.pool.query(
+      `UPDATE verification_runs SET checked = $3, size = $4, locked_until = now() + ${LEASE} WHERE id = $1 AND attempts = $2 AND status = 'running'`,
+      [run.id, run.attempts, checked, size],
+    )
+    return rowCount === 1
   }
 
-  async finish(id: string, report: VerificationResult): Promise<void> {
+  async finish(run: VerificationRun, report: VerificationResult): Promise<void> {
     await this.#db.pool.query(
-      `UPDATE verification_runs SET status = 'done', finished_at = now(), locked_until = NULL, done = $3, size = $3, report = $2
-       WHERE id = $1 AND status = 'running'`,
-      [id, JSON.stringify(report), report.size],
+      `UPDATE verification_runs SET status = 'done', finished_at = now(), locked_until = NULL, checked = $4, size = $4, report = $3
+       WHERE id = $1 AND attempts = $2 AND status = 'running'`,
+      [run.id, run.attempts, JSON.stringify(report), report.size],
     )
   }
 
-  async fail(id: string, error: string): Promise<void> {
+  async fail(run: VerificationRun, error: string): Promise<void> {
     await this.#db.pool.query(
-      `UPDATE verification_runs SET status = 'failed', finished_at = now(), locked_until = NULL, error = $2 WHERE id = $1 AND status = 'running'`,
-      [id, error],
+      `UPDATE verification_runs SET status = 'failed', finished_at = now(), locked_until = NULL, error = $3
+       WHERE id = $1 AND attempts = $2 AND status = 'running'`,
+      [run.id, run.attempts, error],
     )
   }
 }

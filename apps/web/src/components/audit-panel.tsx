@@ -207,7 +207,7 @@ export function AuditPanel() {
         >
           {busy === 'verify' || verifying ? 'Verifying…' : 'Verify everything'}
         </button>
-        {server?.verification ? <VerificationRunView run={server.verification} /> : null}
+        {server?.verification ? <VerificationRunView run={server.verification} tamperAt={tamper?.at ?? null} /> : null}
       </section>
 
       {note ? <p className="text-sm text-warn">{note}</p> : null}

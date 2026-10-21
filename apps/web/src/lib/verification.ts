@@ -23,7 +23,7 @@ export interface VerificationRun {
   started_at: string | null
   finished_at: string | null
   attempts: number
-  progress: { done: number; size: number } | null
+  progress: { checked: number; size: number } | null
   report: VerificationReport | null
   error: string | null
 }
@@ -35,7 +35,13 @@ export function isOpen(run: VerificationRun | null): boolean {
 export function percentDone(run: VerificationRun): number {
   const progress = run.progress
   if (!progress || progress.size === 0) return 0
-  return Math.min(100, Math.floor((progress.done / progress.size) * 100))
+  return Math.min(100, Math.floor((progress.checked / progress.size) * 100))
+}
+
+export function startedBeforeTamper(run: VerificationRun, tamperAt: string | null): boolean {
+  return (
+    run.status === 'done' && run.report?.findings === 0 && tamperAt !== null && run.started_at !== null && Date.parse(tamperAt) > Date.parse(run.started_at)
+  )
 }
 
 export function describeFinding(f: VerificationFinding): string {

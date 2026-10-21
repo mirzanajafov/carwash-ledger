@@ -8,7 +8,7 @@ CREATE TABLE "verification_runs" (
     "finished_at" TIMESTAMPTZ(6),
     "locked_until" TIMESTAMPTZ(6),
     "attempts" INTEGER NOT NULL DEFAULT 0,
-    "done" BIGINT NOT NULL DEFAULT 0,
+    "checked" BIGINT NOT NULL DEFAULT 0,
     "size" BIGINT,
     "report" JSONB,
     "error" TEXT,
@@ -20,4 +20,3 @@ CREATE UNIQUE INDEX "verification_runs_one_open" ON "verification_runs" ((true))
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON "verification_runs" TO ledger_app;
 GRANT USAGE ON SEQUENCE "verification_runs_id_seq" TO ledger_app;
-GRANT SELECT ON "verification_runs" TO ledger_audit;
