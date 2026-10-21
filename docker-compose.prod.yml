@@ -131,6 +131,8 @@ services:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3145/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       retries: 10
+      start_period: 1m
+      start_interval: 2s
     cpus: 0.1
     mem_limit: 64m
     pids_limit: 32

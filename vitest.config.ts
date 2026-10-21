@@ -10,7 +10,7 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'unit', include: [`${packages}/test/**/*.test.ts`], exclude: [...configDefaults.exclude, '**/*.db.test.ts'] },
+        test: { name: 'unit', include: [`${packages}/test/**/*.test.ts`, 'deploy/test/*.test.ts'], exclude: [...configDefaults.exclude, '**/*.db.test.ts'] },
       },
       {
         extends: true,

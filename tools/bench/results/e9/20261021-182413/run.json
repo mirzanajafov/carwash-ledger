@@ -1,0 +1,11 @@
+{
+  "experiment": "e9",
+  "options": {
+    "sizes": "51000,510000",
+    "repeats": "3",
+    "out": "results/e9"
+  },
+  "commit": "712a56f",
+  "node": "v24.18.0",
+  "cpu": "12th Gen Intel(R) Core(TM) i7-1270P"
+}

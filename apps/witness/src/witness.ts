@@ -1,6 +1,20 @@
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify, type KeyObject } from 'node:crypto'
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs'
+import {
+  closeSync,
+  createReadStream,
+  existsSync,
+  fstatSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs'
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 import { checkpointBody, fromHex, verifyConsistency, type Checkpoint } from '@carwash/audit'
 
 export interface Signed extends Checkpoint {
@@ -22,16 +36,42 @@ export class Refusal extends Error {
   }
 }
 
+const TAIL_CHUNK = 4096
+const LONGEST_LINE = 65_536
+
+function lastLine(path: string): string | undefined {
+  if (!existsSync(path)) return undefined
+  const fd = openSync(path, 'r')
+  try {
+    let tail = Buffer.alloc(0)
+    for (let position = fstatSync(fd).size; position > 0;) {
+      if (tail.length > LONGEST_LINE) throw new Error(`the last line of ${path} is longer than ${LONGEST_LINE} bytes`)
+      const length = Math.min(TAIL_CHUNK, position)
+      position -= length
+      const chunk = Buffer.alloc(length)
+      if (readSync(fd, chunk, 0, length, position) !== length) throw new Error(`${path} changed while its last line was read`)
+      tail = Buffer.concat([chunk, tail])
+      const lines = tail
+        .toString('utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+      if (lines.length > 1 || (position === 0 && lines.length === 1)) return lines.at(-1)
+    }
+    return undefined
+  } finally {
+    closeSync(fd)
+  }
+}
+
 export class Witness {
-  readonly #dir: string
   readonly #origin: string
   readonly #privateKey: KeyObject
   readonly #publicKey: KeyObject
-  readonly #history: Signed[] = []
+  readonly #log: string
+  #latest: Signed | undefined
   #queue: Promise<unknown> = Promise.resolve()
 
   constructor(dir: string, origin: string) {
-    this.#dir = dir
     this.#origin = origin
     mkdirSync(dir, { recursive: true })
     const keyFile = join(dir, 'witness.key')
@@ -41,15 +81,12 @@ export class Witness {
     }
     this.#privateKey = createPrivateKey(readFileSync(keyFile))
     this.#publicKey = createPublicKey(this.#privateKey)
-    const log = join(dir, 'checkpoints.jsonl')
-    if (existsSync(log)) {
-      for (const line of readFileSync(log, 'utf8').split('\n')) {
-        if (line.trim() === '') continue
-        const signed = JSON.parse(line) as Signed
-        if (!this.verify(signed)) throw new Error(`the witness log has a checkpoint at size ${signed.size} that its own key did not sign`)
-        this.#history.push(signed)
-      }
-    }
+    this.#log = join(dir, 'checkpoints.jsonl')
+    const line = lastLine(this.#log)
+    if (line === undefined) return
+    const signed = JSON.parse(line) as Signed
+    if (!this.verify(signed)) throw new Error(`the witness log ends with a checkpoint at size ${signed.size} that its own key did not sign`)
+    this.#latest = signed
   }
 
   get publicKey(): string {
@@ -61,11 +98,21 @@ export class Witness {
   }
 
   latest(): Signed | undefined {
-    return this.#history.at(-1)
+    return this.#latest
   }
 
-  history(): readonly Signed[] {
-    return this.#history
+  async *history(): AsyncGenerator<string> {
+    if (!existsSync(this.#log)) return
+    const end = statSync(this.#log).size
+    if (end === 0) return
+    const input = createReadStream(this.#log, { end: end - 1 })
+    try {
+      for await (const line of createInterface({ input, crlfDelay: Infinity })) {
+        if (line.trim() !== '') yield line
+      }
+    } finally {
+      input.destroy()
+    }
   }
 
   verify(signed: Signed): boolean {
@@ -98,14 +145,14 @@ export class Witness {
       signature: sign(null, Buffer.from(body), this.#privateKey).toString('base64'),
       signed_at: new Date().toISOString(),
     }
-    const fd = openSync(join(this.#dir, 'checkpoints.jsonl'), 'a')
+    const fd = openSync(this.#log, 'a')
     try {
       writeSync(fd, `${JSON.stringify(signed)}\n`)
       fsyncSync(fd)
     } finally {
       closeSync(fd)
     }
-    this.#history.push(signed)
+    this.#latest = signed
     return { signed, fresh: true }
   }
 }
