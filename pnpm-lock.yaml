@@ -516,6 +516,9 @@ importers:
 
   tools/bench:
     dependencies:
+      '@carwash/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@carwash/audit-pg':
         specifier: workspace:*
         version: link:../../packages/audit-pg
