@@ -3,12 +3,11 @@ import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
 import { once } from 'node:events'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
-import { checkAudit, checkAuditIn, readWitness, violations, type WitnessView } from '@carwash/invariants'
+import { checkAudit, checkAuditIn, readWitness, readWitnessHistory, violations, type WitnessView } from '@carwash/invariants'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -63,10 +62,12 @@ async function rewriteHistory(client: pg.ClientBase): Promise<void> {
   while ((await sequenceBatch(client, 1000)) > 0);
 }
 
-async function listen(listening: Server): Promise<string> {
-  listening.listen(0, '127.0.0.1')
-  await once(listening, 'listening')
-  return `http://127.0.0.1:${(listening.address() as AddressInfo).port}`
+async function listen(http: Server): Promise<string> {
+  http.listen(0, '127.0.0.1')
+  await once(http, 'listening')
+  const address = http.address()
+  if (address === null || typeof address === 'string') throw new Error('the server is not listening on a port')
+  return `http://127.0.0.1:${address.port}`
 }
 
 function answering(routes: Record<string, string>): Server {
@@ -116,21 +117,25 @@ describe('checkpoints and the witness', () => {
     }
   })
 
-  it('refuses a witness that answers something other than JSON, a key that is not Ed25519, or a checkpoint without a positive size', async () => {
+  it('refuses a witness that answers something other than JSON, a key that is not Ed25519, or checkpoints without a positive size, and names it', async () => {
     const publicKey = generateKeyPairSync('ed25519').publicKey.export({ format: 'jwk' }).x
     const key = (x: unknown) => JSON.stringify({ origin: 'carwash-ledger', algorithm: 'ed25519', public_key: x })
-    const cases: [Record<string, string>, string][] = [
-      [{ '/v1/key': '<html>' }, 'with a body that is not JSON'],
-      [{ '/v1/key': key('abc') }, 'publishes a key that is not an Ed25519 key'],
+    const zero = JSON.stringify({ size: 0, root: '00', signature: 'AA' })
+    const cases: [Record<string, string>, (url: string) => Promise<unknown>, (url: string) => string][] = [
+      [{ '/v1/key': '<html>' }, readWitness, (url) => `GET ${url}/v1/key answered 200 with a body that is not JSON`],
+      [{ '/v1/key': key('abc') }, readWitness, (url) => `the witness at ${url} publishes a key that is not an Ed25519 key`],
       [
-        { '/v1/key': key(publicKey), '/v1/checkpoints/latest': JSON.stringify({ size: 0, root: '00', signature: 'AA' }) },
-        'answered something that is not a checkpoint',
+        { '/v1/key': key(publicKey), '/v1/checkpoints/latest': zero },
+        readWitness,
+        (url) => `the witness at ${url} answered something that is not a checkpoint`,
       ],
+      [{ '/v1/checkpoints': `{"data":[${zero}]}` }, readWitnessHistory, (url) => `the witness at ${url} answered a history that is not a list of checkpoints`],
     ]
-    for (const [routes, refusal] of cases) {
+    for (const [routes, read, refusal] of cases) {
       const stub = answering(routes)
       try {
-        await expect(readWitness(await listen(stub))).rejects.toThrow(refusal)
+        const url = await listen(stub)
+        await expect(read(url)).rejects.toThrow(refusal(url))
       } finally {
         stub.close()
       }

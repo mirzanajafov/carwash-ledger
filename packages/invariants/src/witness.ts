@@ -11,6 +11,7 @@ export interface WitnessedCheckpoint {
 export interface WitnessView {
   origin: string
   publicKey: string
+  key: KeyObject
   latest: WitnessedCheckpoint | undefined
 }
 
@@ -50,10 +51,11 @@ export async function readWitness(url: string): Promise<WitnessView> {
   const key = await getJson(`${url}/v1/key`)
   if (!isObject(key) || typeof key.origin !== 'string' || typeof key.public_key !== 'string') throw new Error(`the witness at ${url} publishes no key`)
   if (key.algorithm !== 'ed25519') throw new Error(`the witness at ${url} signs with ${String(key.algorithm)}, not ed25519`)
-  if (!publicKeyOf(key.public_key)) throw new Error(`the witness at ${url} publishes a key that is not an Ed25519 key`)
+  const parsed = publicKeyOf(key.public_key)
+  if (!parsed) throw new Error(`the witness at ${url} publishes a key that is not an Ed25519 key`)
   const latest = await getJson(`${url}/v1/checkpoints/latest`)
   if (latest !== undefined && !isCheckpoint(latest)) throw new Error(`the witness at ${url} answered something that is not a checkpoint`)
-  return { origin: key.origin, publicKey: key.public_key, latest }
+  return { origin: key.origin, publicKey: key.public_key, key: parsed, latest }
 }
 
 export async function readWitnessHistory(url: string): Promise<WitnessedCheckpoint[]> {
@@ -140,10 +142,8 @@ async function copyProblem(client: pg.ClientBase, treeSize: number, copy: Stored
 }
 
 export async function checkWitnessedIn(client: pg.ClientBase, witness: WitnessView, treeSize: number): Promise<Finding> {
-  const key = publicKeyOf(witness.publicKey)
-  if (!key) return { count: 1, examples: [`the witness key ${witness.publicKey} is not an Ed25519 key`] }
   const signed: Signed = (checkpoint) =>
-    verify(null, Buffer.from(`${witness.origin}\n${checkpoint.size}\n${checkpoint.root}\n`), key, Buffer.from(checkpoint.signature, 'base64'))
+    verify(null, Buffer.from(`${witness.origin}\n${checkpoint.size}\n${checkpoint.root}\n`), witness.key, Buffer.from(checkpoint.signature, 'base64'))
   const copy = await newestCopy(client)
   const problems = [
     witness.latest && (await latestProblem(client, treeSize, witness.latest, signed)),
