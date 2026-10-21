@@ -328,10 +328,18 @@ describe('verification runs', () => {
     await expect(starting).rejects.toThrow('AUDIT_DATABASE_URL is required in the worker')
   })
 
-  it('fails a run whose witness cannot be read, without saying where it lives', async () => {
+  it('queues a run again when the witness cannot be read, and fails it on the third attempt without saying where the witness lives', async () => {
     const run = (await request()).body.id
-    await withWorker((job) => job.runNext(), { witnessUrl: 'http://127.0.0.1:9', witnessToken: 'token' })
-    expect((await latest()).body).toMatchObject({ id: run, status: 'failed', error: 'the witness could not be read', report: null })
+    await withWorker(
+      async (job) => {
+        await job.runNext()
+        expect((await latest()).body).toMatchObject({ id: run, status: 'queued', attempts: 1, error: null })
+        await job.runNext()
+        await job.runNext()
+      },
+      { witnessUrl: 'http://127.0.0.1:9', witnessToken: 'token' },
+    )
+    expect((await latest()).body).toMatchObject({ id: run, status: 'failed', attempts: 3, error: 'the witness could not be read', report: null })
   })
 })
 

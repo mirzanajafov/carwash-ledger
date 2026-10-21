@@ -42,7 +42,7 @@ export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy 
       witness = this.#config.witnessUrl ? await readWitness(this.#config.witnessUrl) : undefined
     } catch (error) {
       this.#logger.warn(`run ${run.id}: the witness could not be read: ${error instanceof Error ? error.message : String(error)}`)
-      await this.#runs.fail(run, 'the witness could not be read')
+      await this.#runs.retryOrFail(run, 'the witness could not be read')
       return run
     }
     const onProgress = async (checked: number, size: number) => {
@@ -51,14 +51,15 @@ export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy 
     }
     try {
       const { state, ...report } = await inSnapshot(this.#pool, (client) => verifyLog(client, { witness, onProgress }))
-      await this.#runs.finish(run, { ...report, root: state?.root ?? null })
-      this.#logger.log(`run ${run.id}: ${report.journals} journals, ${report.witnessed} signed roots, ${report.findings} findings in ${report.ms.total} ms`)
+      if (await this.#runs.finish(run, { ...report, root: state?.root ?? null }))
+        this.#logger.log(`run ${run.id}: ${report.journals} journals, ${report.witnessed} signed roots, ${report.findings} findings in ${report.ms.total} ms`)
+      else this.#logger.warn(`run ${run.id} was taken over by another worker before it finished`)
     } catch (error) {
       if (this.#stop.signal.aborted) {
         this.#logger.log(`run ${run.id} stopped with the worker, and the next worker starts it again once its lease ends`)
       } else {
         this.#logger.error(`run ${run.id} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
-        await this.#runs.fail(run, 'the verification failed, and the worker logged why')
+        await this.#runs.retryOrFail(run, 'the verification failed, and the worker logged why')
       }
     }
     return run

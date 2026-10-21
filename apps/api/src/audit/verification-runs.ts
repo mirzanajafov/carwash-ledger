@@ -87,8 +87,10 @@ export class VerificationRuns {
 
   async request(): Promise<VerificationRun> {
     await this.#db.pool.query(`DELETE FROM verification_runs WHERE status IN ('done', 'failed') AND requested_at < now() - interval '1 day'`)
-    await this.#db.pool.query(`INSERT INTO verification_runs DEFAULT VALUES ON CONFLICT ((true)) WHERE status IN ('queued', 'running') DO NOTHING`)
-    const run = (await this.open()) ?? (await this.latest())
+    const { rows } = await this.#db.pool.query<Row>(
+      `INSERT INTO verification_runs AS r DEFAULT VALUES ON CONFLICT ((true)) WHERE status IN ('queued', 'running') DO NOTHING RETURNING ${COLUMNS}`,
+    )
+    const run = rows.map(toRun)[0] ?? (await this.open()) ?? (await this.latest())
     if (!run) throw new Error('a verification run was requested but none exists')
     return run
   }
@@ -120,12 +122,13 @@ export class VerificationRuns {
     return rowCount === 1
   }
 
-  async finish(run: VerificationRun, report: VerificationResult): Promise<void> {
-    await this.#db.pool.query(
+  async finish(run: VerificationRun, report: VerificationResult): Promise<boolean> {
+    const { rowCount } = await this.#db.pool.query(
       `UPDATE verification_runs SET status = 'done', finished_at = now(), locked_until = NULL, checked = $4, size = $4, report = $3
        WHERE id = $1 AND attempts = $2 AND status = 'running'`,
       [run.id, run.attempts, JSON.stringify(report), report.size],
     )
+    return rowCount === 1
   }
 
   async fail(run: VerificationRun, error: string): Promise<void> {
@@ -134,5 +137,16 @@ export class VerificationRuns {
        WHERE id = $1 AND attempts = $2 AND status = 'running'`,
       [run.id, run.attempts, error],
     )
+  }
+
+  async retryOrFail(run: VerificationRun, error: string): Promise<void> {
+    if (run.attempts >= ATTEMPTS) {
+      await this.fail(run, error)
+      return
+    }
+    await this.#db.pool.query(`UPDATE verification_runs SET status = 'queued', locked_until = NULL WHERE id = $1 AND attempts = $2 AND status = 'running'`, [
+      run.id,
+      run.attempts,
+    ])
   }
 }
