@@ -14,6 +14,7 @@ import {
   checkEvents,
   checkLedger,
   checkPayments,
+  checkPaymentsIncrementally,
   checkSequenced,
   checkSettled,
   checkSettlement,
@@ -100,7 +101,7 @@ export interface PaymentsReport {
   toxicsByProxy: Record<string, number>
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
   pspOperations: Record<string, number>
-  checks: { periodic: number; skipped: number }
+  checks: { periodic: number; resumed: number; skipped: number }
   witness: { checkpoints: number; size: number; compared: number }
   harnessErrors: string[]
   violations: Violation[]
@@ -215,7 +216,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     toxicsByProxy: Object.fromEntries(PROXIES.map((p) => [p, 0])),
     ledger: { anomalies: {}, webhooks: {} },
     pspOperations: {},
-    checks: { periodic: 0, skipped: 0 },
+    checks: { periodic: 0, resumed: 0, skipped: 0 },
     witness: { checkpoints: 0, size: 0, compared: 0 },
     harnessErrors: [],
     violations: found.list,
@@ -422,7 +423,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, ledgerDb.name)}`)
       try {
         found.addResults(await checkLedger(audit), 'during')
-        found.addResults(await checkPayments(audit), 'during')
+        const payments = await checkPaymentsIncrementally(audit)
+        found.addResults(payments.results, 'during')
+        if (payments.since) report.checks.resumed++
         found.addResults([await checkAgainstPsp(audit, psp)], 'during')
         found.addResults([await checkAudit(audit, await readWitness(WITNESS_URL).catch(() => undefined))], 'during')
         report.checks.periodic++
@@ -553,7 +556,13 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     while (checking) await sleep(10)
 
     found.addResults(await checkLedger(audit), 'final')
-    found.addResults(await checkPayments(audit), 'final')
+    const full = await checkPayments(audit)
+    const resumed = (await checkPaymentsIncrementally(audit)).results
+    found.addResults(full, 'final')
+    for (const result of full) {
+      const count = resumed.find((r) => r.id === result.id)?.count
+      if (count !== result.count) report.harnessErrors.push(`the incremental ${result.id} found ${count}, the full one ${result.count}`)
+    }
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
     found.addResults(await checkEvents(audit), 'final')
     found.addResults([await checkAudit(audit, witness), await checkSequenced(audit, witness)], 'final')
@@ -789,6 +798,8 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     kafkaKills: sum((r) => r.kafka.kills),
     settlementBreaks: merged((r) => r.settlement.breaks),
     kafkaRecoveryMsMedian: median(reports.flatMap((r) => r.kafka.recoveryMs)),
+    periodicChecks: sum((r) => r.checks.periodic),
+    periodicChecksResumed: sum((r) => r.checks.resumed),
     witnessCheckpoints: sum((r) => r.witness.checkpoints),
     witnessRootsCompared: sum((r) => r.witness.compared),
     events: merged((r) => r.events),

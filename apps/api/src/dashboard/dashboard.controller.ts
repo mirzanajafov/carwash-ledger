@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, Req, type OnModuleDestroy } from '@nestjs/common'
 import { verifyLog } from '@carwash/audit-pg'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
-import { checkAudit, checkLedger, checkPayments, checkSequenced, readWitness, type WitnessView } from '@carwash/invariants'
+import { checkAudit, checkLedger, checkPaymentsIncrementally, checkSequenced, readWitness, type WitnessView } from '@carwash/invariants'
 import { createPool, inSnapshot } from '@carwash/pg'
 import { IsIn } from 'class-validator'
 import type pg from 'pg'
@@ -76,17 +76,19 @@ export class DashboardController {
     await this.#turn(request, 'checks', this.#config.checksEveryMs)
     const started = performance.now()
     const witness = await this.#witness()
-    const results = [
-      ...(await checkLedger(pool)),
-      ...(await checkPayments(pool)),
-      await checkAudit(pool, witness),
-      await checkSequenced(pool, undefined, { graceSeconds: 10 }),
-    ]
+    const ledger = await checkLedger(pool)
+    const payments = await checkPaymentsIncrementally(pool)
+    const results = [...ledger, ...payments.results, await checkAudit(pool, witness), await checkSequenced(pool, undefined, { graceSeconds: 10 })]
     return {
       object: 'invariant_checks',
       ran_at: new Date().toISOString(),
       ms: Math.round(performance.now() - started),
       witnessed: witness !== undefined,
+      payment_checks: {
+        since: payments.since?.takenAt.toISOString() ?? null,
+        payments: payments.payments,
+        merchant_entries: payments.entries,
+      },
       results,
     }
   }

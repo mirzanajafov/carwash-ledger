@@ -6,12 +6,15 @@ import {
   checkLedger,
   checkPayments,
   checkPaymentsIn,
+  checkPaymentsIncrementally,
   checkSettled,
   checkSettledIn,
   checkSettlementIn,
+  inSnapshot,
   violations,
   type InvariantId,
   type InvariantResult,
+  type PaymentBase,
 } from '@carwash/invariants'
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
@@ -21,6 +24,7 @@ import { deliver, outboxEvents, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 let settledDay: number
+let base: PaymentBase
 const payments: Record<'auto' | 'manual' | 'authorized' | 'declined', string> = {} as never
 
 function pay(token: string, extra: Record<string, unknown> = {}) {
@@ -61,8 +65,8 @@ async function corrupted(
   }
 }
 
-function inLedger(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
-  return corrupted(stack.admin, corrupt, async (client) => [...(await checkPaymentsIn(client)), await checkSettledIn(client)])
+function inLedger(corrupt: (client: pg.PoolClient) => Promise<unknown>, since?: PaymentBase) {
+  return corrupted(stack.admin, corrupt, async (client) => [...(await checkPaymentsIn(client, { since })).results, await checkSettledIn(client)])
 }
 
 function inEvents(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
@@ -91,6 +95,50 @@ async function settlementExamples(corrupt: (client: pg.PoolClient) => Promise<un
 function atPsp(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
   return corrupted(stack.pspSql, corrupt, async (client) => [await checkAgainstPsp(stack.admin, client)])
 }
+
+const corruptions = {
+  'a second capture journal': async (client) => {
+    await client.query('DROP INDEX journals_external_ref_key')
+    const { rows } = await client.query<{ account_id: string; amount: number }>(
+      `SELECT e.account_id::text, e.amount::int FROM entries e JOIN journals j ON j.id = e.journal_id WHERE j.external_ref = $1`,
+      [`capture:${payments.auto}`],
+    )
+    await postJournal(
+      client,
+      `capture:${payments.auto}`,
+      rows.map((r) => [r.account_id, r.amount]),
+    )
+  },
+  'a payment captured without its journal': (client) =>
+    client.query(`UPDATE payments SET status = 'captured', captured_amount = amount WHERE id = $1`, [payments.authorized]),
+  'a refund beyond the capture': async (client) => {
+    const { rows } = await client.query<{ id: string }>(`INSERT INTO refunds (payment_id, amount, status) VALUES ($1, 1000, 'succeeded') RETURNING id`, [
+      payments.manual,
+    ])
+    await postJournal(client, `refund:${rows[0]!.id}`, [
+      [await accountId('psp_receivable:EUR'), -1000],
+      [await accountId('merchant_payable:wash_1'), 1000],
+    ])
+  },
+  'a payment no key created': (client) => client.query(`DELETE FROM idempotency_keys WHERE payment_id = $1 AND path = '/v1/payments'`, [payments.auto]),
+  'a payment two keys created': (client) =>
+    client.query(
+      `INSERT INTO idempotency_keys (client_id, key, method, path, request_hash, state, payment_id)
+       SELECT client_id, key || '-again', method, path, request_hash, state, payment_id
+       FROM idempotency_keys WHERE payment_id = $1 AND path = '/v1/payments'`,
+      [payments.manual],
+    ),
+  'a debit committed behind a payout': async (client) =>
+    postJournal(
+      client,
+      'debit-that-took-an-early-id',
+      [
+        [await accountId('merchant_payable:wash_1'), 100],
+        [await accountId('psp_receivable:EUR'), -100],
+      ],
+      -1,
+    ),
+} satisfies Record<string, (client: pg.PoolClient) => Promise<unknown>>
 
 async function postJournal(client: pg.ClientBase, ref: string, entries: [string, number][], id?: number): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
@@ -127,6 +175,7 @@ beforeAll(async () => {
   expect((await call('POST', `/v1/settlements/${settledDay}/ingest`, { as: 'admin' })).body.outcome).toBe('ingested')
   const app = stack.app.get(Database).pool
   await deliver(app, [await outboxEvents(app)])
+  base = (await inSnapshot(stack.admin, (client) => checkPaymentsIn(client))).base!
 })
 
 afterAll(async () => {
@@ -142,62 +191,22 @@ describe('the payment invariants', () => {
   })
 
   it('catch a second capture journal, a state without its journal, and refunds beyond the capture (S3)', async () => {
-    const second = await inLedger(async (client) => {
-      await client.query('DROP INDEX journals_external_ref_key')
-      const { rows } = await client.query<{ account_id: string; amount: number }>(
-        `SELECT e.account_id::text, e.amount::int FROM entries e JOIN journals j ON j.id = e.journal_id WHERE j.external_ref = $1`,
-        [`capture:${payments.auto}`],
-      )
-      await postJournal(
-        client,
-        `capture:${payments.auto}`,
-        rows.map((r) => [r.account_id, r.amount]),
-      )
-    })
-    expect(second).toMatchObject({ S3: 2, S5: 0, S6: 0 })
-    const unbooked = await inLedger((client) =>
-      client.query(`UPDATE payments SET status = 'captured', captured_amount = amount WHERE id = $1`, [payments.authorized]),
-    )
-    expect(unbooked).toMatchObject({ S3: 1 })
-    const beyond = await inLedger(async (client) => {
-      const { rows } = await client.query<{ id: string }>(`INSERT INTO refunds (payment_id, amount, status) VALUES ($1, 1000, 'succeeded') RETURNING id`, [
-        payments.manual,
-      ])
-      await postJournal(client, `refund:${rows[0]!.id}`, [
-        [await accountId('psp_receivable:EUR'), -1000],
-        [await accountId('merchant_payable:wash_1'), 1000],
-      ])
-    })
-    expect(beyond).toMatchObject({ S3: 1 })
+    expect(await inLedger(corruptions['a second capture journal'])).toMatchObject({ S3: 2, S5: 0, S6: 0 })
+    expect(await inLedger(corruptions['a payment captured without its journal'])).toMatchObject({ S3: 1 })
+    expect(await inLedger(corruptions['a refund beyond the capture'])).toMatchObject({ S3: 1 })
   })
 
   it('catch a payment that no key created, or that two keys did (S5)', async () => {
-    const orphan = await inLedger((client) => client.query(`DELETE FROM idempotency_keys WHERE payment_id = $1 AND path = '/v1/payments'`, [payments.auto]))
-    expect(orphan).toMatchObject({ S3: 0, S5: 1 })
-    const twice = await inLedger((client) =>
-      client.query(
-        `INSERT INTO idempotency_keys (client_id, key, method, path, request_hash, state, payment_id)
-         SELECT client_id, key || '-again', method, path, request_hash, state, payment_id
-         FROM idempotency_keys WHERE payment_id = $1 AND path = '/v1/payments'`,
-        [payments.manual],
-      ),
-    )
-    expect(twice).toMatchObject({ S5: 1 })
+    expect(await inLedger(corruptions['a payment no key created'])).toMatchObject({ S3: 0, S5: 1 })
+    expect(await inLedger(corruptions['a payment two keys created'])).toMatchObject({ S5: 1 })
   })
 
   it('catch a payout that the payable did not cover in journal order (S6)', async () => {
-    const reordered = await inLedger(async (client) => {
-      await postJournal(
-        client,
-        'debit-that-took-an-early-id',
-        [
-          [await accountId('merchant_payable:wash_1'), 100],
-          [await accountId('psp_receivable:EUR'), -100],
-        ],
-        -1,
-      )
-    })
-    expect(reordered).toMatchObject({ S3: 0, S5: 0, S6: 1 })
+    expect(await inLedger(corruptions['a debit committed behind a payout'])).toMatchObject({ S3: 0, S5: 0, S6: 1 })
+  })
+
+  it.each(Object.entries(corruptions))('find %s just as well when they continue from a clean run taken before it', async (_, corrupt) => {
+    expect(await inLedger(corrupt, base)).toEqual(await inLedger(corrupt))
   })
 
   it('catch an attempt that nothing will resolve (L1)', async () => {
@@ -316,5 +325,38 @@ describe('the settlement invariant', () => {
     expect(journal).toHaveLength(1)
     expect(journal[0]).toContain('Its journal moved')
     expect(await inSettlement(async () => undefined)).toEqual({ L5: 0 })
+  })
+})
+
+describe('the payment invariants, continued from the last clean run', () => {
+  it('check every payment the first time, then only what changed, and keep their place while something is broken', async () => {
+    const audit = stack.ledgerDb.pool('ledger_audit', 2)
+    const { rows } = await stack.admin.query<{ n: number }>('SELECT count(*)::int AS n FROM payments')
+    const first = await checkPaymentsIncrementally(audit)
+    expect(first).toMatchObject({ since: undefined, payments: rows[0]!.n })
+    const quiet = await checkPaymentsIncrementally(audit)
+    expect(quiet).toMatchObject({ payments: 0, entries: 0 })
+    expect(quiet.since?.snapshot).toBe(first.base?.snapshot)
+
+    const paid = (await stack.call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2' }) })).body.id
+    const next = await checkPaymentsIncrementally(audit)
+    expect(next).toMatchObject({ payments: 1, entries: 1 })
+    await stack.admin.query('UPDATE payments SET captured_amount = captured_amount - 1 WHERE id = $1', [paid])
+    const broken = await checkPaymentsIncrementally(audit)
+    expect(counts(broken.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
+    expect(broken.base).toBeUndefined()
+    const again = await checkPaymentsIncrementally(audit)
+    expect(again.since?.snapshot).toBe(next.base?.snapshot)
+    expect(counts(again.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
+    await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [paid])
+    expect(violations((await checkPaymentsIncrementally(audit)).results)).toEqual([])
+  })
+
+  it('start from the first payment when the saved place is ahead of the database, as after a restore into a new cluster', async () => {
+    const audit = stack.ledgerDb.pool('ledger_audit', 2)
+    await stack.admin.query(`UPDATE invariant_cursors SET snapshot = '4000000000:4000000000:' WHERE name = 'payments'`)
+    const restored = await checkPaymentsIncrementally(audit)
+    expect(restored.since).toBeUndefined()
+    expect((await checkPaymentsIncrementally(audit)).since?.snapshot).toBe(restored.base?.snapshot)
   })
 })

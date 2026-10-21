@@ -58,6 +58,7 @@ model Journal {
   payoutUndo  Payout?             @relation("PayoutReversalJournal")
   payoutFix   Payout?             @relation("PayoutAdjustmentJournal")
 
+  @@index([createdXid])
   @@map("journals")
 }
 
@@ -193,47 +194,51 @@ model Merchant {
 }
 
 model Payment {
-  id               String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  clientId         BigInt        @map("client_id")
-  merchantId       BigInt        @map("merchant_id")
+  id               String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  clientId         BigInt              @map("client_id")
+  merchantId       BigInt              @map("merchant_id")
   amount           BigInt
-  currency         String        @db.Char(3)
-  captureMode      CaptureMode   @map("capture_mode")
-  status           PaymentStatus @default(created)
+  currency         String              @db.Char(3)
+  captureMode      CaptureMode         @map("capture_mode")
+  status           PaymentStatus       @default(created)
   token            String
-  pspChargeId      String?       @unique @map("psp_charge_id")
-  capturedAmount   BigInt        @default(0) @map("captured_amount")
-  refundedAmount   BigInt        @default(0) @map("refunded_amount")
-  fee              BigInt        @default(0)
-  failureReason    String?       @map("failure_reason")
-  captureJournalId BigInt?       @unique @map("capture_journal_id")
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
-  client           ApiClient     @relation(fields: [clientId], references: [id])
-  merchant         Merchant      @relation(fields: [merchantId], references: [id])
-  captureJournal   Journal?      @relation("CaptureJournal", fields: [captureJournalId], references: [id])
+  pspChargeId      String?             @unique @map("psp_charge_id")
+  capturedAmount   BigInt              @default(0) @map("captured_amount")
+  refundedAmount   BigInt              @default(0) @map("refunded_amount")
+  fee              BigInt              @default(0)
+  failureReason    String?             @map("failure_reason")
+  captureJournalId BigInt?             @unique @map("capture_journal_id")
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedXid       Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()")) @map("updated_xid")
+  client           ApiClient           @relation(fields: [clientId], references: [id])
+  merchant         Merchant            @relation(fields: [merchantId], references: [id])
+  captureJournal   Journal?            @relation("CaptureJournal", fields: [captureJournalId], references: [id])
   attempts         Attempt[]
   refunds          Refund[]
 
   @@index([merchantId, createdAt])
+  @@index([updatedXid])
   @@map("payments")
 }
 
 model Refund {
-  id            String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  paymentId     String       @map("payment_id") @db.Uuid
+  id            String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  paymentId     String              @map("payment_id") @db.Uuid
   amount        BigInt
-  status        RefundStatus @default(pending)
-  feeRefund     BigInt       @default(0) @map("fee_refund")
-  failureReason String?      @map("failure_reason")
-  journalId     BigInt?      @unique @map("journal_id")
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  resolvedAt    DateTime?    @map("resolved_at") @db.Timestamptz(6)
-  payment       Payment      @relation(fields: [paymentId], references: [id])
-  journal       Journal?     @relation("RefundJournal", fields: [journalId], references: [id])
+  status        RefundStatus        @default(pending)
+  feeRefund     BigInt              @default(0) @map("fee_refund")
+  failureReason String?             @map("failure_reason")
+  journalId     BigInt?             @unique @map("journal_id")
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt    DateTime?           @map("resolved_at") @db.Timestamptz(6)
+  updatedXid    Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()")) @map("updated_xid")
+  payment       Payment             @relation(fields: [paymentId], references: [id])
+  journal       Journal?            @relation("RefundJournal", fields: [journalId], references: [id])
   attempts      Attempt[]
 
   @@index([paymentId])
+  @@index([updatedXid])
   @@map("refunds")
 }
 
@@ -479,6 +484,15 @@ model AuditCheckpoint {
   storedAt   DateTime @default(now()) @map("stored_at") @db.Timestamptz(6)
 
   @@map("audit_checkpoints")
+}
+
+model InvariantCursor {
+  name      String                     @id
+  snapshot  Unsupported("pg_snapshot")
+  takenAt   DateTime                   @map("taken_at") @db.Timestamptz(6)
+  merchants Json
+
+  @@map("invariant_cursors")
 }
 
 model DemoLimit {
