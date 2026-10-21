@@ -58,7 +58,7 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
     case 'answered':
       return { text: `Try ${step.attempt} with the same key answers ${step.status}: one payment, ${step.paymentStatus ?? 'no payment'}.`, tone: 'text-ok' }
     case 'checks':
-      return { text: 'The invariants, checked as the read-only audit role:', tone: 'text-ink' }
+      return { text: 'The invariants, checked in a read-only snapshot as the audit role:', tone: 'text-ink' }
     case 'failed':
       return { text: step.message, tone: 'text-bad' }
   }

@@ -49,15 +49,16 @@ function medianTimes(runs: readonly CheckTimes[]): CheckTimes {
 }
 
 const INCREMENTS = [
-  ['10 s', 2],
-  ['1 minute', 12],
-  ['1 hour', 725],
+  ['10 s', 10],
+  ['1 minute', 60],
+  ['1 hour', 3600],
 ] as const
 
 async function incremental(admin: pg.Pool, pool: pg.Pool, ledger: ProductionLedger, repeats: number) {
   let base = (await inSnapshot(pool, (client) => checkPaymentsIn(client))).base
   const steps = []
-  for (const [traffic, payments] of INCREMENTS) {
+  for (const [traffic, seconds] of INCREMENTS) {
+    const payments = Math.max(1, Math.round((Number(values['per-day']) * seconds) / 86_400))
     await addTraffic(admin, ledger.traffic, payments)
     const since = base
     const runs: number[] = []

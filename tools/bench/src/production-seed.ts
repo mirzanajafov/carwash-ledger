@@ -13,7 +13,6 @@ export interface Shape {
 }
 
 interface Traffic {
-  start: Date
   spacing: number
   next: number
   merchants: { id: string; account: string }[]
@@ -241,22 +240,23 @@ async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: num
   return { origin: ORIGIN, publicKey: x, key: publicKey, latest, count }
 }
 
-async function addPayments(client: pg.ClientBase, traffic: Traffic, count: number): Promise<void> {
+async function addPayments(client: pg.ClientBase, traffic: Traffic, count: number, start: Date): Promise<void> {
   const merchants = [traffic.merchants.map((m) => m.id), traffic.merchants.map((m) => m.account)]
-  await client.query(BATCH_ROWS, [traffic.next, traffic.next + count - 1, traffic.start, traffic.spacing, ...merchants])
+  await client.query(BATCH_ROWS, [traffic.next, traffic.next + count - 1, start, traffic.spacing, ...merchants])
   await client.query(PAYMENTS, [traffic.client])
   await client.query(CAPTURES, [traffic.receivable, traffic.fees])
   await client.query(REFUNDS, [traffic.receivable, traffic.fees])
-  traffic.next += count
 }
 
 export async function addTraffic(admin: pg.Pool, traffic: Traffic, payments: number): Promise<void> {
+  const endingNow = new Date(Date.now() - (traffic.next + payments) * traffic.spacing * 1000)
   await withTriggersOff(admin, async (client) => {
-    await addPayments(client, traffic, payments)
+    await addPayments(client, traffic, payments, endingNow)
     await client.query(REFUNDS_OF_OLDER_PAYMENTS, [traffic.receivable, traffic.fees, Math.ceil(payments / 36)])
     await client.query(KEYS, [traffic.client, traffic.admin])
     await client.query(BALANCES)
   })
+  traffic.next += payments
 }
 
 export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: Shape): Promise<ProductionLedger> {
@@ -277,8 +277,8 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
   )
   const payments = Math.round(shape.days * shape.paymentsPerDay)
   const spacing = 86_400 / shape.paymentsPerDay
+  const start = new Date(Date.now() - payments * spacing * 1000 - 60_000)
   const traffic: Traffic = {
-    start: new Date(Date.now() - payments * spacing * 1000 - 60_000),
     spacing,
     next: 0,
     merchants,
@@ -288,10 +288,12 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
     ...clients[0]!,
   }
   while (traffic.next < payments) {
+    const count = Math.min(BATCH, payments - traffic.next)
     await withTriggersOff(admin, async (client) => {
-      await addPayments(client, traffic, Math.min(BATCH, payments - traffic.next))
+      await addPayments(client, traffic, count, start)
       await client.query(PAYOUTS, [traffic.bank])
     })
+    traffic.next += count
   }
   await withTriggersOff(admin, async (client) => {
     await client.query(KEYS, [traffic.client, traffic.admin])
