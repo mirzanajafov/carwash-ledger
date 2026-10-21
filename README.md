@@ -177,8 +177,9 @@ For the dashboard, start the provider, the API, the worker, the witness, the tam
 | `GET /v1/audit/head`, `/checkpoint`, `/checkpoints` | the tree and what the witness signed |
 | `GET /v1/journals/:id`, `/v1/journals/:id/proof?tree_size=` | a journal's rows and its inclusion proof |
 | `GET /v1/audit/consistency?first=&second=` | proof that one tree extends another |
+| `GET /v1/audit/verification` | the newest full verification run, with its progress or its report |
 | `GET /v1/live` | the dashboard's event stream |
-| `POST /v1/admin/plug`, `/checks`, `/verify` | the dashboard's demo actions, limited globally |
+| `POST /v1/admin/plug`, `/checks`, `/verify` | the dashboard's demo actions, limited globally (`/verify` only queues a run for the worker) |
 | `POST /v1/admin/sessions`, `GET`/`DELETE /v1/admin/sessions/current` | an admin key opens a 12-hour session for the dashboard, and sessions skip the global limits |
 | `GET /v1/admin/anomalies`, `POST /v1/admin/anomalies/:id/accept`, `/dispute` | answers the API refused, and a person's decision on them |
 
@@ -204,7 +205,7 @@ tools/recon-eval     the reconciliation experiment
 
 ## Limits and next
 
-"Verify everything" is a full verification, so it grows with the log. In production it took 57 s at 126,568 journals and 51,067 signed checkpoints. Running the verifier on the server with and without the stored checkpoints says about half of that is them, and the witness adds about 7,500 a day. The web server gives it a minute, so it needs to stop being a single request before long: a run that reports its progress, or a job the page comes back to.
+"Verify everything" is a full verification, so it grows with the log. In production it took 57 s at 126,568 journals and 51,067 signed checkpoints, about half of that for the checkpoints, and the witness adds about 7,500 a day. It used to be one request that the web server gave a minute. Now the button queues a run, the worker runs it, and the page shows how far it got and the last result, with no deadline anywhere. Two visitors share one run, and a run whose worker dies is started again by the next one. I considered streaming the progress over one long response instead. It needs no table, but the hashing would block the API's event loop for a second per batch, a closed tab would throw the run away, and the next visitor couldn't see the result. The run itself still grows with the log and holds back vacuum while it reads. The real fix is verifying only what was added since a run that passed, which the incremental audit check needs too.
 
 One Postgres without a replica, one Kafka broker, and backups on the same disk as the database. That's fine for a demo and not for money. The witness runs on the same server as the ledger, but it should sign somewhere I don't control, like a public transparency log or a git repository someone else watches. The sequencer is a single writer by design. It did 22,000-25,000 journals a second here, far above anything a car wash chain needs, but it is still one process. FX, chargebacks and disputes with the card networks aren't there.
 
