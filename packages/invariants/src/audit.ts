@@ -1,5 +1,6 @@
+import { inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
-import { collect, EXAMPLES, inSnapshot, type Check } from './collect.ts'
+import { collect, EXAMPLES, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
 import { checkWitnessedIn, type WitnessView } from './witness.ts'
 

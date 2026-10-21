@@ -17,7 +17,7 @@ import {
   type TamperClass,
   type VerifierState,
   type VerifyReport,
-  type WitnessedRoots,
+  type WitnessAnchor,
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
@@ -119,8 +119,8 @@ async function openLab(): Promise<Lab> {
   }
 }
 
-function roots(lab: Lab): WitnessedRoots {
-  return { origin: lab.witness.origin, publicKey: lab.witness.publicKey, checkpoints: lab.witness.history() }
+function anchor(lab: Lab): WitnessAnchor {
+  return { origin: lab.witness.origin, publicKey: lab.witness.publicKey, latest: lab.witness.latest() }
 }
 
 function seed(lab: Lab, from: number, to: number): Promise<number> {
@@ -170,7 +170,7 @@ async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoin
 }
 
 async function verifyInSnapshot(lab: Lab, from?: VerifierState): Promise<VerifyReport> {
-  const witness = roots(lab)
+  const witness = anchor(lab)
   const client = await lab.audit.connect()
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
@@ -356,8 +356,8 @@ async function trials(dir: string) {
   try {
     await seed(lab, 0, size)
     await sequenceAll(lab, every, false)
-    const witnessed = roots(lab)
-    const covered = witnessed.checkpoints.at(-1)!.size
+    const witnessed = anchor(lab)
+    const covered = witnessed.latest!.size
     const summary: Record<string, { trials: number; caught: number; named: number; caughtWithoutWitness: number; ms: number[] }> = {}
     for (const tamperClass of [1, 2, 3] as const) {
       for (let i = 0; i < perClass; i++) {

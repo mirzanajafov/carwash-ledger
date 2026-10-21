@@ -34,3 +34,22 @@ export async function checkout(pool: pg.Pool): Promise<Checkout> {
     },
   }
 }
+
+export async function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+  const lease = await checkout(pool)
+  const { client } = lease
+  let broken = false
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    const value = await read(client)
+    await client.query('COMMIT')
+    return value
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {
+      broken = true
+    })
+    throw error
+  } finally {
+    lease.release(broken)
+  }
+}

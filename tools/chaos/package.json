@@ -8,6 +8,7 @@
     "harness": "node --conditions=source src/harness.ts"
   },
   "dependencies": {
+    "@carwash/audit-pg": "workspace:*",
     "@carwash/db": "workspace:*",
     "@carwash/failpoints": "workspace:*",
     "@carwash/invariants": "workspace:*",

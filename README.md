@@ -76,7 +76,7 @@ Every 10 seconds the worker asks a separate witness to sign the tree's root. The
 2. **Do that, then rewrite the leaf, the chain and the tree**, so the database agrees with itself completely. Only the roots the witness signed catch it.
 3. **Delete a journal.** Its leaf is still in the signed tree.
 
-Then your browser checks one journal on its own. It recomputes the leaf from the rows, follows the server's proof to the root, and verifies the witness's Ed25519 signature with WebCrypto. The server only supplies data. A full verifier on the server does the same for every journal and names the first one that differs.
+Then your browser checks one journal on its own. It recomputes the leaf from the rows, follows the server's proof to the root, and verifies the witness's Ed25519 signature with WebCrypto. The server only supplies data. A full verifier on the server does the same for every journal and names the first one that differs. It takes the signed roots from the copies the ledger keeps of every checkpoint, checks each signature with the witness's key, and asks the witness itself only for its newest root. Deleting copies can make it vaguer about where a change is, never blind to it, because that newest root commits to everything below it.
 
 What it can't catch, honestly: a change in the second between a journal's commit and its sequencing, and a full rewrite done in the seconds before the next checkpoint. And the witness trusts the first root it ever sees.
 

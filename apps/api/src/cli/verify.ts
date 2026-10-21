@@ -1,6 +1,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { verifyLog, WitnessClient, type VerifierState, type WitnessedRoots } from '@carwash/audit-pg'
+import { verifyLog, type VerifierState } from '@carwash/audit-pg'
+import { readWitness } from '@carwash/invariants'
 import pg from 'pg'
 
 const { values } = parseArgs({
@@ -28,20 +29,13 @@ function loadState(file: string | undefined): VerifierState | undefined {
   }
 }
 
-async function witnessed(url: string | undefined): Promise<WitnessedRoots | undefined> {
-  if (!url) return undefined
-  const witness = new WitnessClient(url, '', 10_000)
-  const key = await witness.key()
-  return { origin: key.origin, publicKey: key.public_key, checkpoints: await witness.history() }
-}
-
-const roots = await witnessed(witnessUrl)
+const witness = witnessUrl ? await readWitness(witnessUrl) : undefined
 const client = new pg.Client({ connectionString })
 client.on('error', () => undefined)
 await client.connect()
 try {
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-  const report = await verifyLog(client, { witness: roots, from: loadState(values.state), batch: Number(values.batch) })
+  const report = await verifyLog(client, { witness, from: loadState(values.state), batch: Number(values.batch) })
   await client.query('COMMIT')
   process.stdout.write(`${JSON.stringify({ ...report, state: undefined }, null, 2)}\n`)
   if (values.state && report.findings === 0 && report.state) {

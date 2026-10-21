@@ -47,7 +47,8 @@ function publicKeyOf(x: string): KeyObject | undefined {
   }
 }
 
-export async function readWitness(url: string): Promise<WitnessView> {
+export async function readWitness(witnessUrl: string): Promise<WitnessView> {
+  const url = witnessUrl.replace(/\/+$/, '')
   const key = await getJson(`${url}/v1/key`)
   if (!isObject(key) || typeof key.origin !== 'string' || typeof key.public_key !== 'string') throw new Error(`the witness at ${url} publishes no key`)
   if (key.algorithm !== 'ed25519') throw new Error(`the witness at ${url} signs with ${String(key.algorithm)}, not ed25519`)
@@ -58,7 +59,8 @@ export async function readWitness(url: string): Promise<WitnessView> {
   return { origin: key.origin, publicKey: key.public_key, key: parsed, latest }
 }
 
-export async function readWitnessHistory(url: string): Promise<WitnessedCheckpoint[]> {
+export async function readWitnessHistory(witnessUrl: string): Promise<WitnessedCheckpoint[]> {
+  const url = witnessUrl.replace(/\/+$/, '')
   const history = await getJson(`${url}/v1/checkpoints`)
   if (!isObject(history) || !Array.isArray(history.data) || !history.data.every(isCheckpoint)) {
     throw new Error(`the witness at ${url} answered a history that is not a list of checkpoints`)
