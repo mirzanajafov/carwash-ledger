@@ -211,7 +211,7 @@ interface ReplayStart extends MerchantReplay {
   since: string
 }
 
-const FROM_THE_FIRST_ENTRY = { journal: '0', total: '0', since: '0' }
+const FROM_THE_FIRST_ENTRY = { journal: '-9223372036854775808', total: '0', since: '0' }
 
 async function replayStarts(client: pg.ClientBase, since: PaymentBase | undefined): Promise<ReplayStart[]> {
   if (!since) {
