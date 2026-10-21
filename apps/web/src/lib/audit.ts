@@ -1,3 +1,4 @@
+import type { VerificationRun } from './verification'
 import type { CheckpointJson } from './verify-journal'
 
 interface Tamper {
@@ -14,6 +15,7 @@ export interface AuditState {
   tamperAvailable: boolean
   checkpoint: (CheckpointJson & { signed_at: string }) | null
   witnessKey: string | null
+  verification: VerificationRun | null
 }
 
 export interface AuditPanelState {

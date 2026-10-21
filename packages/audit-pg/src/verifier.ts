@@ -38,6 +38,7 @@ export interface VerifyOptions {
   from?: VerifierState
   batch?: number
   examples?: number
+  onProgress?: (done: number, size: number) => Promise<void>
 }
 
 export interface VerifyReport {
@@ -182,6 +183,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
         else report({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }
+    await options.onProgress?.(to, size)
   }
   if (position < size) {
     report({ kind: 'gap', seq: position, missing: size - position })

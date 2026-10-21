@@ -495,6 +495,31 @@ model InvariantCursor {
   @@map("invariant_cursors")
 }
 
+enum VerificationStatus {
+  queued
+  running
+  done
+  failed
+
+  @@map("verification_status")
+}
+
+model VerificationRun {
+  id          BigInt             @id @default(autoincrement())
+  status      VerificationStatus @default(queued)
+  requestedAt DateTime           @default(now()) @map("requested_at") @db.Timestamptz(6)
+  startedAt   DateTime?          @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime?          @map("finished_at") @db.Timestamptz(6)
+  lockedUntil DateTime?          @map("locked_until") @db.Timestamptz(6)
+  attempts    Int                @default(0)
+  done        BigInt             @default(0)
+  size        BigInt?
+  report      Json?
+  error       String?
+
+  @@map("verification_runs")
+}
+
 model DemoLimit {
   name   String   @id
   lastAt DateTime @map("last_at") @db.Timestamptz(6)

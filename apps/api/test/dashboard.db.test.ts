@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { sequenceBatch } from '@carwash/audit-pg'
+import { NestFactory } from '@nestjs/core'
+import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
 import { PgCtePoster } from '@carwash/ledger'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { VerificationJob } from '../src/audit/verification-job.ts'
+import type { ApiConfig } from '../src/config.ts'
 import { Database } from '../src/db/database.ts'
 import { Chart } from '../src/ledger/chart.service.ts'
 import { PAYMENTS } from '../src/live/live-feed.ts'
+import { WorkerModule } from '../src/worker/worker.module.ts'
 import { startApi, startStack, type Stack } from './support.ts'
 
 let stack: Stack
@@ -186,7 +190,7 @@ describe('the admin side of the dashboard', () => {
     }
   })
 
-  it('runs the invariants and the verifier on demand as the audit role, and finds nothing wrong', async () => {
+  it('runs the invariants on demand as the audit role, and finds nothing wrong', async () => {
     await sequenceAll()
     expect((await stack.call('POST', '/v1/admin/checks', { key: null })).status).toBe(403)
     const checks = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null })
@@ -195,21 +199,90 @@ describe('the admin side of the dashboard', () => {
     expect(checks.body.results.filter((r: { count: number }) => r.count > 0)).toEqual([])
     expect(checks.body.payment_checks).toMatchObject({ since: null })
     expect(checks.body.payment_checks.payments).toBeGreaterThan(0)
-    const verified = await stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
-    expect(verified).toMatchObject({ status: 200, body: { object: 'verification', mode: 'full', findings: 0 } })
-    expect(verified.body.journals).toBeGreaterThan(0)
   })
 
-  it('answers 503 for the checks and verification while the witness is not answering', async () => {
+  it('answers 503 for the checks while the witness is not answering', async () => {
     const blind = await startApi({ ...stack.config, witnessUrl: 'http://127.0.0.1:9' })
     try {
-      for (const path of ['/v1/admin/checks', '/v1/admin/verify']) {
-        const answer = await stack.call('POST', path, { as: 'admin', key: null, base: blind.url })
-        expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })
-      }
+      const answer = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null, base: blind.url })
+      expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })
     } finally {
       await blind.app.close()
     }
+  })
+})
+
+describe('verification runs', () => {
+  async function withWorker<T>(work: (job: VerificationJob) => Promise<T>, config: Partial<ApiConfig> = {}): Promise<T> {
+    const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, ...config }), { logger: false })
+    try {
+      return await work(worker.get(VerificationJob))
+    } finally {
+      await worker.close()
+    }
+  }
+
+  const request = () => stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
+  const latest = () => stack.call('GET', '/v1/audit/verification')
+
+  it('queues one run however often it is asked for, and the worker runs it to the end with its progress', async () => {
+    await sequenceAll()
+    expect((await latest()).status).toBe(404)
+    const first = await request()
+    expect(first).toMatchObject({ status: 202, body: { object: 'verification_run', status: 'queued', progress: null, report: null } })
+    expect((await request()).body.id).toBe(first.body.id)
+    await withWorker(async (job) => {
+      expect((await job.runNext())?.id).toBe(first.body.id)
+      expect(await job.runNext()).toBeUndefined()
+    })
+    const done = await latest()
+    expect(done.body).toMatchObject({ id: first.body.id, status: 'done', attempts: 1, error: null, report: { mode: 'full', findings: 0 } })
+    expect(done.body.report.journals).toBeGreaterThan(0)
+    expect(done.body.progress).toEqual({ done: done.body.report.size, size: done.body.report.size })
+    expect((await request()).body.id).not.toBe(first.body.id)
+  })
+
+  it('finds a tamper committed before the run, and nothing once it is restored', async () => {
+    await sequenceAll()
+    const client = await stack.admin.connect()
+    try {
+      await client.query('BEGIN')
+      const tampered = await tamper(client, 1, 1)
+      await client.query('COMMIT')
+      await request()
+      await withWorker((job) => job.runNext())
+      expect((await latest()).body).toMatchObject({
+        status: 'done',
+        report: { firstSeq: 1, examples: [{ kind: 'leaf', seq: 1, journalId: tampered.journalId }] },
+      })
+      await client.query('BEGIN')
+      await restore(client, tampered)
+      await client.query('COMMIT')
+    } finally {
+      client.release()
+    }
+    await request()
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({ status: 'done', report: { findings: 0 } })
+  })
+
+  it('takes over a run whose worker stopped, and gives up on one that stopped three times', async () => {
+    const run = (await request()).body.id
+    await stack.admin.query(`UPDATE verification_runs SET status = 'running', attempts = 1, locked_until = now() - interval '1 second' WHERE id = $1`, [run])
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({ id: run, status: 'done', attempts: 2 })
+    const stuck = (await request()).body.id
+    await stack.admin.query(`UPDATE verification_runs SET status = 'running', attempts = 3, locked_until = now() - interval '1 second' WHERE id = $1`, [stuck])
+    await withWorker(async (job) => {
+      expect(await job.runNext()).toBeUndefined()
+    })
+    expect((await latest()).body).toMatchObject({ id: stuck, status: 'failed', error: 'the worker stopped during this run 3 times' })
+  })
+
+  it('fails a run whose witness cannot be read, without saying where it lives', async () => {
+    const run = (await request()).body.id
+    await withWorker((job) => job.runNext(), { witnessUrl: 'http://127.0.0.1:9', witnessToken: 'token' })
+    expect((await latest()).body).toMatchObject({ id: run, status: 'failed', error: 'the witness could not be read', report: null })
   })
 })
 

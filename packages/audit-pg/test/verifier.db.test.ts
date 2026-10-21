@@ -135,6 +135,21 @@ describe('full verification', () => {
     expect(report.state).toMatchObject({ size: 40, root: toHex((await head(app)).root), chain: toHex((await head(app)).chain) })
   })
 
+  it('reports how far it got after every batch, ending at the size of the log', async () => {
+    const progress: [number, number][] = []
+    await verifyLog(app, {
+      batch: 16,
+      onProgress: async (done, size) => {
+        progress.push([done, size])
+      },
+    })
+    expect(progress).toEqual([
+      [16, 40],
+      [32, 40],
+      [40, 40],
+    ])
+  })
+
   it('names the journal whose entries changed (class 1), with or without the witness', async () => {
     const { what, report } = await tampered(1, 20)
     expect(report.firstSeq).toBe(20)

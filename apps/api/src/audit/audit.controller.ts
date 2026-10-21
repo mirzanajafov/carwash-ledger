@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ORIGIN, toHex } from '@carwash/audit'
 import { Database } from '../db/database.ts'
 import { badRequest, notFound } from '../http/api-error.ts'
+import { runView, VerificationRuns } from './verification-runs.ts'
 import { head, proveConsistency, proveInclusion, rootAt, treeSize } from '@carwash/audit-pg'
 
 function size(value: string | undefined, name: string): number | undefined {
@@ -13,9 +14,18 @@ function size(value: string | undefined, name: string): number | undefined {
 @Controller('v1')
 export class AuditController {
   readonly #db: Database
+  readonly #runs: VerificationRuns
 
-  constructor(db: Database) {
+  constructor(db: Database, runs: VerificationRuns) {
     this.#db = db
+    this.#runs = runs
+  }
+
+  @Get('audit/verification')
+  async verification() {
+    const latest = await this.#runs.latest()
+    if (!latest) throw notFound('a verification run')
+    return runView(latest)
   }
 
   @Get('audit/head')

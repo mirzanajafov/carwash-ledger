@@ -163,6 +163,7 @@ services:
     command: ["node", "apps/api/dist/worker.js"]
     environment:
       <<: *ledger
+      AUDIT_DATABASE_URL: postgresql://ledger_audit:${LEDGER_AUDIT_PASSWORD}@postgres:5432/ledger
       KAFKA_BROKERS: kafka:9092
       WITNESS_TOKEN: ${WITNESS_TOKEN}
       SETTLEMENT_EVERY_MS: "30000"

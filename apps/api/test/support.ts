@@ -97,6 +97,7 @@ export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partia
     liveMaxConnections: 100,
     plugEveryMs: 60_000,
     checksEveryMs: 0,
+    verifyEveryMs: 0,
     sessionHours: 12,
     ...overrides,
   }
