@@ -2,17 +2,9 @@
 
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { EMPTY, reduce, type AuditState } from '@/lib/audit'
+import { isOpen } from '@/lib/verification'
 import { checkJournal, type CheckpointJson, type JournalJson, type ProofJson, type Verdict } from '@/lib/verify-journal'
-
-interface Report {
-  size: number
-  journals: number
-  witnessed: number
-  findings: number
-  firstSeq: number | null
-  examples: { kind: string; seq?: number; size?: number; after?: number; journalId?: string }[]
-  ms: { read: number; compute: number; total: number }
-}
+import { VerificationRunView } from './verification-run'
 
 const CLASSES = [
   { tamperClass: 1, title: 'Change an amount', detail: 'Move a euro between two entries of one journal. It still balances, so every balance check passes.' },
@@ -25,14 +17,6 @@ const LABELS: Record<Verdict['name'], string> = {
   key: 'It is the key the witness publishes',
   rows: "The journal's rows give the logged leaf",
   inclusion: 'The leaf is in the signed tree',
-}
-
-function finding(f: Report['examples'][number]): string {
-  if (f.kind === 'root') return `the root at size ${f.size} is not the one the witness signed (the change is in seq ${f.after} to ${(f.size ?? 0) - 1})`
-  if (f.kind === 'leaf') return `seq ${f.seq}: journal ${f.journalId} no longer matches its leaf`
-  if (f.kind === 'missing_journal') return `seq ${f.seq}: journal ${f.journalId} is gone`
-  if (f.kind === 'chain') return `seq ${f.seq}: the chain breaks`
-  return `${f.kind}${f.seq !== undefined ? ` at seq ${f.seq}` : ''}`
 }
 
 function Mark({ ok }: { ok: boolean | null }) {
@@ -52,7 +36,6 @@ export function AuditPanel() {
   const [{ server, seq }, dispatch] = useReducer(reduce, EMPTY)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const [report, setReport] = useState<Report | null>(null)
   const [verdicts, setVerdicts] = useState<{ seq: number; journalId: string; verdicts: Verdict[] } | null>(null)
 
   const refresh = useCallback(async () => {
@@ -60,11 +43,13 @@ export function AuditPanel() {
     if (response.ok) dispatch({ type: 'loaded', server: (await response.json()) as AuditState })
   }, [])
 
+  const verifying = isOpen(server?.verification ?? null)
+
   useEffect(() => {
     void refresh()
-    const timer = setInterval(() => void refresh(), 5000)
+    const timer = setInterval(() => void refresh(), verifying ? 2000 : 5000)
     return () => clearInterval(timer)
-  }, [refresh])
+  }, [refresh, verifying])
 
   async function act(label: string, url: string, body?: unknown) {
     setBusy(label)
@@ -82,12 +67,6 @@ export function AuditPanel() {
       setBusy(null)
       void refresh()
     }
-  }
-
-  async function verify() {
-    setReport(null)
-    const answer = await act('verify', '/api/audit/verify')
-    if (answer) setReport(answer as Report)
   }
 
   async function check() {
@@ -216,34 +195,19 @@ export function AuditPanel() {
         <div>
           <h2 className="text-base font-semibold">Verify the whole log</h2>
           <p className="text-sm text-muted">
-            The server recomputes every leaf from the current rows, rebuilds the tree on its own and compares the root at every size the witness signed.
+            The worker recomputes every leaf from the current rows, rebuilds the tree on its own and compares the root at every size the witness signed. It runs
+            in the background, so this page can be closed and opened again while it works.
           </p>
         </div>
         <button
           type="button"
-          onClick={verify}
-          disabled={busy !== null}
+          onClick={() => act('verify', '/api/audit/verify')}
+          disabled={busy !== null || verifying}
           className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
-          {busy === 'verify' ? 'Verifying…' : 'Verify everything'}
+          {busy === 'verify' || verifying ? 'Verifying…' : 'Verify everything'}
         </button>
-        {report ? (
-          <div className="rounded-xl border border-line bg-surface p-4 text-sm">
-            <p className={report.findings === 0 ? 'font-medium text-ok' : 'font-medium text-bad'}>
-              {report.findings === 0
-                ? `${report.journals.toLocaleString('en')} journals, ${report.witnessed} signed roots: nothing wrong.`
-                : `${report.findings} finding${report.findings === 1 ? '' : 's'} in ${report.journals.toLocaleString('en')} journals${report.firstSeq !== null ? `, first at seq ${report.firstSeq}` : ''}.`}
-              <span className="ml-2 font-normal text-muted">{report.ms.total} ms</span>
-            </p>
-            {report.examples.length > 0 ? (
-              <ul className="mt-2 space-y-0.5 font-mono text-xs text-bad">
-                {report.examples.slice(0, 6).map((f, i) => (
-                  <li key={i}>{finding(f)}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
+        {server?.verification ? <VerificationRunView run={server.verification} tamperAt={tamper?.at ?? null} /> : null}
       </section>
 
       {note ? <p className="text-sm text-warn">{note}</p> : null}

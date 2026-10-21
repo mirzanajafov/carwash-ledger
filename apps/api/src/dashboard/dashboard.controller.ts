@@ -1,12 +1,12 @@
-import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, Req, type OnModuleDestroy } from '@nestjs/common'
-import { verifyLog } from '@carwash/audit-pg'
+import { Body, Controller, HttpCode, Inject, Logger, Post, Req } from '@nestjs/common'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
 import { checkAudit, checkLedger, checkPaymentsIncrementally, checkSequenced, readWitness, type WitnessView } from '@carwash/invariants'
-import { createPool, inSnapshot } from '@carwash/pg'
 import { IsIn } from 'class-validator'
 import type pg from 'pg'
+import { runView, VerificationRuns } from '../audit/verification-runs.ts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { AuditDatabase } from '../db/audit-database.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
 import { INSTANCE } from '../http/instance.ts'
@@ -19,19 +19,6 @@ export class PlugBody {
   failpoint!: (typeof PLUGS)[number]
 }
 
-@Injectable()
-export class AuditDatabase implements OnModuleDestroy {
-  readonly pool: pg.Pool | undefined
-
-  constructor(@Inject(API_CONFIG) config: ApiConfig) {
-    this.pool = config.auditDatabaseUrl ? createPool({ connectionString: config.auditDatabaseUrl, max: 2, connectionTimeoutMillis: 5000 }) : undefined
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.pool?.end()
-  }
-}
-
 function limited(waitMs: number): ApiError {
   const seconds = Math.ceil(waitMs / 1000)
   return new ApiError(429, 'rate_limited', `this can run again in ${seconds} s`, { 'retry-after': String(seconds) })
@@ -42,12 +29,14 @@ function limited(waitMs: number): ApiError {
 export class DashboardController {
   readonly #audit: AuditDatabase
   readonly #db: Database
+  readonly #runs: VerificationRuns
   readonly #config: ApiConfig
   readonly #logger = new Logger('dashboard')
 
-  constructor(audit: AuditDatabase, db: Database, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(audit: AuditDatabase, db: Database, runs: VerificationRuns, @Inject(API_CONFIG) config: ApiConfig) {
     this.#audit = audit
     this.#db = db
+    this.#runs = runs
     this.#config = config
   }
 
@@ -94,13 +83,12 @@ export class DashboardController {
   }
 
   @Post('verify')
-  @HttpCode(200)
+  @HttpCode(202)
   async verify(@Req() request: AuthedRequest) {
-    const pool = this.#pool()
+    const open = await this.#runs.open()
+    if (open) return runView(open)
     await this.#turn(request, 'verify', this.#config.checksEveryMs)
-    const witness = await this.#witness()
-    const { state, ...report } = await inSnapshot(pool, (client) => verifyLog(client, { witness }))
-    return { object: 'verification', ...report, root: state?.root ?? null }
+    return runView(await this.#runs.request())
   }
 
   async #witness(): Promise<WitnessView | undefined> {

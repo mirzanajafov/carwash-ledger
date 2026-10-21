@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { sequenceBatch } from '@carwash/audit-pg'
+import { NestFactory } from '@nestjs/core'
+import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
 import { PgCtePoster } from '@carwash/ledger'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { VerificationJob } from '../src/audit/verification-job.ts'
+import { VerificationRuns } from '../src/audit/verification-runs.ts'
+import type { ApiConfig } from '../src/config.ts'
 import { Database } from '../src/db/database.ts'
 import { Chart } from '../src/ledger/chart.service.ts'
 import { PAYMENTS } from '../src/live/live-feed.ts'
+import { WorkerModule } from '../src/worker/worker.module.ts'
 import { startApi, startStack, type Stack } from './support.ts'
 
 let stack: Stack
@@ -186,7 +191,7 @@ describe('the admin side of the dashboard', () => {
     }
   })
 
-  it('runs the invariants and the verifier on demand as the audit role, and finds nothing wrong', async () => {
+  it('runs the invariants on demand as the audit role, and finds nothing wrong', async () => {
     await sequenceAll()
     expect((await stack.call('POST', '/v1/admin/checks', { key: null })).status).toBe(403)
     const checks = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null })
@@ -195,21 +200,146 @@ describe('the admin side of the dashboard', () => {
     expect(checks.body.results.filter((r: { count: number }) => r.count > 0)).toEqual([])
     expect(checks.body.payment_checks).toMatchObject({ since: null })
     expect(checks.body.payment_checks.payments).toBeGreaterThan(0)
-    const verified = await stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
-    expect(verified).toMatchObject({ status: 200, body: { object: 'verification', mode: 'full', findings: 0 } })
-    expect(verified.body.journals).toBeGreaterThan(0)
   })
 
-  it('answers 503 for the checks and verification while the witness is not answering', async () => {
+  it('answers 503 for the checks while the witness is not answering', async () => {
     const blind = await startApi({ ...stack.config, witnessUrl: 'http://127.0.0.1:9' })
     try {
-      for (const path of ['/v1/admin/checks', '/v1/admin/verify']) {
-        const answer = await stack.call('POST', path, { as: 'admin', key: null, base: blind.url })
-        expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })
-      }
+      const answer = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null, base: blind.url })
+      expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })
     } finally {
       await blind.app.close()
     }
+  })
+})
+
+describe('verification runs', () => {
+  async function withWorker<T>(work: (job: VerificationJob) => Promise<T>, config: Partial<ApiConfig> = {}): Promise<T> {
+    const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, ...config }), { logger: false })
+    try {
+      return await work(worker.get(VerificationJob))
+    } finally {
+      await worker.close()
+    }
+  }
+
+  const request = () => stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
+  const latest = () => stack.call('GET', '/v1/audit/verification')
+
+  it('queues one run however often and however many at once ask for it, and the worker runs it to the end with its progress', async () => {
+    await sequenceAll()
+    expect((await latest()).status).toBe(404)
+    const asked = await Promise.all([request(), request(), request(), request(), request()])
+    expect(asked[0]).toMatchObject({ status: 202, body: { object: 'verification_run', status: 'queued', progress: null, report: null } })
+    const ids = new Set(asked.map((answer) => answer.body.id))
+    expect(ids.size).toBe(1)
+    const [id] = ids
+    expect((await request()).body.id).toBe(id)
+    await withWorker(async (job) => {
+      expect((await job.runNext())?.id).toBe(id)
+      expect(await job.runNext()).toBeUndefined()
+    })
+    const finished = await latest()
+    expect(finished.body).toMatchObject({ id, status: 'done', attempts: 1, error: null, report: { mode: 'full', findings: 0 } })
+    expect(finished.body.report.journals).toBeGreaterThan(0)
+    expect(finished.body.progress).toEqual({ checked: finished.body.report.size, size: finished.body.report.size })
+    expect((await request()).body.id).not.toBe(id)
+  })
+
+  it('finds a tamper committed before the run, and nothing once it is restored', async () => {
+    await sequenceAll()
+    const client = await stack.admin.connect()
+    try {
+      await client.query('BEGIN')
+      const tampered = await tamper(client, 1, 1)
+      await client.query('COMMIT')
+      await request()
+      await withWorker((job) => job.runNext())
+      expect((await latest()).body).toMatchObject({
+        status: 'done',
+        report: { firstSeq: 1, examples: [{ kind: 'leaf', seq: 1, journalId: tampered.journalId }] },
+      })
+      await client.query('BEGIN')
+      await restore(client, tampered)
+      await client.query('COMMIT')
+    } finally {
+      client.release()
+    }
+    await request()
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({ status: 'done', report: { findings: 0 } })
+  })
+
+  it('takes over a run whose worker stopped, and gives up on one that stopped three times', async () => {
+    const run = (await request()).body.id
+    await stack.admin.query(`UPDATE verification_runs SET status = 'running', attempts = 1, locked_until = now() - interval '1 second' WHERE id = $1`, [run])
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({ id: run, status: 'done', attempts: 2 })
+    const stuck = (await request()).body.id
+    await stack.admin.query(`UPDATE verification_runs SET status = 'running', attempts = 3, locked_until = now() - interval '1 second' WHERE id = $1`, [stuck])
+    await withWorker(async (job) => {
+      expect(await job.runNext()).toBeUndefined()
+    })
+    expect((await latest()).body).toMatchObject({ id: stuck, status: 'failed', error: 'the worker stopped during this run 3 times' })
+  })
+
+  it('ignores a worker whose run was taken over after its lease ran out', async () => {
+    const runs = stack.app.get(VerificationRuns)
+    await request()
+    const stale = await runs.claim()
+    await stack.admin.query(`UPDATE verification_runs SET locked_until = now() - interval '1 second' WHERE status = 'running'`)
+    const current = await runs.claim()
+    if (!stale || !current) throw new Error('no run was claimed')
+    expect(current).toMatchObject({ id: stale.id, attempts: 2 })
+    expect(await runs.progress(stale, 5, 10)).toBe(false)
+    await runs.fail(stale, 'the stale worker failed')
+    expect((await latest()).body).toMatchObject({ id: stale.id, status: 'running', attempts: 2, progress: null })
+    expect(await runs.progress(current, 5, 10)).toBe(true)
+    await runs.fail(current, 'the current worker failed')
+    expect((await latest()).body).toMatchObject({ status: 'failed', progress: { checked: 5, size: 10 }, error: 'the current worker failed' })
+  })
+
+  it('leaves its run to the next worker when it stops in the middle, instead of failing it', async () => {
+    await sequenceAll()
+    const run = (await request()).body.id
+    const blocker = await stack.admin.connect()
+    try {
+      await blocker.query('BEGIN')
+      await blocker.query('LOCK TABLE audit_log IN ACCESS EXCLUSIVE MODE')
+      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, verifyEveryMs: 20 }), { logger: false })
+      await vi.waitFor(async () => expect((await latest()).body.status).toBe('running'), { timeout: 5000 })
+      const stopping = worker.close()
+      await blocker.query('COMMIT')
+      await stopping
+    } finally {
+      blocker.release()
+    }
+    expect((await latest()).body).toMatchObject({ id: run, status: 'running', attempts: 1, progress: null })
+    await stack.admin.query(`UPDATE verification_runs SET locked_until = now() - interval '1 second' WHERE id = $1`, [run])
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({ id: run, status: 'done', attempts: 2 })
+  })
+
+  it('will not start a worker that cannot read the ledger as the audit role', async () => {
+    const starting = NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, auditDatabaseUrl: undefined }), {
+      logger: false,
+      abortOnError: false,
+    })
+    await expect(starting).rejects.toThrow('AUDIT_DATABASE_URL is required in the worker')
+  })
+
+  it('queues a run again when the witness cannot be read, and fails it on the third attempt without saying where the witness lives', async () => {
+    const run = (await request()).body.id
+    await withWorker(
+      async (job) => {
+        await job.runNext()
+        expect((await latest()).body).toMatchObject({ id: run, status: 'queued', attempts: 1, error: null })
+        await job.runNext()
+        await job.runNext()
+      },
+      { witnessUrl: 'http://127.0.0.1:9', witnessToken: 'token' },
+    )
+    expect((await latest()).body).toMatchObject({ id: run, status: 'failed', attempts: 3, error: 'the witness could not be read', report: null })
   })
 })
 

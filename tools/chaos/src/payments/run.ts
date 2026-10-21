@@ -103,9 +103,14 @@ export interface PaymentsReport {
   pspOperations: Record<string, number>
   checks: { periodic: number; resumed: number; skipped: number }
   witness: { checkpoints: number; size: number; compared: number }
+  verification: { requested: number; runs: Record<string, number>; maxAttempts: number }
   harnessErrors: string[]
   violations: Violation[]
 }
+
+type VerificationRunAnswer = { id: string; requested_at: string; error: string | null } & (
+  { status: 'queued' | 'running' | 'failed'; report: null } | { status: 'done'; report: { findings: number; examples: unknown[] } }
+)
 
 const ROOT = new URL('../../../../', import.meta.url)
 const API_MAIN = fileURLToPath(new URL('apps/api/dist/main.js', ROOT))
@@ -142,6 +147,7 @@ const PROXY_UPSTREAMS: Record<ProxyName, number> = {
 const SETTLEMENT_DAY_SECONDS = 86_400
 const PSP_API_KEY = 'sk_chaos_api'
 const PSP_ADMIN_KEY = 'sk_chaos_admin'
+const ADMIN_KEY = 'cw_chaos_admin'
 const WEBHOOK_SECRET = 'whsec_chaos'
 const WITNESS_TOKEN = 'witness_chaos'
 const NO_FAULTS = { seed: 0, decline: 0, fail: 0, timeoutAfterCommit: 0, slow: 0, wrongAmount: 0, webhook: {} }
@@ -218,6 +224,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     pspOperations: {},
     checks: { periodic: 0, resumed: 0, skipped: 0 },
     witness: { checkpoints: 0, size: 0, compared: 0 },
+    verification: { requested: 0, runs: {}, maxAttempts: 0 },
     harnessErrors: [],
     violations: found.list,
   }
@@ -235,7 +242,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
   try {
     const owner = ledgerDb.pool('ledger_owner', 1)
     const audit = ledgerDb.pool('ledger_audit', 3)
-    const keys: Record<string, string> = { admin: 'cw_chaos_admin' }
+    const keys: Record<string, string> = { admin: ADMIN_KEY }
     for (let i = 0; i < options.clients; i++) keys[`client-${i}`] = `cw_chaos_client_${i}`
     for (const [name, key] of Object.entries(keys)) {
       await owner.query('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope)', [
@@ -338,6 +345,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           ...shared,
           WORKER_PORT: String(WORKER_PORT),
           DATABASE_URL: ledgerUrl('worker-db'),
+          AUDIT_DATABASE_URL: withPort(ledgerDb.url('ledger_audit'), PROXY_PORTS['worker-db']),
           KAFKA_BROKERS: `127.0.0.1:${PROXY_PORTS['worker-kafka']}`,
           RELAY_WORKERS: '4',
           WITNESS_URL: `http://127.0.0.1:${PROXY_PORTS.witness}`,
@@ -419,7 +427,11 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
 
     let checking = false
+    const askedRuns = new Set<string>()
     const periodicCheck = async () => {
+      void askForVerification(ADMIN_KEY).then((asked) => {
+        if (asked) askedRuns.add(asked.id)
+      })
       log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, ledgerDb.name)}`)
       try {
         found.addResults(await checkLedger(audit), 'during')
@@ -506,7 +518,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
     report.settleMs = Math.round(now() - settleStarted!)
     try {
-      report.anomalies = await acceptAnomalies(keys.admin!, journeys)
+      report.anomalies = await acceptAnomalies(ADMIN_KEY, journeys)
       log(
         `anomalies: ${report.anomalies.open} open, ${report.anomalies.accepted} accepted${report.anomalies.failed.length ? `, refused ${report.anomalies.failed.join('; ')}` : ''}`,
       )
@@ -517,7 +529,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const lastDay = Math.floor(Date.now() / 1000 / SETTLEMENT_DAY_SECONDS)
     for (let day = firstDay; day <= lastDay; day++) {
       try {
-        const settled = await settleDay(day, keys.admin!)
+        const settled = await settleDay(day, ADMIN_KEY)
         report.settlement.days.push(day)
         report.settlement.outcomes.push(settled.outcome)
         for (const [name, n] of Object.entries(settled.reconciliation?.breaks ?? {})) {
@@ -550,6 +562,21 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const witnessed = witness.latest?.size ?? 0
     const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
     report.witness = { checkpoints, size: witnessed, compared: 0 }
+    report.verification.requested = askedRuns.size
+    const finalRun = await finalVerificationRun(ADMIN_KEY)
+    found.add(
+      'verify-job',
+      'final',
+      'a verification run in the worker, asked for once the faults stop, ends done and finds nothing',
+      finalRun?.status === 'done' ? finalRun.report.findings : 1,
+      finalRun?.status === 'done' ? finalRun.report.examples.slice(0, 5).map((finding) => JSON.stringify(finding)) : [JSON.stringify(finalRun)],
+    )
+    const { rows: runs } = await owner.query<{ status: string; n: number; attempts: number }>(
+      'SELECT status::text, count(*)::int AS n, max(attempts) AS attempts FROM verification_runs GROUP BY status',
+    )
+    report.verification.runs = Object.fromEntries(runs.map((row) => [row.status, row.n]))
+    report.verification.maxAttempts = Math.max(0, ...runs.map((row) => row.attempts))
+    log(`verification runs ${JSON.stringify(report.verification)}, the last one ${finalRun?.status ?? 'never finished'}`)
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))
@@ -649,6 +676,48 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       journeys.learnAccepted(body)
     }
     return result
+  }
+
+  async function askForVerification(adminKey: string): Promise<VerificationRunAnswer | null> {
+    try {
+      const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/admin/verify`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${adminKey}` },
+        signal: AbortSignal.timeout(5000),
+      })
+      return response.status === 202 ? ((await response.json()) as VerificationRunAnswer) : null
+    } catch {
+      return null
+    }
+  }
+
+  async function latestVerificationRun(adminKey: string): Promise<VerificationRunAnswer | null> {
+    try {
+      const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/audit/verification`, {
+        headers: { authorization: `Bearer ${adminKey}` },
+        signal: AbortSignal.timeout(5000),
+      })
+      return response.status === 200 ? ((await response.json()) as VerificationRunAnswer) : null
+    } catch {
+      return null
+    }
+  }
+
+  async function finalVerificationRun(adminKey: string): Promise<VerificationRunAnswer | null> {
+    const since = Date.now()
+    const deadline = performance.now() + 120_000
+    let id: string | undefined
+    while (performance.now() < deadline) {
+      if (id === undefined) {
+        const asked = await askForVerification(adminKey)
+        if (asked && Date.parse(asked.requested_at) >= since) id = asked.id
+      } else {
+        const latest = await latestVerificationRun(adminKey)
+        if (latest?.id === id && (latest.status === 'done' || latest.status === 'failed')) return latest
+      }
+      await sleep(500)
+    }
+    return null
   }
 
   async function settleDay(day: number, adminKey: string): Promise<{ outcome: string; reconciliation?: { breaks: Record<string, number> } }> {
@@ -802,6 +871,9 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     periodicChecksResumed: sum((r) => r.checks.resumed),
     witnessCheckpoints: sum((r) => r.witness.checkpoints),
     witnessRootsCompared: sum((r) => r.witness.compared),
+    verificationRequests: sum((r) => r.verification.requested),
+    verificationRuns: merged((r) => r.verification.runs),
+    verificationMaxAttempts: Math.max(0, ...reports.map((r) => r.verification.maxAttempts)),
     events: merged((r) => r.events),
     toxics: merged((r) => r.toxics),
     toxicsByProxy: merged((r) => r.toxicsByProxy),
