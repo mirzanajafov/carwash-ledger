@@ -17,6 +17,7 @@ import {
   checkSettled,
   checkSettlement,
   readWitness,
+  readWitnessHistory,
 } from '@carwash/invariants'
 import { kafkaClient } from '@carwash/outbox'
 import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
@@ -541,8 +542,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
-    const witness = await readWitness(WITNESS_URL)
-    report.witness = { checkpoints: witness.checkpoints.length, size: witness.checkpoints.at(-1)?.size ?? 0 }
+    const [witness, history] = await Promise.all([readWitness(WITNESS_URL), readWitnessHistory(WITNESS_URL)])
+    const witnessed = witness.latest?.size ?? 0
+    const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
+    report.witness = { checkpoints, size: witnessed }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))

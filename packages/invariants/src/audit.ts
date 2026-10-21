@@ -73,15 +73,20 @@ function queued(graceSeconds: number): readonly Check[] {
   ]
 }
 
+async function auditLogSize(client: pg.ClientBase): Promise<number> {
+  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
+  return Number(rows[0]?.size ?? 0)
+}
+
 export async function checkAuditIn(client: pg.ClientBase, witness?: WitnessView): Promise<InvariantResult> {
   const s7 = await collect(client, AGREES)
   if (!witness) return { id: 'S7', description: 'the audit log agrees with the journals and with itself: leaves, chain and subtrees', ...s7 }
-  const witnessed = await checkWitnessedIn(client, witness)
+  const witnessed = await checkWitnessedIn(client, witness, await auditLogSize(client))
   return {
     id: 'S7',
-    description: 'the audit log agrees with the journals, with itself and with every root the witness signed',
+    description: 'the audit log agrees with the journals, with itself, with the newest root the witness signed and with the newest stored copy',
     count: s7.count + witnessed.count,
-    examples: [...s7.examples, ...witnessed.examples].slice(0, EXAMPLES),
+    examples: [...witnessed.examples, ...s7.examples].slice(0, EXAMPLES),
   }
 }
 
@@ -98,9 +103,8 @@ export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessV
   const l4 = await collect(client, queued(grace))
   const description = grace > 0 ? `every journal is sequenced into the audit log within ${grace} s` : 'every journal has been sequenced into the audit log'
   if (!witness) return { id: 'L4', description, ...l4 }
-  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
-  const size = Number(rows[0]!.size)
-  const signed = witness.checkpoints.at(-1)?.size ?? 0
+  const size = await auditLogSize(client)
+  const signed = witness.latest?.size ?? 0
   const behind = signed < size ? [`the witness has signed ${signed} of ${size} leaves`] : []
   return {
     id: 'L4',
