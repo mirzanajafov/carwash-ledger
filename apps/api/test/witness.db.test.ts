@@ -117,7 +117,7 @@ describe('checkpoints and the witness', () => {
     }
   })
 
-  it('refuses a witness that answers something other than JSON, a key that is not Ed25519, or checkpoints without a positive size, and names it', async () => {
+  it('refuses a witness that answers something other than JSON, a key that is not Ed25519, or checkpoints without a positive size, and says which witness URL it refused', async () => {
     const publicKey = generateKeyPairSync('ed25519').publicKey.export({ format: 'jwk' }).x
     const key = (x: unknown) => JSON.stringify({ origin: 'carwash-ledger', algorithm: 'ed25519', public_key: x })
     const zero = JSON.stringify({ size: 0, root: '00', signature: 'AA' })
@@ -130,6 +130,7 @@ describe('checkpoints and the witness', () => {
         (url) => `the witness at ${url} answered something that is not a checkpoint`,
       ],
       [{ '/v1/checkpoints': `{"data":[${zero}]}` }, readWitnessHistory, (url) => `the witness at ${url} answered a history that is not a list of checkpoints`],
+      [{ '/v1/checkpoints': '{"data":{}}' }, readWitnessHistory, (url) => `the witness at ${url} answered a history that is not a list of checkpoints`],
     ]
     for (const [routes, read, refusal] of cases) {
       const stub = answering(routes)

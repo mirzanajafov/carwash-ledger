@@ -542,9 +542,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
-    const witness = await readWitness(WITNESS_URL)
+    const [witness, history] = await Promise.all([readWitness(WITNESS_URL), readWitnessHistory(WITNESS_URL)])
     const witnessed = witness.latest?.size ?? 0
-    const checkpoints = (await readWitnessHistory(WITNESS_URL)).filter((checkpoint) => checkpoint.size <= witnessed).length
+    const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
     report.witness = { checkpoints, size: witnessed }
 
     stopping = true
