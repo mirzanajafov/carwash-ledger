@@ -89,10 +89,10 @@ export function createWitnessServer(witness: Witness, token: string): Server {
   }
   return createServer((request, response) => {
     routes(request, response).catch((error: unknown) => {
-      if (response.headersSent) return
       if (error instanceof Refusal) return send(response, REFUSAL_STATUS.get(error.code) ?? 409, { error: { code: error.code, message: error.message } })
+      if (error instanceof Error && 'code' in error && error.code === 'ERR_STREAM_PREMATURE_CLOSE') return
       process.stderr.write(`witness: ${error instanceof Error ? error.stack : String(error)}\n`)
-      send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
+      if (!response.headersSent) send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })
   })
 }

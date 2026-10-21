@@ -1,9 +1,10 @@
+import { ORIGIN } from '@carwash/audit'
 import { Witness } from '@carwash/witness'
 
 const dir = process.argv[2]
 if (!dir) throw new Error('usage: e9-start <witness dir>')
 const started = performance.now()
-const witness = new Witness(dir, 'carwash-ledger')
+const witness = new Witness(dir, ORIGIN)
 const ms = performance.now() - started
 global.gc?.()
 const { rss, heapUsed } = process.memoryUsage()

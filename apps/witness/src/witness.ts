@@ -37,19 +37,24 @@ export class Refusal extends Error {
 }
 
 const TAIL_CHUNK = 4096
+const LONGEST_LINE = 65_536
 
 function lastLine(path: string): string | undefined {
   if (!existsSync(path)) return undefined
   const fd = openSync(path, 'r')
   try {
-    let tail = ''
+    let tail = Buffer.alloc(0)
     for (let position = fstatSync(fd).size; position > 0;) {
+      if (tail.length > LONGEST_LINE) throw new Error(`the last line of ${path} is longer than ${LONGEST_LINE} bytes`)
       const length = Math.min(TAIL_CHUNK, position)
       position -= length
       const chunk = Buffer.alloc(length)
-      readSync(fd, chunk, 0, length, position)
-      tail = chunk.toString('utf8') + tail
-      const lines = tail.split('\n').filter((line) => line.trim() !== '')
+      if (readSync(fd, chunk, 0, length, position) !== length) throw new Error(`${path} changed while its last line was read`)
+      tail = Buffer.concat([chunk, tail])
+      const lines = tail
+        .toString('utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
       if (lines.length > 1 || (position === 0 && lines.length === 1)) return lines.at(-1)
     }
     return undefined
@@ -100,8 +105,13 @@ export class Witness {
     if (!existsSync(this.#log)) return
     const end = statSync(this.#log).size
     if (end === 0) return
-    for await (const line of createInterface({ input: createReadStream(this.#log, { end: end - 1 }), crlfDelay: Infinity })) {
-      if (line.trim() !== '') yield line
+    const input = createReadStream(this.#log, { end: end - 1 })
+    try {
+      for await (const line of createInterface({ input, crlfDelay: Infinity })) {
+        if (line.trim() !== '') yield line
+      }
+    } finally {
+      input.destroy()
     }
   }
 
