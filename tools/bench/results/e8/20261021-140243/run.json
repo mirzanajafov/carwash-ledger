@@ -1,0 +1,27 @@
+{
+  "experiment": "e8",
+  "options": {
+    "days": "6.6,66",
+    "repeats": "3",
+    "per-day": "17400",
+    "leaves-per-checkpoint": "2.476",
+    "out": "results/e8"
+  },
+  "environment": {
+    "commit": "06277fa",
+    "node": "v24.21.0",
+    "platform": "linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1270P",
+    "cpus": 16,
+    "memoryGb": 8,
+    "postgresCgroup": "cpu.max=max 100000 cpuset=2-3 memory.max=1073741824",
+    "postgres": {
+      "fsync": "on",
+      "max_connections": "200",
+      "server_version": "18.6",
+      "shared_buffers": "32768",
+      "synchronous_commit": "on",
+      "wal_sync_method": "fdatasync"
+    }
+  }
+}
