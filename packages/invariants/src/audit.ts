@@ -100,7 +100,7 @@ export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessV
   if (!witness) return { id: 'L4', description, ...l4 }
   const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
   const size = Number(rows[0]!.size)
-  const signed = witness.checkpoints.at(-1)?.size ?? 0
+  const signed = witness.latest?.size ?? 0
   const behind = signed < size ? [`the witness has signed ${signed} of ${size} leaves`] : []
   return {
     id: 'L4',

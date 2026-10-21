@@ -107,7 +107,7 @@ describe('checkpoints and the witness', () => {
     expect(second.size).toBeGreaterThan(first.size)
 
     const witness = await readWitness(witnessUrl)
-    expect(witness.checkpoints.map((c) => c.size)).toEqual([first.size, second.size])
+    expect(witness.latest?.size).toBe(second.size)
     const { rows } = await stack.admin.query<{ size: string }>('SELECT c.size::text FROM audit_checkpoints c ORDER BY c.size')
     expect(rows.map((r) => Number(r.size))).toEqual([first.size, second.size])
 
@@ -143,24 +143,46 @@ describe('checkpoints and the witness', () => {
     expect(await runVerify(['--state', stateFile])).toMatchObject({ code: 0, report: { mode: 'incremental', from: second.size, journals: 0, findings: 0 } })
   })
 
+  it('flags the newest copy in audit_checkpoints when the witness did not sign it or no longer stands behind it', async () => {
+    const witness = await readWitness(witnessUrl)
+    const { rows } = await stack.admin.query<{ size: number; root: string; signature: string }>(
+      `SELECT size::int, encode(root, 'hex') AS root, encode(signature, 'base64') AS signature FROM audit_checkpoints ORDER BY size`,
+    )
+    const [older, newest] = rows
+    if (!older || !newest) throw new Error('the first test leaves two signed checkpoints')
+    const forged = newest.size + 1
+    await stack.admin.query(
+      `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
+       VALUES ($1, decode($2, 'hex'), decode($3, 'base64'), 'k', now())`,
+      [forged, newest.root, newest.signature],
+    )
+    try {
+      expect((await checkAudit(stack.admin, witness)).examples).toEqual([
+        `the copy of the checkpoint at size ${forged} in audit_checkpoints does not carry the witness's signature`,
+      ])
+    } finally {
+      await stack.admin.query('DELETE FROM audit_checkpoints WHERE size = $1', [forged])
+    }
+    expect((await checkAudit(stack.admin, { ...witness, latest: older })).examples).toEqual([
+      `audit_checkpoints holds a checkpoint at size ${newest.size}, but the witness stands behind no more than ${older.size}`,
+    ])
+  })
+
   it('catches a history whose hashes were all rewritten to match only through the witness, and the witness refuses to go on', async () => {
     const witness = await readWitness(witnessUrl)
-    const signed = witness.checkpoints.map((c) => c.size)
+    const latest = witness.latest
+    if (!latest) throw new Error('the witness has signed nothing')
+    const signed = latest.size
     const [alone, witnessed] = await inRollback(async (client) => {
       await rewriteHistory(client)
       return [await checkAuditIn(client), await checkAuditIn(client, witness)]
     })
     expect(alone.count).toBe(0)
-    expect(witnessed.count).toBe(signed.length)
-    expect(witnessed.examples.every((e) => /^the root at size \d+ is [0-9a-f]{64}, the witness signed [0-9a-f]{64}$/.test(e))).toBe(true)
+    expect(witnessed.count).toBe(1)
+    expect(witnessed.examples[0]).toMatch(new RegExp(`^the root at size ${signed} is [0-9a-f]{64}, the witness signed ${latest.root}$`))
 
-    const forged: WitnessView = {
-      ...witness,
-      checkpoints: witness.checkpoints.map((c) => ({ ...c, root: c.root.replace(/^./, (d) => (d === '0' ? '1' : '0')) })),
-    }
-    expect((await checkAudit(stack.admin, forged)).examples).toEqual(
-      signed.map((size) => `the checkpoint at size ${size} does not carry the witness's signature`),
-    )
+    const forged: WitnessView = { ...witness, latest: { ...latest, root: latest.root.replace(/^./, (d) => (d === '0' ? '1' : '0')) } }
+    expect((await checkAudit(stack.admin, forged)).examples).toEqual([`the checkpoint at size ${signed} does not carry the witness's signature`])
 
     const client = await stack.admin.connect()
     try {
@@ -172,7 +194,7 @@ describe('checkpoints and the witness', () => {
     }
     const incremental = await runVerify(['--state', stateFile])
     expect(incremental.code).toBe(1)
-    expect(incremental.report.examples).toContainEqual({ kind: 'history', size: signed.at(-1), what: 'chain' })
+    expect(incremental.report.examples).toContainEqual({ kind: 'history', size: signed, what: 'chain' })
     const full = await runVerify(['--full'])
     expect(full.code).toBe(1)
     expect(full.report.examples.every((f: { kind: string }) => f.kind === 'root')).toBe(true)
@@ -180,13 +202,13 @@ describe('checkpoints and the witness', () => {
     await stack.call('POST', '/v1/payments', { body: pay(1200) })
     await sequencer.drain()
     expect(await sequencer.checkpoint()).toMatchObject({ kind: 'refused', code: 'inconsistent' })
-    expect((await readWitness(witnessUrl)).checkpoints.map((c) => c.size)).toEqual(signed)
+    expect((await readWitness(witnessUrl)).latest?.size).toBe(signed)
 
-    await stack.admin.query('DELETE FROM audit_nodes WHERE level = 0 AND idx >= $1', [signed.at(-1)! - 1])
-    await stack.admin.query('DELETE FROM audit_log WHERE seq >= $1', [signed.at(-1)! - 1])
-    expect(await sequencer.checkpoint()).toMatchObject({ kind: 'behind', witnessed: signed.at(-1) })
+    await stack.admin.query('DELETE FROM audit_nodes WHERE level = 0 AND idx >= $1', [signed - 1])
+    await stack.admin.query('DELETE FROM audit_log WHERE seq >= $1', [signed - 1])
+    expect(await sequencer.checkpoint()).toMatchObject({ kind: 'behind', witnessed: signed })
     expect((await checkAudit(stack.admin, await readWitness(witnessUrl))).examples).toContain(
-      `the witness signed size ${signed.at(-1)} but the log has only ${signed.at(-1)! - 1} leaves`,
+      `the witness signed size ${signed} but the log has only ${signed - 1} leaves`,
     )
   })
 })

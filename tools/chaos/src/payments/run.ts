@@ -542,7 +542,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
     const witness = await readWitness(WITNESS_URL)
-    report.witness = { checkpoints: witness.checkpoints.length, size: witness.checkpoints.at(-1)?.size ?? 0 }
+    const { data: signed } = (await (await fetch(`${WITNESS_URL}/v1/checkpoints`)).json()) as { data: unknown[] }
+    report.witness = { checkpoints: signed.length, size: witness.latest?.size ?? 0 }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))
