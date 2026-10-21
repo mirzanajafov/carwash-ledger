@@ -17,7 +17,7 @@ import {
   checkSettled,
   checkSettlement,
   readWitness,
-  type WitnessedCheckpoint,
+  readWitnessHistory,
 } from '@carwash/invariants'
 import { kafkaClient } from '@carwash/outbox'
 import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
@@ -542,11 +542,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
-    const history = await fetch(`${WITNESS_URL}/v1/checkpoints`, { signal: AbortSignal.timeout(10_000) })
-    if (!history.ok) throw new Error(`the witness answered ${history.status} for its checkpoints`)
-    const { data: signed } = (await history.json()) as { data: WitnessedCheckpoint[] }
-    const witness = { ...(await readWitness(WITNESS_URL)), latest: signed.at(-1) }
-    report.witness = { checkpoints: signed.length, size: witness.latest?.size ?? 0 }
+    const witness = await readWitness(WITNESS_URL)
+    const witnessed = witness.latest?.size ?? 0
+    const signed = (await readWitnessHistory(WITNESS_URL)).filter((checkpoint) => checkpoint.size <= witnessed)
+    report.witness = { checkpoints: signed.length, size: witnessed }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))

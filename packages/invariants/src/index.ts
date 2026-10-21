@@ -4,4 +4,4 @@ export { checkAgainstPsp, checkPayments, checkPaymentsIn, checkSettled, checkSet
 export { checkEvents, checkEventsIn } from './events.ts'
 export { checkSettlement, checkSettlementIn, type SettlementChecks } from './settlement.ts'
 export { checkAudit, checkAuditIn, checkSequenced, checkSequencedIn, type SequencedOptions } from './audit.ts'
-export { readWitness, type WitnessedCheckpoint, type WitnessView } from './witness.ts'
+export { readWitness, readWitnessHistory, type WitnessedCheckpoint, type WitnessView } from './witness.ts'

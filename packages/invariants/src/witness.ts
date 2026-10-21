@@ -1,6 +1,6 @@
-import { createHash, createPublicKey, verify } from 'node:crypto'
+import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto'
 import type pg from 'pg'
-import { auditLogSize, type Finding } from './collect.ts'
+import type { Finding } from './collect.ts'
 
 export interface WitnessedCheckpoint {
   size: number
@@ -19,24 +19,49 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isCheckpoint(value: unknown): value is WitnessedCheckpoint {
-  return isObject(value) && typeof value.size === 'number' && typeof value.root === 'string' && typeof value.signature === 'string'
+  return (
+    isObject(value) &&
+    typeof value.size === 'number' &&
+    Number.isSafeInteger(value.size) &&
+    value.size >= 1 &&
+    typeof value.root === 'string' &&
+    typeof value.signature === 'string'
+  )
 }
 
 async function getJson(url: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000) })
-  if (response.ok) return response.json()
   const body: unknown = await response.json().catch(() => undefined)
+  if (response.ok && body === undefined) throw new Error(`GET ${url} answered ${response.status} with a body that is not JSON`)
+  if (response.ok) return body
   if (response.status === 404 && isObject(body) && isObject(body.error) && body.error.code === 'none') return undefined
   throw new Error(`GET ${url} answered ${response.status}`)
+}
+
+function publicKeyOf(x: string): KeyObject | undefined {
+  try {
+    return createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x }, format: 'jwk' })
+  } catch {
+    return undefined
+  }
 }
 
 export async function readWitness(url: string): Promise<WitnessView> {
   const key = await getJson(`${url}/v1/key`)
   if (!isObject(key) || typeof key.origin !== 'string' || typeof key.public_key !== 'string') throw new Error(`the witness at ${url} publishes no key`)
-  if (key.algorithm !== 'ed25519') throw new Error(`the witness signs with ${String(key.algorithm)}, not ed25519`)
+  if (key.algorithm !== 'ed25519') throw new Error(`the witness at ${url} signs with ${String(key.algorithm)}, not ed25519`)
+  if (!publicKeyOf(key.public_key)) throw new Error(`the witness at ${url} publishes a key that is not an Ed25519 key`)
   const latest = await getJson(`${url}/v1/checkpoints/latest`)
   if (latest !== undefined && !isCheckpoint(latest)) throw new Error(`the witness at ${url} answered something that is not a checkpoint`)
   return { origin: key.origin, publicKey: key.public_key, latest }
+}
+
+export async function readWitnessHistory(url: string): Promise<WitnessedCheckpoint[]> {
+  const history = await getJson(`${url}/v1/checkpoints`)
+  if (!isObject(history) || !Array.isArray(history.data) || !history.data.every(isCheckpoint)) {
+    throw new Error(`the witness at ${url} answered a history that is not a list of checkpoints`)
+  }
+  return history.data
 }
 
 function subtrees(size: number): [level: number, index: number][] {
@@ -114,11 +139,11 @@ async function copyProblem(client: pg.ClientBase, treeSize: number, copy: Stored
   return rootProblem(client, treeSize, copy, 'audit_checkpoints holds')
 }
 
-export async function checkWitnessedIn(client: pg.ClientBase, witness: WitnessView): Promise<Finding> {
-  const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: witness.publicKey }, format: 'jwk' })
+export async function checkWitnessedIn(client: pg.ClientBase, witness: WitnessView, treeSize: number): Promise<Finding> {
+  const key = publicKeyOf(witness.publicKey)
+  if (!key) return { count: 1, examples: [`the witness key ${witness.publicKey} is not an Ed25519 key`] }
   const signed: Signed = (checkpoint) =>
     verify(null, Buffer.from(`${witness.origin}\n${checkpoint.size}\n${checkpoint.root}\n`), key, Buffer.from(checkpoint.signature, 'base64'))
-  const treeSize = await auditLogSize(client)
   const copy = await newestCopy(client)
   const problems = [
     witness.latest && (await latestProblem(client, treeSize, witness.latest, signed)),

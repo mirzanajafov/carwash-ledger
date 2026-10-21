@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { auditLogSize, collect, EXAMPLES, inSnapshot, type Check } from './collect.ts'
+import { collect, EXAMPLES, inSnapshot, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
 import { checkWitnessedIn, type WitnessView } from './witness.ts'
 
@@ -73,10 +73,15 @@ function queued(graceSeconds: number): readonly Check[] {
   ]
 }
 
+async function auditLogSize(client: pg.ClientBase): Promise<number> {
+  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
+  return Number(rows[0]?.size ?? 0)
+}
+
 export async function checkAuditIn(client: pg.ClientBase, witness?: WitnessView): Promise<InvariantResult> {
   const s7 = await collect(client, AGREES)
   if (!witness) return { id: 'S7', description: 'the audit log agrees with the journals and with itself: leaves, chain and subtrees', ...s7 }
-  const witnessed = await checkWitnessedIn(client, witness)
+  const witnessed = await checkWitnessedIn(client, witness, await auditLogSize(client))
   return {
     id: 'S7',
     description: 'the audit log agrees with the journals, with itself, with the newest root the witness signed and with the newest stored copy',

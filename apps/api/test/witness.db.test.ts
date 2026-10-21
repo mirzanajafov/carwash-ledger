@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process'
-import { createPublicKey, verify } from 'node:crypto'
+import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
 import { once } from 'node:events'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
-import type { Server } from 'node:http'
+import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -63,6 +63,19 @@ async function rewriteHistory(client: pg.ClientBase): Promise<void> {
   while ((await sequenceBatch(client, 1000)) > 0);
 }
 
+async function listen(listening: Server): Promise<string> {
+  listening.listen(0, '127.0.0.1')
+  await once(listening, 'listening')
+  return `http://127.0.0.1:${(listening.address() as AddressInfo).port}`
+}
+
+function answering(routes: Record<string, string>): Server {
+  return createServer((request, response) => {
+    const body = routes[request.url ?? '']
+    response.writeHead(body === undefined ? 404 : 200, { 'content-type': 'application/json' }).end(body ?? '{}')
+  })
+}
+
 async function inRollback<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const client = await stack.admin.connect()
   try {
@@ -78,9 +91,7 @@ beforeAll(async () => {
   stack = await startStack()
   dir = mkdtempSync(join(tmpdir(), 'witness-'))
   server = createWitnessServer(new Witness(dir, 'carwash-ledger'), 'witness-token')
-  server.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  witnessUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  witnessUrl = await listen(server)
   stateFile = join(dir, 'verifier.json')
   sequencer = new Sequencer(stack.app.get(Database), { ...stack.config, witnessUrl, witnessToken: 'witness-token' })
 })
@@ -95,15 +106,34 @@ describe('checkpoints and the witness', () => {
   it('reads a witness that has signed nothing as no checkpoint, and refuses a 404 from anywhere else', async () => {
     const emptyDir = mkdtempSync(join(tmpdir(), 'witness-'))
     const empty = createWitnessServer(new Witness(emptyDir, 'carwash-ledger'), 'token')
-    empty.listen(0, '127.0.0.1')
-    await once(empty, 'listening')
-    const url = `http://127.0.0.1:${(empty.address() as AddressInfo).port}`
+    const url = await listen(empty)
     try {
       expect((await readWitness(url)).latest).toBeUndefined()
       await expect(readWitness(`${url}/elsewhere`)).rejects.toThrow('answered 404')
     } finally {
       empty.close()
       rmSync(emptyDir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a witness that answers something other than JSON, a key that is not Ed25519, or a checkpoint without a positive size', async () => {
+    const publicKey = generateKeyPairSync('ed25519').publicKey.export({ format: 'jwk' }).x
+    const key = (x: unknown) => JSON.stringify({ origin: 'carwash-ledger', algorithm: 'ed25519', public_key: x })
+    const cases: [Record<string, string>, string][] = [
+      [{ '/v1/key': '<html>' }, 'with a body that is not JSON'],
+      [{ '/v1/key': key('abc') }, 'publishes a key that is not an Ed25519 key'],
+      [
+        { '/v1/key': key(publicKey), '/v1/checkpoints/latest': JSON.stringify({ size: 0, root: '00', signature: 'AA' }) },
+        'answered something that is not a checkpoint',
+      ],
+    ]
+    for (const [routes, refusal] of cases) {
+      const stub = answering(routes)
+      try {
+        await expect(readWitness(await listen(stub))).rejects.toThrow(refusal)
+      } finally {
+        stub.close()
+      }
     }
   })
 
