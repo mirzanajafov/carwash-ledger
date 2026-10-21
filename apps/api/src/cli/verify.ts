@@ -13,7 +13,7 @@ const { values } = parseArgs({
   },
 })
 const connectionString = process.env.DATABASE_URL
-const witnessUrl = (values.witness ?? process.env.WITNESS_URL)?.replace(/\/+$/, '')
+const witnessUrl = values.witness ?? process.env.WITNESS_URL
 if (!connectionString) {
   process.stderr.write('usage: verify [--state file] [--witness url] [--full]   (DATABASE_URL, ideally the ledger_audit role)\n')
   process.exit(2)

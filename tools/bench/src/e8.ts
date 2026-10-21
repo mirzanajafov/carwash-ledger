@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { verifyLog, type VerifyReport } from '@carwash/audit-pg'
-import { checkAudit, checkLedger, checkPaymentsIn, checkSequenced, inSnapshot, violations, type InvariantResult } from '@carwash/invariants'
-import { createPool } from '@carwash/pg'
+import { checkAudit, checkLedger, checkPaymentsIn, checkSequenced, violations, type InvariantResult, type WitnessView } from '@carwash/invariants'
+import { createPool, inSnapshot } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, writeJson } from './env.ts'
@@ -48,8 +48,8 @@ function medianTimes(runs: readonly CheckTimes[]): CheckTimes {
   return { s1s2: of('s1s2'), s3s5s6: of('s3s5s6'), s7: of('s7'), l4: of('l4'), total: of('total') }
 }
 
-async function verify(pool: pg.Pool, ledger: ProductionLedger, witnessed: boolean): Promise<VerifyReport> {
-  return inSnapshot(pool, (client) => verifyLog(client, witnessed ? { witness: ledger.witness } : {}))
+async function verify(pool: pg.Pool, witness: WitnessView | undefined): Promise<VerifyReport> {
+  return inSnapshot(pool, (client) => verifyLog(client, { witness }))
 }
 
 async function sizes(admin: pg.Pool) {
@@ -84,10 +84,10 @@ async function measure(dir: string, days: number, repeats: number) {
         for (const jit of ['on', 'off'] as const) runs[jit].push((await checks(pools[jit], ledger)).ms)
       }
       const verified: VerifyReport[] = []
-      for (let r = 0; r < repeats; r++) verified.push(await verify(pools.off, ledger, true))
+      for (let r = 0; r < repeats; r++) verified.push(await verify(pools.off, ledger.witness))
       const wrong = verified.find((v) => v.findings > 0)
       if (wrong) throw new Error(`the verifier found something in the seed: ${JSON.stringify(wrong.examples)}`)
-      const unwitnessed = await verify(pools.off, ledger, false)
+      const unwitnessed = await verify(pools.off, undefined)
       const step = {
         days,
         payments: ledger.payments,

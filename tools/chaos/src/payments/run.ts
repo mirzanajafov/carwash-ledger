@@ -7,7 +7,7 @@ import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { verifyLog } from '@carwash/audit-pg'
 import { FAILPOINTS } from '@carwash/failpoints'
-import { createPool } from '@carwash/pg'
+import { createPool, inSnapshot } from '@carwash/pg'
 import {
   checkAgainstPsp,
   checkAudit,
@@ -17,7 +17,6 @@ import {
   checkSequenced,
   checkSettled,
   checkSettlement,
-  inSnapshot,
   readWitness,
   readWitnessHistory,
 } from '@carwash/invariants'

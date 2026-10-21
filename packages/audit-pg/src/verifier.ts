@@ -80,11 +80,12 @@ const UNSEQUENCED = `
 
 const COPIES = `
   SELECT c.size::text, c.root, c.signature FROM audit_checkpoints c
-  WHERE c.size > $1 AND c.size <= $2
+  WHERE c.size > $1 AND c.size <= $2 AND c.witness_key = $3
   ORDER BY c.size`
 
-async function claimedRoots(db: Queryable, latest: SignedRoot | undefined, above: number, through: number): Promise<SignedRoot[]> {
-  const { rows } = await db.query<{ size: string; root: Buffer; signature: Buffer }>(COPIES, [above, through])
+async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number, through: number): Promise<SignedRoot[]> {
+  const { latest } = witness
+  const { rows } = await db.query<{ size: string; root: Buffer; signature: Buffer }>(COPIES, [above, through, witness.publicKey])
   const roots = rows.map((row) => ({ size: Number(row.size), root: row.root.toString('hex'), signature: row.signature.toString('base64') }))
   const isLatest = (root: SignedRoot) => root.size === latest?.size && root.root === latest.root && root.signature === latest.signature
   if (latest && latest.size > above && latest.size <= through && !roots.some(isLatest)) roots.push(latest)
@@ -137,7 +138,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
   const signedRoots = async (above: number, through: number): Promise<SignedRoot[]> => {
     if (!witness) return []
     const good: SignedRoot[] = []
-    for (const root of await timed(() => claimedRoots(db, witness.latest, above, through))) {
+    for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
       if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
       else report({ kind: 'signature', size: root.size })
     }

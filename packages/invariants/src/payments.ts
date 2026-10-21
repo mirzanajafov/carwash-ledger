@@ -1,5 +1,6 @@
+import { inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
-import { collect, EXAMPLES, inSnapshot, type Check, type Finding } from './collect.ts'
+import { collect, EXAMPLES, type Check, type Finding } from './collect.ts'
 import type { InvariantResult } from './types.ts'
 
 const MONEY = `

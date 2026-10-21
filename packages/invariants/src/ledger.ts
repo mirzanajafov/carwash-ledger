@@ -1,5 +1,6 @@
+import { inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
-import { collect, inSnapshot, type Check } from './collect.ts'
+import { collect, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
 
 const JOURNALS_BALANCE: readonly Check[] = [

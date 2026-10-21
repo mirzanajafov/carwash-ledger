@@ -1,8 +1,8 @@
 import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, Req, type OnModuleDestroy } from '@nestjs/common'
 import { verifyLog } from '@carwash/audit-pg'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
-import { checkAudit, checkLedger, checkPayments, checkSequenced, inSnapshot, readWitness, type WitnessView } from '@carwash/invariants'
-import { createPool } from '@carwash/pg'
+import { checkAudit, checkLedger, checkPayments, checkSequenced, readWitness, type WitnessView } from '@carwash/invariants'
+import { createPool, inSnapshot } from '@carwash/pg'
 import { IsIn } from 'class-validator'
 import type pg from 'pg'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
@@ -107,7 +107,7 @@ export class DashboardController {
       return await readWitness(this.#config.witnessUrl)
     } catch (error) {
       this.#logger.warn(`the witness could not be read: ${error instanceof Error ? error.message : String(error)}`)
-      throw new ApiError(503, 'witness_unavailable', 'the witness is not answering, so try again in a minute', { 'retry-after': '10' })
+      throw new ApiError(503, 'witness_unavailable', 'the witness could not be read, so try again in a minute', { 'retry-after': '60' })
     }
   }
 

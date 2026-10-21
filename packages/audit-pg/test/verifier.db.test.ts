@@ -184,7 +184,7 @@ describe('full verification', () => {
 })
 
 describe('signed roots', () => {
-  it('compares the copies in audit_checkpoints and the witness latest checkpoint, each once', async () => {
+  it("compares the copies in audit_checkpoints and the witness's latest checkpoint, each once", async () => {
     const copies = await inRollback(async (client) => {
       await client.query('DELETE FROM audit_checkpoints WHERE size = 33')
       return verifyLog(client, { witness: witnessed })
@@ -194,12 +194,20 @@ describe('signed roots', () => {
   })
 
   it('still catches a rewrite through the latest checkpoint when the copies are gone, in a wider range', async () => {
-    const { report } = await inRollback(async (client) => {
+    const report = await inRollback(async (client) => {
       await tamper(client, 2, 20)
       await client.query('DELETE FROM audit_checkpoints')
-      return { report: await verifyLog(client, { witness: witnessed }) }
+      return verifyLog(client, { witness: witnessed })
     })
     expect(report.examples).toEqual([{ kind: 'root', size: 33, after: 0 }])
+  })
+
+  it('leaves out copies made under another witness key, as if they had been deleted', async () => {
+    const report = await inRollback(async (client) => {
+      await client.query(`UPDATE audit_checkpoints SET witness_key = 'another' WHERE size = 16`)
+      return verifyLog(client, { witness: witnessed })
+    })
+    expect(report).toMatchObject({ witnessed: 1, findings: 0 })
   })
 
   it('never compares a copy rewritten to agree with a rewritten history, because its signature fails', async () => {

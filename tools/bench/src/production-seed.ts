@@ -1,6 +1,7 @@
-import { createPublicKey, generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto'
+import { createPublicKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { checkpointBody, Frontier, ORIGIN, toHex } from '@carwash/audit'
 import { sequenceBatch, treeSize } from '@carwash/audit-pg'
+import type { WitnessView } from '@carwash/invariants'
 import { createAccount, type Account } from '@carwash/ledger'
 import { checkout } from '@carwash/pg'
 import type pg from 'pg'
@@ -11,18 +12,11 @@ export interface Shape {
   leavesPerCheckpoint: number
 }
 
-export interface Witnessing {
-  origin: string
-  publicKey: string
-  key: KeyObject
-  latest: { size: number; root: string; signature: string }
-}
-
 export interface ProductionLedger {
   payments: number
   journals: number
   checkpoints: number
-  witness: Witnessing
+  witness: WitnessView
   ms: { rows: number; sequencer: number; checkpoints: number }
 }
 
@@ -178,7 +172,7 @@ async function sequenceEverything(app: pg.Pool): Promise<void> {
   }
 }
 
-async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: number): Promise<Witnessing & { count: number }> {
+async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: number): Promise<WitnessView & { count: number }> {
   const { privateKey } = generateKeyPairSync('ed25519')
   const publicKey = createPublicKey(privateKey)
   const { x } = publicKey.export({ format: 'jwk' })
@@ -186,7 +180,7 @@ async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: num
   const frontier = new Frontier()
   let next = 1
   let count = 0
-  let latest: Witnessing['latest'] | undefined
+  let latest: WitnessView['latest']
   for (let from = 0; from < size; from += 50_000) {
     const { rows } = await admin.query<{ leaf: Buffer }>('SELECT a.leaf FROM audit_log a WHERE a.seq >= $1 AND a.seq < $2 ORDER BY a.seq', [
       from,
