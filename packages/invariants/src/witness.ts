@@ -62,38 +62,46 @@ async function rootAt(client: pg.ClientBase, size: number): Promise<{ root: stri
   return { root: hashes.reduceRight((right, left) => interior(left, right)).toString('hex') }
 }
 
-async function latestProblem(client: pg.ClientBase, latest: WitnessedCheckpoint, signed: boolean): Promise<string | undefined> {
-  if (!signed) return `the checkpoint at size ${latest.size} does not carry the witness's signature`
-  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
-  const treeSize = Number(rows[0]?.size ?? 0)
-  if (latest.size > treeSize) return `the witness signed size ${latest.size} but the log has only ${treeSize} leaves`
-  const computed = await rootAt(client, latest.size)
-  if ('missing' in computed) return `the log has no subtree ${computed.missing}, which the root at size ${latest.size} needs`
-  if (computed.root !== latest.root) return `the root at size ${latest.size} is ${computed.root}, the witness signed ${latest.root}`
+interface Claim {
+  checkpoint: WitnessedCheckpoint
+  signed: boolean
+  name: string
+  claims: string
+}
+
+async function claimProblem(client: pg.ClientBase, treeSize: number, { checkpoint, signed, name, claims }: Claim): Promise<string | undefined> {
+  if (!signed) return `${name} at size ${checkpoint.size} does not carry the witness's signature`
+  if (checkpoint.size > treeSize) return `${claims} size ${checkpoint.size} but the log has only ${treeSize} leaves`
+  const computed = await rootAt(client, checkpoint.size)
+  if ('missing' in computed) return `the log has no subtree ${computed.missing}, which the root at size ${checkpoint.size} needs`
+  if (computed.root !== checkpoint.root) return `the root at size ${checkpoint.size} is ${computed.root}, ${claims} ${checkpoint.root}`
   return undefined
 }
 
 async function newestCopy(client: pg.ClientBase): Promise<WitnessedCheckpoint | undefined> {
-  const { rows } = await client.query<{ size: string; root: string; signature: string }>(
-    `SELECT size::text, encode(root, 'hex') AS root, encode(signature, 'base64') AS signature FROM audit_checkpoints ORDER BY size DESC LIMIT 1`,
+  const { rows } = await client.query<{ size: string; root: Buffer; signature: Buffer }>(
+    'SELECT size::text, root, signature FROM audit_checkpoints ORDER BY size DESC LIMIT 1',
   )
-  return rows.map((row) => ({ size: Number(row.size), root: row.root, signature: row.signature }))[0]
-}
-
-function copyProblem(copy: WitnessedCheckpoint, signed: boolean, witnessed: number): string | undefined {
-  if (!signed) return `the copy of the checkpoint at size ${copy.size} in audit_checkpoints does not carry the witness's signature`
-  if (copy.size > witnessed) return `audit_checkpoints holds a checkpoint at size ${copy.size}, but the witness stands behind no more than ${witnessed}`
-  return undefined
+  return rows.map((row) => ({ size: Number(row.size), root: row.root.toString('hex'), signature: row.signature.toString('base64') }))[0]
 }
 
 export async function checkWitnessedIn(client: pg.ClientBase, witness: WitnessView): Promise<Finding> {
   const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: witness.publicKey }, format: 'jwk' })
   const signed = (checkpoint: WitnessedCheckpoint) =>
     verify(null, Buffer.from(`${witness.origin}\n${checkpoint.size}\n${checkpoint.root}\n`), key, Buffer.from(checkpoint.signature, 'base64'))
+  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
+  const treeSize = Number(rows[0]?.size ?? 0)
   const { latest } = witness
   const copy = await newestCopy(client)
-  const problems = [latest && (await latestProblem(client, latest, signed(latest))), copy && copyProblem(copy, signed(copy), latest?.size ?? 0)].filter(
-    (problem) => problem !== undefined,
-  )
+  const claims: Claim[] = []
+  if (latest) claims.push({ checkpoint: latest, signed: signed(latest), name: 'the checkpoint', claims: 'the witness signed' })
+  if (copy && (copy.size !== latest?.size || copy.root !== latest.root || copy.signature !== latest.signature)) {
+    claims.push({ checkpoint: copy, signed: signed(copy), name: 'the copy in audit_checkpoints', claims: 'audit_checkpoints holds' })
+  }
+  const problems: string[] = []
+  for (const claim of claims) {
+    const problem = await claimProblem(client, treeSize, claim)
+    if (problem) problems.push(problem)
+  }
   return { count: problems.length, examples: problems.slice(0, EXAMPLES) }
 }
