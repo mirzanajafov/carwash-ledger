@@ -23,10 +23,10 @@ healthy() {
 }
 
 release() {
-  docker build -q --label app=carwash -f deploy/server.Dockerfile -t carwash-server:latest . > /dev/null
-  docker build -q --label app=carwash -f apps/web/Dockerfile -t carwash-web:latest . > /dev/null
-  "${compose[@]}" build -q backup
-  "${compose[@]}" up -d --remove-orphans
+  docker build -q --label app=carwash -f deploy/server.Dockerfile -t carwash-server:latest . > /dev/null &&
+    docker build -q --label app=carwash -f apps/web/Dockerfile -t carwash-web:latest . > /dev/null &&
+    "${compose[@]}" build -q backup &&
+    "${compose[@]}" up -d --remove-orphans
 }
 
 previous=$(git rev-parse HEAD)
@@ -45,10 +45,9 @@ fi
 
 say "Deploying $(git log --oneline -1 "$target")"
 git merge --ff-only --quiet "$target"
-release
 
 say "Waiting for the API, the worker and the web app"
-if healthy; then
+if release && healthy; then
   docker image prune -f --filter label=app=carwash > /dev/null
   say "Live: $(git log --oneline -1)"
   exit 0
@@ -56,8 +55,7 @@ fi
 
 say "Not healthy, rolling back to $(git log --oneline -1 "$previous")"
 git reset --hard --quiet "$previous"
-release
-if healthy; then
+if release && healthy; then
   echo "Rolled back. Database migrations from the failed release stay applied;"
   echo "the dump taken above is in backups/db if the schema change has to be undone."
 else
