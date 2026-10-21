@@ -547,6 +547,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const [witness, history] = await Promise.all([readWitness(WITNESS_URL), readWitnessHistory(WITNESS_URL)])
     const witnessed = witness.latest?.size ?? 0
     const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
+    report.witness = { checkpoints, size: witnessed, compared: 0 }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))
@@ -558,7 +559,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(await checkEvents(audit), 'final')
     found.addResults([await checkAudit(audit, witness), await checkSequenced(audit, witness)], 'final')
     const verification = await inSnapshot(audit, (client) => verifyLog(client, { witness }))
-    report.witness = { checkpoints, size: witnessed, compared: verification.witnessed }
+    report.witness.compared = verification.witnessed
     found.add(
       'verify',
       'final',

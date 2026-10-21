@@ -197,6 +197,18 @@ describe('the admin side of the dashboard', () => {
     expect(verified).toMatchObject({ status: 200, body: { object: 'verification', mode: 'full', findings: 0 } })
     expect(verified.body.journals).toBeGreaterThan(0)
   })
+
+  it('answers 503 for the checks and verification while the witness is not answering', async () => {
+    const blind = await startApi({ ...stack.config, witnessUrl: 'http://127.0.0.1:9' })
+    try {
+      for (const path of ['/v1/admin/checks', '/v1/admin/verify']) {
+        const answer = await stack.call('POST', path, { as: 'admin', key: null, base: blind.url })
+        expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })
+      }
+    } finally {
+      await blind.app.close()
+    }
+  })
 })
 
 describe('admin sessions', () => {

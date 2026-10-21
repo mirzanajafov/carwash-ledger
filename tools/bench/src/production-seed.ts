@@ -1,7 +1,8 @@
 import { createPublicKey, generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto'
 import { checkpointBody, Frontier, ORIGIN, toHex } from '@carwash/audit'
-import { sequenceBatch } from '@carwash/audit-pg'
+import { sequenceBatch, treeSize } from '@carwash/audit-pg'
 import { createAccount, type Account } from '@carwash/ledger'
+import { checkout } from '@carwash/pg'
 import type pg from 'pg'
 
 export interface Shape {
@@ -123,18 +124,21 @@ const BALANCES = `
   FROM (SELECT account_id, sum(amount) AS total FROM entries GROUP BY account_id) t
   WHERE b.account_id = t.account_id AND b.shard = 0`
 
-async function inTransaction(admin: pg.Pool, work: (client: pg.PoolClient) => Promise<void>): Promise<void> {
-  const client = await admin.connect()
+async function inTransaction(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
+  const lease = await checkout(admin)
+  let broken = false
   try {
-    await client.query('BEGIN')
-    await client.query('SET LOCAL session_replication_role = replica')
-    await work(client)
-    await client.query('COMMIT')
+    await lease.client.query('BEGIN')
+    await lease.client.query('SET LOCAL session_replication_role = replica')
+    await work(lease.client)
+    await lease.client.query('COMMIT')
   } catch (error) {
-    await client.query('ROLLBACK')
+    await lease.client.query('ROLLBACK').catch(() => {
+      broken = true
+    })
     throw error
   } finally {
-    client.release()
+    lease.release(broken)
   }
 }
 
@@ -142,7 +146,7 @@ interface Chart {
   receivable: Account
   fees: Account
   bank: Account
-  merchants: Account[]
+  merchants: { code: string; account: Account }[]
 }
 
 async function chart(app: pg.Pool): Promise<Chart> {
@@ -153,29 +157,26 @@ async function chart(app: pg.Pool): Promise<Chart> {
   const bank = await createAccount(app, { ...cold, code: 'bank:EUR', type: 'asset' })
   await createAccount(app, { ...cold, code: 'psp_fee_expense:EUR', type: 'expense' })
   await createAccount(app, { ...cold, code: 'suspense:EUR', type: 'liability' })
-  const merchants: Account[] = []
-  for (const code of MERCHANTS) merchants.push(await createAccount(app, { ...cold, code: `merchant_payable:${code}`, type: 'liability' }))
+  const merchants: Chart['merchants'] = []
+  for (const code of MERCHANTS) merchants.push({ code, account: await createAccount(app, { ...cold, code: `merchant_payable:${code}`, type: 'liability' }) })
   return { receivable, fees, bank, merchants }
 }
 
 async function sequenceEverything(app: pg.Pool): Promise<void> {
-  const client = await app.connect()
-  try {
-    for (;;) {
-      await client.query('BEGIN')
-      const sequenced = await sequenceBatch(client, 1000)
-      await client.query('COMMIT')
-      if (sequenced === 0) return
-    }
-  } finally {
-    client.release()
+  for (;;) {
+    let sequenced = 0
+    await inTransaction(app, async (client) => {
+      sequenced = await sequenceBatch(client, 1000)
+    })
+    if (sequenced === 0) return
   }
 }
 
 async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: number): Promise<Witnessing & { count: number }> {
   const { privateKey } = generateKeyPairSync('ed25519')
   const publicKey = createPublicKey(privateKey)
-  const x = publicKey.export({ format: 'jwk' }).x!
+  const { x } = publicKey.export({ format: 'jwk' })
+  if (!x) throw new Error('an Ed25519 key exports its public half as x')
   const frontier = new Frontier()
   let next = 1
   let count = 0
@@ -209,15 +210,12 @@ async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: num
 export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: Shape): Promise<ProductionLedger> {
   const started = performance.now()
   const accounts = await chart(app)
-  const merchants = accounts.merchants
-  const merchantIds: string[] = []
-  for (const [index, code] of MERCHANTS.entries()) {
-    const { rows } = await admin.query<{ id: string }>(
-      `INSERT INTO merchants (code, name, currency, account_id) VALUES ($1, $1, 'EUR', $2) RETURNING id::text`,
-      [code, merchants[index]!.id.toString()],
-    )
-    merchantIds.push(rows[0]!.id)
-  }
+  const { rows: merchants } = await admin.query<{ id: string; account: string }>(
+    `INSERT INTO merchants (code, name, currency, account_id)
+     SELECT code, code, 'EUR', account FROM unnest($1::text[], $2::bigint[]) AS m(code, account)
+     RETURNING id::text, account_id::text AS account`,
+    [accounts.merchants.map((m) => m.code), accounts.merchants.map((m) => m.account.id.toString())],
+  )
   const clients = await admin.query<{ id: string }>(
     `INSERT INTO api_clients (name, key_hash, scope) VALUES ('traffic', $1, 'client'), ('admin', $2, 'admin') RETURNING id::text`,
     [randomBytes(32), randomBytes(32)],
@@ -231,7 +229,7 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
   const bank = accounts.bank.id.toString()
   for (let from = 0; from < payments; from += BATCH) {
     await inTransaction(admin, async (client) => {
-      await client.query(BATCH_ROWS, [from, Math.min(from + BATCH, payments) - 1, start, spacing, merchantIds, merchants.map((m) => m.id.toString())])
+      await client.query(BATCH_ROWS, [from, Math.min(from + BATCH, payments) - 1, start, spacing, merchants.map((m) => m.id), merchants.map((m) => m.account)])
       await client.query(PAYMENTS, [traffic])
       await client.query(CAPTURES, [receivable, fees])
       await client.query(REFUNDS, [receivable, fees])
@@ -247,8 +245,7 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
   const rowsMs = performance.now() - started
   await sequenceEverything(app)
   const sequencedMs = performance.now() - started - rowsMs
-  const { rows } = await admin.query<{ journals: number }>('SELECT count(*)::int AS journals FROM journals')
-  const journals = rows[0]!.journals
+  const journals = await treeSize(admin)
   const { count, ...witness } = await signCopies(admin, journals, shape.leavesPerCheckpoint)
   await admin.query('ANALYZE')
   return {

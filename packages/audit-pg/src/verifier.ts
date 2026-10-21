@@ -175,9 +175,9 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
       chain = chainHash(chain, leaf)
       if (broken) continue
       frontier.push(leaf)
-      for (; next < roots.length && roots[next]!.size === frontier.size; next++) {
+      for (let root = roots[next]; root?.size === frontier.size; root = roots[++next]) {
         witnessed++
-        if (toHex(frontier.root()) === roots[next]!.root) lastMatched = frontier.size
+        if (toHex(frontier.root()) === root.root) lastMatched = frontier.size
         else report({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }

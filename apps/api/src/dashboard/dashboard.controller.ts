@@ -1,8 +1,8 @@
 import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, Req, type OnModuleDestroy } from '@nestjs/common'
 import { verifyLog } from '@carwash/audit-pg'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
-import { checkAudit, checkLedger, checkPayments, checkSequenced, readWitness } from '@carwash/invariants'
-import { checkout, createPool } from '@carwash/pg'
+import { checkAudit, checkLedger, checkPayments, checkSequenced, inSnapshot, readWitness, type WitnessView } from '@carwash/invariants'
+import { createPool } from '@carwash/pg'
 import { IsIn } from 'class-validator'
 import type pg from 'pg'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
@@ -75,7 +75,7 @@ export class DashboardController {
     const pool = this.#pool()
     await this.#turn(request, 'checks', this.#config.checksEveryMs)
     const started = performance.now()
-    const witness = this.#config.witnessUrl ? await readWitness(this.#config.witnessUrl) : undefined
+    const witness = await this.#witness()
     const results = [
       ...(await checkLedger(pool)),
       ...(await checkPayments(pool)),
@@ -96,22 +96,18 @@ export class DashboardController {
   async verify(@Req() request: AuthedRequest) {
     const pool = this.#pool()
     await this.#turn(request, 'verify', this.#config.checksEveryMs)
-    const witness = this.#config.witnessUrl ? await readWitness(this.#config.witnessUrl) : undefined
-    const lease = await checkout(pool)
-    let broken = false
+    const witness = await this.#witness()
+    const { state, ...report } = await inSnapshot(pool, (client) => verifyLog(client, { witness }))
+    return { object: 'verification', ...report, root: state?.root ?? null }
+  }
+
+  async #witness(): Promise<WitnessView | undefined> {
+    if (!this.#config.witnessUrl) return undefined
     try {
-      await lease.client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-      const report = await verifyLog(lease.client, { witness })
-      await lease.client.query('COMMIT')
-      const { state, ...rest } = report
-      return { object: 'verification', ...rest, root: state?.root ?? null }
+      return await readWitness(this.#config.witnessUrl)
     } catch (error) {
-      await lease.client.query('ROLLBACK').catch(() => {
-        broken = true
-      })
-      throw error
-    } finally {
-      lease.release(broken)
+      this.#logger.warn(`the witness could not be read: ${error instanceof Error ? error.message : String(error)}`)
+      throw new ApiError(503, 'witness_unavailable', 'the witness is not answering, so try again in a minute', { 'retry-after': '10' })
     }
   }
 

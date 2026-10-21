@@ -18,48 +18,34 @@ const { values } = parseArgs({
   },
 })
 
-interface Query {
-  sql: string
-  ms: number
-}
-
-function recording(client: pg.ClientBase, queries: Query[]): pg.ClientBase {
-  return new Proxy(client, {
-    get(target, property, receiver) {
-      if (property === 'query') {
-        return async (...args: unknown[]) => {
-          const started = performance.now()
-          try {
-            return await (target.query as (...a: unknown[]) => Promise<unknown>)(...args)
-          } finally {
-            queries.push({ sql: String(args[0]).replace(/\s+/g, ' ').trim().slice(0, 90), ms: Math.round(performance.now() - started) })
-          }
-        }
-      }
-      const value = Reflect.get(target, property, receiver)
-      return typeof value === 'function' ? value.bind(target) : value
-    },
-  })
-}
-
 async function timed<T>(work: () => Promise<T>): Promise<{ value: T; ms: number }> {
   const started = performance.now()
   const value = await work()
   return { value, ms: Math.round(performance.now() - started) }
 }
 
-async function checks(pool: pg.Pool, ledger: ProductionLedger) {
-  const queries: Query[] = []
+interface CheckTimes {
+  s1s2: number
+  s3s5s6: number
+  s7: number
+  l4: number
+  total: number
+}
+
+async function checks(pool: pg.Pool, ledger: ProductionLedger): Promise<{ ms: CheckTimes; broken: InvariantResult[] }> {
   const s1s2 = await timed(() => checkLedger(pool))
-  const payments = await timed(() => inSnapshot(pool, (client) => checkPaymentsIn(recording(client, queries))))
+  const payments = await timed(() => inSnapshot(pool, (client) => checkPaymentsIn(client)))
   const s7 = await timed(() => checkAudit(pool, ledger.witness))
   const l4 = await timed(() => checkSequenced(pool, undefined, { graceSeconds: 10 }))
-  const results: InvariantResult[] = [...s1s2.value, ...payments.value, s7.value, l4.value]
   return {
     ms: { s1s2: s1s2.ms, s3s5s6: payments.ms, s7: s7.ms, l4: l4.ms, total: s1s2.ms + payments.ms + s7.ms + l4.ms },
-    queries,
-    broken: violations(results),
+    broken: violations([...s1s2.value, ...payments.value, s7.value, l4.value]),
   }
+}
+
+function medianTimes(runs: readonly CheckTimes[]): CheckTimes {
+  const of = (key: keyof CheckTimes) => median(runs.map((run) => run[key]))
+  return { s1s2: of('s1s2'), s3s5s6: of('s3s5s6'), s7: of('s7'), l4: of('l4'), total: of('total') }
 }
 
 async function verify(pool: pg.Pool, ledger: ProductionLedger, witnessed: boolean): Promise<VerifyReport> {
@@ -93,16 +79,15 @@ async function measure(dir: string, days: number, repeats: number) {
     try {
       const first = await checks(pools.off, ledger)
       if (first.broken.length > 0) throw new Error(`the seed breaks invariants: ${JSON.stringify(first.broken)}`)
-      const runs: Record<'on' | 'off', Awaited<ReturnType<typeof checks>>[]> = { on: [], off: [] }
+      const runs: Record<'on' | 'off', CheckTimes[]> = { on: [], off: [] }
       for (let r = 0; r < repeats; r++) {
-        for (const jit of ['on', 'off'] as const) runs[jit].push(await checks(pools[jit], ledger))
+        for (const jit of ['on', 'off'] as const) runs[jit].push((await checks(pools[jit], ledger)).ms)
       }
       const verified: VerifyReport[] = []
       for (let r = 0; r < repeats; r++) verified.push(await verify(pools.off, ledger, true))
-      if (verified.some((v) => v.findings > 0)) throw new Error(`the verifier found something in the seed: ${JSON.stringify(verified[0]!.examples)}`)
+      const wrong = verified.find((v) => v.findings > 0)
+      if (wrong) throw new Error(`the verifier found something in the seed: ${JSON.stringify(wrong.examples)}`)
       const unwitnessed = await verify(pools.off, ledger, false)
-      const medians = (jit: 'on' | 'off') =>
-        Object.fromEntries(Object.keys(runs[jit][0]!.ms).map((key) => [key, median(runs[jit].map((run) => run.ms[key as keyof typeof run.ms]))]))
       const step = {
         days,
         payments: ledger.payments,
@@ -110,8 +95,7 @@ async function measure(dir: string, days: number, repeats: number) {
         copies: ledger.checkpoints,
         seedMs: ledger.ms,
         bytes: await sizes(admin),
-        checks: { jitOn: medians('on'), jitOff: medians('off') },
-        queries: { jitOn: runs.on.at(-1)!.queries, jitOff: runs.off.at(-1)!.queries },
+        checks: { jitOn: medianTimes(runs.on), jitOff: medianTimes(runs.off) },
         verify: verified.map((v) => ({ ...v.ms, journals: v.journals, witnessed: v.witnessed })),
         verifyMedianMs: median(verified.map((v) => v.ms.total)),
         verifyWithoutWitnessMs: unwitnessed.ms,
@@ -127,10 +111,10 @@ async function measure(dir: string, days: number, repeats: number) {
 }
 
 await prepareTemplate()
-const dir = createResultsDir(values.out!)
+const dir = createResultsDir(values.out)
 const probe = await createTestDatabase()
 writeJson(join(dir, 'run.json'), { experiment: 'e8', options: values, environment: await describeEnvironment(probe.pool('admin', 1)) })
 await probe.drop()
-for (const days of values.days!.split(',').map(Number)) await measure(dir, days, Number(values.repeats))
+for (const days of values.days.split(',').map(Number)) await measure(dir, days, Number(values.repeats))
 console.log(`results in ${dir}`)
 process.exit(0)
