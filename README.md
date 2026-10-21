@@ -18,7 +18,7 @@ Every movement is a journal of entries that sum to zero per currency, in integer
 - the app's role has no `UPDATE` or `DELETE` on entries, and the owner's updates go through a trigger that refuses changes to any column that matters
 - every entry copies its account's currency, filled by a trigger and checked by the invariant checker
 
-The invariant checker is separate code with its own SQL, so a bug in the posting path can't hide behind the same bug in the check. It runs as a read-only role. Its checks:
+The invariant checker is separate code with its own SQL, so a bug in the posting path can't hide behind the same bug in the check. It reads in a read-only snapshot, as a role whose only write is its own bookmark (below). Its checks:
 
 - every journal sums to zero per currency (S1)
 - every stored balance equals its entries (S2)
@@ -29,6 +29,8 @@ The invariant checker is separate code with its own SQL, so a bug in the posting
 - the audit log matches the journals and the witness (S7)
 - what clients were told is what the books say (S8)
 - plus the liveness checks L1 to L5, things that have to be true once the faults stop
+
+After a week of traffic the dashboard's "Just run the checks" took 16 of the web server's 30 seconds, and most of it was S3 reading every payment again. Postgres was spending most of that compiling the query with its JIT on a single CPU, not running it. A bigger timeout would only have bought days, so S3 and S6 now continue from the last run that found nothing. Payments and refunds carry the transaction that last wrote them, stamped by a trigger, and a row counts as new when that run's snapshot couldn't see it, which also catches transactions that were still open then. S6 replays each merchant from where it stopped, and from the start when an entry committed out of journal order, which is exactly the bug S6 is there for. The full run is still what the CLI, the restore check and the end of every chaos run use, and the chaos runs compare the two. S1, S2 and S7 still read everything, so this is a lot of headroom, not forever.
 
 ## The hot account
 
