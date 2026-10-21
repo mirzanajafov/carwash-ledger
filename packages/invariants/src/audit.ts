@@ -1,7 +1,7 @@
 import type pg from 'pg'
 import { collect, EXAMPLES, inSnapshot, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
-import { checkWitnessedIn, type WitnessView } from './witness.ts'
+import { auditLogSize, checkWitnessedIn, type WitnessView } from './witness.ts'
 
 const CANONICAL = `
   canonical AS (
@@ -79,7 +79,7 @@ export async function checkAuditIn(client: pg.ClientBase, witness?: WitnessView)
   const witnessed = await checkWitnessedIn(client, witness)
   return {
     id: 'S7',
-    description: 'the audit log agrees with the journals, with itself and with every root the witness signed',
+    description: 'the audit log agrees with the journals, with itself, with the newest root the witness signed and with the newest stored copy',
     count: s7.count + witnessed.count,
     examples: [...s7.examples, ...witnessed.examples].slice(0, EXAMPLES),
   }
@@ -98,8 +98,7 @@ export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessV
   const l4 = await collect(client, queued(grace))
   const description = grace > 0 ? `every journal is sequenced into the audit log within ${grace} s` : 'every journal has been sequenced into the audit log'
   if (!witness) return { id: 'L4', description, ...l4 }
-  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
-  const size = Number(rows[0]!.size)
+  const size = await auditLogSize(client)
   const signed = witness.latest?.size ?? 0
   const behind = signed < size ? [`the witness has signed ${signed} of ${size} leaves`] : []
   return {

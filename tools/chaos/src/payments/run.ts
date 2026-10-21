@@ -542,8 +542,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
     const witness = await readWitness(WITNESS_URL)
-    const { data: signed } = (await (await fetch(`${WITNESS_URL}/v1/checkpoints`)).json()) as { data: unknown[] }
-    report.witness = { checkpoints: signed.length, size: witness.latest?.size ?? 0 }
+    const history = await fetch(`${WITNESS_URL}/v1/checkpoints`, { signal: AbortSignal.timeout(10_000) })
+    if (!history.ok) throw new Error(`the witness answered ${history.status} for its checkpoints`)
+    const { data: signed } = (await history.json()) as { data: { size: number }[] }
+    report.witness = { checkpoints: signed.length, size: signed.at(-1)?.size ?? 0 }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))

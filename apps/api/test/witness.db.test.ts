@@ -92,6 +92,11 @@ afterAll(async () => {
 })
 
 describe('checkpoints and the witness', () => {
+  it('reads a witness that has signed nothing as no checkpoint, and refuses a 404 from anywhere else', async () => {
+    expect((await readWitness(witnessUrl)).latest).toBeUndefined()
+    await expect(readWitness(`${witnessUrl}/elsewhere`)).rejects.toThrow('answered 404')
+  })
+
   it('has the witness sign each new tree size after a consistency proof, and serves a proof that checks against the signed root', async () => {
     for (const amount of [900, 1500]) await stack.call('POST', '/v1/payments', { body: pay(amount) })
     await sequencer.drain()
@@ -148,24 +153,38 @@ describe('checkpoints and the witness', () => {
     const { rows } = await stack.admin.query<{ size: number; root: Buffer; signature: Buffer }>(
       'SELECT size::int, root, signature FROM audit_checkpoints ORDER BY size',
     )
-    const [older, newest] = rows.map((row) => ({ size: row.size, root: row.root.toString('hex'), signature: row.signature.toString('base64') }))
-    if (!older || !newest) throw new Error('the first test leaves two signed checkpoints')
+    const copies = rows.map((row) => ({ size: row.size, root: row.root.toString('hex'), signature: row.signature.toString('base64') }))
+    const [older, newest] = [copies.at(-2), copies.at(-1)]
+    if (!older || !newest) throw new Error('the first test leaves at least two signed checkpoints')
     const stale = { ...witness, latest: older }
     expect(violations([await checkAudit(stack.admin, stale)])).toEqual([])
+    expect(violations([await checkAudit(stack.admin, { ...witness, latest: undefined })])).toEqual([])
 
     const forged = newest.size + 1
-    await stack.admin.query(
-      `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
-       VALUES ($1, decode($2, 'hex'), decode($3, 'base64'), 'k', now())`,
-      [forged, newest.root, newest.signature],
-    )
-    try {
-      expect((await checkAudit(stack.admin, witness)).examples).toEqual([
-        `the copy in audit_checkpoints at size ${forged} does not carry the witness's signature`,
-      ])
-    } finally {
-      await stack.admin.query('DELETE FROM audit_checkpoints WHERE size = $1', [forged])
-    }
+    const unsigned = await inRollback(async (client) => {
+      await client.query(
+        `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
+         VALUES ($1, decode($2, 'hex'), decode($3, 'base64'), $4, now())`,
+        [forged, newest.root, newest.signature, witness.publicKey],
+      )
+      return checkAuditIn(client, witness)
+    })
+    expect(unsigned.examples).toEqual([`the copy in audit_checkpoints at size ${forged} does not carry the witness's signature`])
+
+    const truncated = await inRollback(async (client) => {
+      await client.query('DELETE FROM audit_nodes WHERE level = 0 AND idx >= $1', [newest.size - 1])
+      await client.query('DELETE FROM audit_log WHERE seq >= $1', [newest.size - 1])
+      return checkAuditIn(client, stale)
+    })
+    expect(truncated.examples).toContain(`audit_checkpoints holds size ${newest.size} but the log has only ${newest.size - 1} leaves`)
+
+    const renamed = await inRollback(async (client) => {
+      await client.query(`UPDATE audit_checkpoints SET witness_key = 'k' WHERE size = $1`, [newest.size])
+      return checkAuditIn(client, witness)
+    })
+    expect(renamed.examples).toEqual([
+      `the copy in audit_checkpoints at size ${newest.size} names the witness key k, the witness publishes ${witness.publicKey}`,
+    ])
 
     const rewritten = await inRollback(async (client) => {
       await rewriteHistory(client)
