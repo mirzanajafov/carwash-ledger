@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
-import { CRASH_POINTS, type Check, type CrashPoint, type Step } from '@/lib/plug'
+import { CRASH_POINTS, type Check, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
 import { ChecksTable } from './checks-table'
 
 function seconds(ms: number): string {
@@ -58,7 +58,7 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
     case 'answered':
       return { text: `Try ${step.attempt} with the same key answers ${step.status}: one payment, ${step.paymentStatus ?? 'no payment'}.`, tone: 'text-ok' }
     case 'checks':
-      return { text: 'The invariants, checked as the read-only audit role:', tone: 'text-ink' }
+      return { text: 'The invariants, checked in a read-only snapshot as the audit role:', tone: 'text-ink' }
     case 'failed':
       return { text: step.message, tone: 'text-bad' }
   }
@@ -68,7 +68,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
   const [point, setPoint] = useState<CrashPoint>('attempt.after_psp')
   const [steps, setSteps] = useState<Step[]>([])
   const [running, setRunning] = useState(false)
-  const [checks, setChecks] = useState<{ ms: number; results: Check[] } | null>(null)
+  const [checks, setChecks] = useState<{ ms: number; scope: PaymentScope; results: Check[] } | null>(null)
   const [checking, setChecking] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
@@ -105,7 +105,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
     try {
       const response = await fetch('/api/checks', { method: 'POST' })
       const body = await response.json()
-      if (response.ok) setChecks({ ms: body.ms, results: body.results })
+      if (response.ok) setChecks({ ms: body.ms, scope: body.payment_checks, results: body.results })
       else setNote(body?.error?.message ?? `The checks answered ${response.status}.`)
     } finally {
       setChecking(false)
@@ -181,9 +181,9 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
       ) : null}
 
       {finalChecks ? (
-        <ChecksTable results={finalChecks.results} ms={finalChecks.ms} />
+        <ChecksTable results={finalChecks.results} ms={finalChecks.ms} scope={finalChecks.scope} />
       ) : checks ? (
-        <ChecksTable results={checks.results} ms={checks.ms} />
+        <ChecksTable results={checks.results} ms={checks.ms} scope={checks.scope} />
       ) : null}
     </div>
   )

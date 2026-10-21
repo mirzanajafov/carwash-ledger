@@ -15,6 +15,12 @@ export interface Check {
   examples: string[]
 }
 
+export interface PaymentScope {
+  since: string | null
+  payments: number
+  merchant_entries: number
+}
+
 export type Step =
   | { kind: 'armed'; at: number; failpoint: string; pid: number; startedAt: string }
   | { kind: 'refused'; at: number; status: number; message: string }
@@ -23,7 +29,7 @@ export type Step =
   | { kind: 'back'; at: number; pid: number; startedAt: string; downMs: number }
   | { kind: 'retry'; at: number; attempt: number; status: number; code: string; waitMs: number }
   | { kind: 'answered'; at: number; attempt: number; status: number; paymentId: string | null; paymentStatus: string | null }
-  | { kind: 'checks'; at: number; ms: number; results: Check[] }
+  | { kind: 'checks'; at: number; ms: number; scope: PaymentScope; results: Check[] }
   | { kind: 'failed'; at: number; message: string }
 
 export interface Reply {
@@ -98,7 +104,7 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
   for (;;) {
     const checked = await deps.checks()
     if (checked.status === 200) {
-      yield { kind: 'checks', at: at(), ms: checked.body.ms, results: checked.body.results }
+      yield { kind: 'checks', at: at(), ms: checked.body.ms, scope: checked.body.payment_checks, results: checked.body.results }
       return
     }
     if (checked.status !== 429 || at() > deadlineMs) {

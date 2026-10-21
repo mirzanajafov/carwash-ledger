@@ -12,17 +12,30 @@ export interface Shape {
   leavesPerCheckpoint: number
 }
 
+interface Traffic {
+  spacing: number
+  next: number
+  merchants: { id: string; account: string }[]
+  receivable: string
+  fees: string
+  bank: string
+  client: string
+  admin: string
+}
+
 export interface ProductionLedger {
   payments: number
   journals: number
   checkpoints: number
   witness: WitnessView
+  traffic: Traffic
   ms: { rows: number; sequencer: number; checkpoints: number }
 }
 
 const MERCHANTS = ['wash_north', 'wash_south', 'wash_east']
 const BATCH = 18_000
 const BLOCK = 180
+const NEW_PAYMENTS_PER_LATE_REFUND = 36
 
 const BATCH_ROWS = `
   CREATE TEMP TABLE batch ON COMMIT DROP AS
@@ -63,8 +76,9 @@ const CAPTURES = `
 
 const REFUNDS = `
   WITH r AS (
-    INSERT INTO refunds (payment_id, amount, status, fee_refund, failure_reason, created_at, resolved_at)
-    SELECT id, refund, CASE WHEN refund_fails THEN 'failed' ELSE 'succeeded' END::refund_status,
+    INSERT INTO refunds (id, payment_id, amount, status, fee_refund, failure_reason, created_at, resolved_at)
+    SELECT uuidv7(created_at + interval '20 seconds' - clock_timestamp()), id, refund,
+           CASE WHEN refund_fails THEN 'failed' ELSE 'succeeded' END::refund_status,
            CASE WHEN refund_fails THEN 0 ELSE fee * refund / amount END, CASE WHEN refund_fails THEN 'declined' END,
            created_at + interval '20 seconds', created_at + interval '21 seconds'
     FROM batch WHERE refund > 0 ORDER BY g
@@ -86,8 +100,9 @@ const PAYOUTS = `
            - sum(CASE WHEN refund > 0 AND NOT refund_fails THEN refund - fee * refund / amount ELSE 0 END) AS amount
     FROM batch GROUP BY 1, 2
   ), p AS (
-    INSERT INTO payouts (merchant_id, amount, currency, status, created_at, resolved_at)
-    SELECT merchant_id, amount, 'EUR', 'succeeded', created_at, created_at FROM due WHERE amount > 0 ORDER BY block, merchant_id
+    INSERT INTO payouts (id, merchant_id, amount, currency, status, created_at, resolved_at)
+    SELECT uuidv7(created_at - clock_timestamp()), merchant_id, amount, 'EUR', 'succeeded', created_at, created_at
+    FROM due WHERE amount > 0 ORDER BY block, merchant_id
     RETURNING id, merchant_id, amount, created_at
   ), j AS (
     INSERT INTO journals (external_ref, created_at)
@@ -111,7 +126,28 @@ const KEYS = `
     UNION ALL
     SELECT $2, 'payout-' || id, '/v1/payouts', NULL, NULL, id, created_at
     FROM payouts WHERE created_at > now() - interval '1 day'
-  ) k`
+  ) k
+  ON CONFLICT DO NOTHING`
+
+const REFUNDS_OF_OLDER_PAYMENTS = `
+  WITH chosen AS (
+    SELECT p.id, p.amount, p.fee, m.account_id
+    FROM payments p JOIN merchants m ON m.id = p.merchant_id
+    WHERE p.status = 'captured' AND p.refunded_amount = 0
+    ORDER BY p.id LIMIT $3
+  ), r AS (
+    INSERT INTO refunds (payment_id, amount, status, fee_refund, created_at, resolved_at)
+    SELECT id, amount / 4, 'succeeded', fee * (amount / 4) / amount, now(), now() FROM chosen
+    RETURNING id, payment_id, amount, fee_refund
+  ), j AS (
+    INSERT INTO journals (external_ref) SELECT 'refund:' || id FROM r RETURNING id, external_ref
+  ), e AS (
+    INSERT INTO entries (journal_id, account_id, amount, currency)
+    SELECT j.id, x.account_id, x.amount, 'EUR'
+    FROM j JOIN r ON j.external_ref = 'refund:' || r.id JOIN chosen c ON c.id = r.payment_id
+    CROSS JOIN LATERAL (VALUES ($1::bigint, -r.amount), (c.account_id, r.amount - r.fee_refund), ($2::bigint, r.fee_refund)) AS x(account_id, amount)
+  )
+  UPDATE payments p SET refunded_amount = r.amount FROM r WHERE p.id = r.payment_id`
 
 const BALANCES = `
   UPDATE balances b SET amount = t.total
@@ -207,6 +243,25 @@ async function signCopies(admin: pg.Pool, size: number, leavesPerCheckpoint: num
   return { origin: ORIGIN, publicKey: x, key: publicKey, latest, count }
 }
 
+async function addPayments(client: pg.ClientBase, traffic: Traffic, count: number, start: Date): Promise<void> {
+  const merchants = [traffic.merchants.map((m) => m.id), traffic.merchants.map((m) => m.account)]
+  await client.query(BATCH_ROWS, [traffic.next, traffic.next + count - 1, start, traffic.spacing, ...merchants])
+  await client.query(PAYMENTS, [traffic.client])
+  await client.query(CAPTURES, [traffic.receivable, traffic.fees])
+  await client.query(REFUNDS, [traffic.receivable, traffic.fees])
+}
+
+export async function addTraffic(admin: pg.Pool, traffic: Traffic, payments: number): Promise<void> {
+  const start = new Date(Date.now() - (traffic.next + payments) * traffic.spacing * 1000)
+  await withTriggersOff(admin, async (client) => {
+    await addPayments(client, traffic, payments, start)
+    await client.query(REFUNDS_OF_OLDER_PAYMENTS, [traffic.receivable, traffic.fees, Math.ceil(payments / NEW_PAYMENTS_PER_LATE_REFUND)])
+    await client.query(KEYS, [traffic.client, traffic.admin])
+    await client.query(BALANCES)
+  })
+  traffic.next += payments
+}
+
 export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: Shape): Promise<ProductionLedger> {
   const started = performance.now()
   const accounts = await chart(app)
@@ -216,28 +271,35 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
      RETURNING id::text, account_id::text AS account`,
     [accounts.merchants.map((m) => m.code), accounts.merchants.map((m) => m.account.id.toString())],
   )
-  const clients = await admin.query<{ id: string }>(
-    `INSERT INTO api_clients (name, key_hash, scope) VALUES ('traffic', $1, 'client'), ('admin', $2, 'admin') RETURNING id::text`,
+  const { rows: clients } = await admin.query<{ client: string; admin: string }>(
+    `WITH c AS (
+       INSERT INTO api_clients (name, key_hash, scope) VALUES ('traffic', $1, 'client'), ('admin', $2, 'admin') RETURNING id, scope
+     )
+     SELECT max(id) FILTER (WHERE scope = 'client')::text AS client, max(id) FILTER (WHERE scope = 'admin')::text AS admin FROM c`,
     [randomBytes(32), randomBytes(32)],
   )
-  const [traffic, adminClient] = clients.rows.map((row) => row.id)
   const payments = Math.round(shape.days * shape.paymentsPerDay)
   const spacing = 86_400 / shape.paymentsPerDay
   const start = new Date(Date.now() - payments * spacing * 1000 - 60_000)
-  const receivable = accounts.receivable.id.toString()
-  const fees = accounts.fees.id.toString()
-  const bank = accounts.bank.id.toString()
-  for (let from = 0; from < payments; from += BATCH) {
+  const traffic: Traffic = {
+    spacing,
+    next: 0,
+    merchants,
+    receivable: accounts.receivable.id.toString(),
+    fees: accounts.fees.id.toString(),
+    bank: accounts.bank.id.toString(),
+    ...clients[0]!,
+  }
+  while (traffic.next < payments) {
+    const count = Math.min(BATCH, payments - traffic.next)
     await withTriggersOff(admin, async (client) => {
-      await client.query(BATCH_ROWS, [from, Math.min(from + BATCH, payments) - 1, start, spacing, merchants.map((m) => m.id), merchants.map((m) => m.account)])
-      await client.query(PAYMENTS, [traffic])
-      await client.query(CAPTURES, [receivable, fees])
-      await client.query(REFUNDS, [receivable, fees])
-      await client.query(PAYOUTS, [bank])
+      await addPayments(client, traffic, count, start)
+      await client.query(PAYOUTS, [traffic.bank])
     })
+    traffic.next += count
   }
   await withTriggersOff(admin, async (client) => {
-    await client.query(KEYS, [traffic, adminClient])
+    await client.query(KEYS, [traffic.client, traffic.admin])
     await client.query(BALANCES)
     await client.query('INSERT INTO audit_queue (journal_id) SELECT j.id FROM journals j ORDER BY j.id')
   })
@@ -253,6 +315,7 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
     journals,
     checkpoints: count,
     witness,
+    traffic,
     ms: { rows: Math.round(rowsMs), sequencer: Math.round(sequencedMs), checkpoints: Math.round(performance.now() - started - rowsMs - sequencedMs) },
   }
 }

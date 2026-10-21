@@ -6,7 +6,7 @@ import { createPool, inSnapshot } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, writeJson } from './env.ts'
-import { seedProductionLedger, type ProductionLedger } from './production-seed.ts'
+import { addTraffic, seedProductionLedger, type ProductionLedger } from './production-seed.ts'
 
 const { values } = parseArgs({
   options: {
@@ -34,7 +34,7 @@ interface CheckTimes {
 
 async function checks(pool: pg.Pool, ledger: ProductionLedger): Promise<{ ms: CheckTimes; broken: InvariantResult[] }> {
   const s1s2 = await timed(() => checkLedger(pool))
-  const payments = await timed(() => inSnapshot(pool, (client) => checkPaymentsIn(client)))
+  const payments = await timed(async () => (await inSnapshot(pool, (client) => checkPaymentsIn(client))).results)
   const s7 = await timed(() => checkAudit(pool, ledger.witness))
   const l4 = await timed(() => checkSequenced(pool, undefined, { graceSeconds: 10 }))
   return {
@@ -46,6 +46,34 @@ async function checks(pool: pg.Pool, ledger: ProductionLedger): Promise<{ ms: Ch
 function medianTimes(runs: readonly CheckTimes[]): CheckTimes {
   const of = (key: keyof CheckTimes) => median(runs.map((run) => run[key]))
   return { s1s2: of('s1s2'), s3s5s6: of('s3s5s6'), s7: of('s7'), l4: of('l4'), total: of('total') }
+}
+
+const INCREMENTS = [
+  ['10 s', 10],
+  ['1 minute', 60],
+  ['1 hour', 3600],
+] as const
+
+async function incremental(admin: pg.Pool, pool: pg.Pool, ledger: ProductionLedger, repeats: number) {
+  let base = (await inSnapshot(pool, (client) => checkPaymentsIn(client))).base
+  const steps = []
+  for (const [traffic, seconds] of INCREMENTS) {
+    const payments = Math.max(1, Math.round((Number(values['per-day']) * seconds) / 86_400))
+    await addTraffic(admin, ledger.traffic, payments)
+    const since = base
+    const runs: number[] = []
+    let last
+    for (let r = 0; r < repeats; r++) {
+      const run = await timed(() => inSnapshot(pool, (client) => checkPaymentsIn(client, { since })))
+      runs.push(run.ms)
+      last = run.value
+    }
+    if (!last?.since || !last.base)
+      throw new Error(`the incremental checks after ${traffic} of traffic did not continue cleanly: ${JSON.stringify(last?.results)}`)
+    steps.push({ traffic, added: payments, ms: median(runs), payments: last.payments, entries: last.entries })
+    base = last.base
+  }
+  return steps
 }
 
 async function verify(pool: pg.Pool, witness: WitnessView | undefined): Promise<VerifyReport> {
@@ -88,6 +116,7 @@ async function measure(dir: string, days: number, repeats: number) {
       const wrong = verified.find((v) => v.findings > 0)
       if (wrong) throw new Error(`the verifier found something in the seed: ${JSON.stringify(wrong.examples)}`)
       const unwitnessed = await verify(pools.off, undefined)
+      const resumed = { jitOn: await incremental(admin, pools.on, ledger, repeats), jitOff: await incremental(admin, pools.off, ledger, repeats) }
       const step = {
         days,
         payments: ledger.payments,
@@ -99,9 +128,10 @@ async function measure(dir: string, days: number, repeats: number) {
         verify: verified.map((v) => ({ ...v.ms, journals: v.journals, witnessed: v.witnessed })),
         verifyMedianMs: median(verified.map((v) => v.ms.total)),
         verifyWithoutWitnessMs: unwitnessed.ms,
+        incremental: resumed,
       }
       appendJsonLine(join(dir, 'e8.jsonl'), step)
-      console.log(JSON.stringify({ days, checks: step.checks, verifyMedianMs: step.verifyMedianMs, verifyWithoutWitnessMs: step.verifyWithoutWitnessMs }))
+      console.log(JSON.stringify({ days, checks: step.checks, verifyMedianMs: step.verifyMedianMs, incremental: resumed }))
     } finally {
       await Promise.all([pools.on.end(), pools.off.end()])
     }

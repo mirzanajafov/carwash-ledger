@@ -18,7 +18,15 @@ function fakeApi(script: { pay: (Reply | Error)[]; health: (string | null)[]; ch
       return started === undefined || started === null ? null : { pid: 7, startedAt: started }
     },
     checks: async () =>
-      script.checks?.shift() ?? { status: 200, body: { ms: 12, results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }] }, retryAfter: null },
+      script.checks?.shift() ?? {
+        status: 200,
+        body: {
+          ms: 12,
+          payment_checks: { since: null, payments: 3, merchant_entries: 5 },
+          results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }],
+        },
+        retryAfter: null,
+      },
     key: () => 'key-1',
     sleep: async (ms) => {
       clock += ms

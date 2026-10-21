@@ -193,6 +193,8 @@ describe('the admin side of the dashboard', () => {
     expect(checks.status).toBe(200)
     expect(checks.body.results.map((r: { id: string }) => r.id)).toEqual(['S1', 'S2', 'S3', 'S5', 'S6', 'S7', 'L4'])
     expect(checks.body.results.filter((r: { count: number }) => r.count > 0)).toEqual([])
+    expect(checks.body.payment_checks).toMatchObject({ since: null })
+    expect(checks.body.payment_checks.payments).toBeGreaterThan(0)
     const verified = await stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
     expect(verified).toMatchObject({ status: 200, body: { object: 'verification', mode: 'full', findings: 0 } })
     expect(verified.body.journals).toBeGreaterThan(0)
