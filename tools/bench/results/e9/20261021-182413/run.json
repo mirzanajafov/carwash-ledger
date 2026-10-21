@@ -5,7 +5,7 @@
     "repeats": "3",
     "out": "results/e9"
   },
-  "commit": "e7fbc1a",
+  "commit": "712a56f",
   "node": "v24.18.0",
   "cpu": "12th Gen Intel(R) Core(TM) i7-1270P"
 }

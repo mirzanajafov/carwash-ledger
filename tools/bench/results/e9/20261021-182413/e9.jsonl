@@ -1,0 +1,2 @@
+{"checkpoints":51000,"fileMb":11,"runs":[{"ms":5,"rssMb":78,"heapMb":11,"latest":127500},{"ms":5,"rssMb":77,"heapMb":11,"latest":127500},{"ms":3,"rssMb":77,"heapMb":11,"latest":127500}],"msMedian":5,"rssMbMedian":77}
+{"checkpoints":510000,"fileMb":113,"runs":[{"ms":3,"rssMb":77,"heapMb":11,"latest":1275000},{"ms":3,"rssMb":77,"heapMb":11,"latest":1275000},{"ms":3,"rssMb":78,"heapMb":11,"latest":1275000}],"msMedian":3,"rssMbMedian":77}
