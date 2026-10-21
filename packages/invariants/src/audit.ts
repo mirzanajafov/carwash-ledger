@@ -1,7 +1,7 @@
 import type pg from 'pg'
-import { collect, EXAMPLES, inSnapshot, type Check } from './collect.ts'
+import { auditLogSize, collect, EXAMPLES, inSnapshot, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
-import { auditLogSize, checkWitnessedIn, type WitnessView } from './witness.ts'
+import { checkWitnessedIn, type WitnessView } from './witness.ts'
 
 const CANONICAL = `
   canonical AS (
@@ -81,7 +81,7 @@ export async function checkAuditIn(client: pg.ClientBase, witness?: WitnessView)
     id: 'S7',
     description: 'the audit log agrees with the journals, with itself, with the newest root the witness signed and with the newest stored copy',
     count: s7.count + witnessed.count,
-    examples: [...s7.examples, ...witnessed.examples].slice(0, EXAMPLES),
+    examples: [...witnessed.examples, ...s7.examples].slice(0, EXAMPLES),
   }
 }
 

@@ -93,8 +93,18 @@ afterAll(async () => {
 
 describe('checkpoints and the witness', () => {
   it('reads a witness that has signed nothing as no checkpoint, and refuses a 404 from anywhere else', async () => {
-    expect((await readWitness(witnessUrl)).latest).toBeUndefined()
-    await expect(readWitness(`${witnessUrl}/elsewhere`)).rejects.toThrow('answered 404')
+    const emptyDir = mkdtempSync(join(tmpdir(), 'witness-'))
+    const empty = createWitnessServer(new Witness(emptyDir, 'carwash-ledger'), 'token')
+    empty.listen(0, '127.0.0.1')
+    await once(empty, 'listening')
+    const url = `http://127.0.0.1:${(empty.address() as AddressInfo).port}`
+    try {
+      expect((await readWitness(url)).latest).toBeUndefined()
+      await expect(readWitness(`${url}/elsewhere`)).rejects.toThrow('answered 404')
+    } finally {
+      empty.close()
+      rmSync(emptyDir, { recursive: true, force: true })
+    }
   })
 
   it('has the witness sign each new tree size after a consistency proof, and serves a proof that checks against the signed root', async () => {

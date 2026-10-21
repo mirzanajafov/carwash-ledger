@@ -1,6 +1,6 @@
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import type pg from 'pg'
-import { EXAMPLES, type Finding } from './collect.ts'
+import { auditLogSize, type Finding } from './collect.ts'
 
 export interface WitnessedCheckpoint {
   size: number
@@ -14,18 +14,28 @@ export interface WitnessView {
   latest: WitnessedCheckpoint | undefined
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isCheckpoint(value: unknown): value is WitnessedCheckpoint {
+  return isObject(value) && typeof value.size === 'number' && typeof value.root === 'string' && typeof value.signature === 'string'
+}
+
 async function getJson(url: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+  if (response.ok) return response.json()
   const body: unknown = await response.json().catch(() => undefined)
-  if (response.ok) return body
-  if (response.status === 404 && (body as { error?: { code?: unknown } } | undefined)?.error?.code === 'none') return undefined
+  if (response.status === 404 && isObject(body) && isObject(body.error) && body.error.code === 'none') return undefined
   throw new Error(`GET ${url} answered ${response.status}`)
 }
 
 export async function readWitness(url: string): Promise<WitnessView> {
-  const key = (await getJson(`${url}/v1/key`)) as { origin: string; algorithm: string; public_key: string }
-  if (key.algorithm !== 'ed25519') throw new Error(`the witness signs with ${key.algorithm}, not ed25519`)
-  const latest = (await getJson(`${url}/v1/checkpoints/latest`)) as WitnessedCheckpoint | undefined
+  const key = await getJson(`${url}/v1/key`)
+  if (!isObject(key) || typeof key.origin !== 'string' || typeof key.public_key !== 'string') throw new Error(`the witness at ${url} publishes no key`)
+  if (key.algorithm !== 'ed25519') throw new Error(`the witness signs with ${String(key.algorithm)}, not ed25519`)
+  const latest = await getJson(`${url}/v1/checkpoints/latest`)
+  if (latest !== undefined && !isCheckpoint(latest)) throw new Error(`the witness at ${url} answered something that is not a checkpoint`)
   return { origin: key.origin, publicKey: key.public_key, latest }
 }
 
@@ -63,11 +73,6 @@ async function rootAt(client: pg.ClientBase, size: number): Promise<{ root: stri
   return { root: hashes.reduceRight((right, left) => interior(left, right)).toString('hex') }
 }
 
-export async function auditLogSize(client: pg.ClientBase): Promise<number> {
-  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
-  return Number(rows[0]?.size ?? 0)
-}
-
 async function rootProblem(client: pg.ClientBase, treeSize: number, checkpoint: WitnessedCheckpoint, claimed: string): Promise<string | undefined> {
   if (checkpoint.size > treeSize) return `${claimed} size ${checkpoint.size} but the log has only ${treeSize} leaves`
   const computed = await rootAt(client, checkpoint.size)
@@ -92,28 +97,32 @@ async function newestCopy(client: pg.ClientBase): Promise<StoredCopy | undefined
   }))[0]
 }
 
+type Signed = (checkpoint: WitnessedCheckpoint) => boolean
+
+async function latestProblem(client: pg.ClientBase, treeSize: number, latest: WitnessedCheckpoint, signed: Signed): Promise<string | undefined> {
+  if (!signed(latest)) return `the checkpoint at size ${latest.size} does not carry the witness's signature`
+  return rootProblem(client, treeSize, latest, 'the witness signed')
+}
+
+async function copyProblem(client: pg.ClientBase, treeSize: number, copy: StoredCopy, witness: WitnessView, signed: Signed): Promise<string | undefined> {
+  if (copy.witnessKey !== witness.publicKey) {
+    return `the copy in audit_checkpoints at size ${copy.size} names the witness key ${copy.witnessKey}, the witness publishes ${witness.publicKey}`
+  }
+  const { latest } = witness
+  if (copy.size === latest?.size && copy.root === latest.root && copy.signature === latest.signature) return undefined
+  if (!signed(copy)) return `the copy in audit_checkpoints at size ${copy.size} does not carry the witness's signature`
+  return rootProblem(client, treeSize, copy, 'audit_checkpoints holds')
+}
+
 export async function checkWitnessedIn(client: pg.ClientBase, witness: WitnessView): Promise<Finding> {
   const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: witness.publicKey }, format: 'jwk' })
-  const signed = (checkpoint: WitnessedCheckpoint) =>
+  const signed: Signed = (checkpoint) =>
     verify(null, Buffer.from(`${witness.origin}\n${checkpoint.size}\n${checkpoint.root}\n`), key, Buffer.from(checkpoint.signature, 'base64'))
   const treeSize = await auditLogSize(client)
-  const { latest } = witness
-
-  const latestProblem = async (checkpoint: WitnessedCheckpoint) =>
-    signed(checkpoint)
-      ? rootProblem(client, treeSize, checkpoint, 'the witness signed')
-      : `the checkpoint at size ${checkpoint.size} does not carry the witness's signature`
-
-  const copyProblem = async (copy: StoredCopy) => {
-    if (copy.witnessKey !== witness.publicKey) {
-      return `the copy in audit_checkpoints at size ${copy.size} names the witness key ${copy.witnessKey}, the witness publishes ${witness.publicKey}`
-    }
-    if (copy.size === latest?.size && copy.root === latest.root && copy.signature === latest.signature) return undefined
-    if (!signed(copy)) return `the copy in audit_checkpoints at size ${copy.size} does not carry the witness's signature`
-    return rootProblem(client, treeSize, copy, 'audit_checkpoints holds')
-  }
-
   const copy = await newestCopy(client)
-  const problems = [latest && (await latestProblem(latest)), copy && (await copyProblem(copy))].filter((problem) => problem !== undefined)
-  return { count: problems.length, examples: problems.slice(0, EXAMPLES) }
+  const problems = [
+    witness.latest && (await latestProblem(client, treeSize, witness.latest, signed)),
+    copy && (await copyProblem(client, treeSize, copy, witness, signed)),
+  ].filter((problem) => problem !== undefined)
+  return { count: problems.length, examples: problems }
 }

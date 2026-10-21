@@ -24,6 +24,11 @@ export async function collect(client: pg.ClientBase, checks: readonly Check[]): 
   return { count, examples }
 }
 
+export async function auditLogSize(client: pg.ClientBase): Promise<number> {
+  const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
+  return Number(rows[0]?.size ?? 0)
+}
+
 export async function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {
   const lease = await checkout(pool)
   const { client } = lease
