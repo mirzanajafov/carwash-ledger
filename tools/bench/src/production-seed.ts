@@ -35,6 +35,7 @@ export interface ProductionLedger {
 const MERCHANTS = ['wash_north', 'wash_south', 'wash_east']
 const BATCH = 18_000
 const BLOCK = 180
+const NEW_PAYMENTS_PER_LATE_REFUND = 36
 
 const BATCH_ROWS = `
   CREATE TEMP TABLE batch ON COMMIT DROP AS
@@ -75,8 +76,9 @@ const CAPTURES = `
 
 const REFUNDS = `
   WITH r AS (
-    INSERT INTO refunds (payment_id, amount, status, fee_refund, failure_reason, created_at, resolved_at)
-    SELECT id, refund, CASE WHEN refund_fails THEN 'failed' ELSE 'succeeded' END::refund_status,
+    INSERT INTO refunds (id, payment_id, amount, status, fee_refund, failure_reason, created_at, resolved_at)
+    SELECT uuidv7(created_at + interval '20 seconds' - clock_timestamp()), id, refund,
+           CASE WHEN refund_fails THEN 'failed' ELSE 'succeeded' END::refund_status,
            CASE WHEN refund_fails THEN 0 ELSE fee * refund / amount END, CASE WHEN refund_fails THEN 'declined' END,
            created_at + interval '20 seconds', created_at + interval '21 seconds'
     FROM batch WHERE refund > 0 ORDER BY g
@@ -98,8 +100,9 @@ const PAYOUTS = `
            - sum(CASE WHEN refund > 0 AND NOT refund_fails THEN refund - fee * refund / amount ELSE 0 END) AS amount
     FROM batch GROUP BY 1, 2
   ), p AS (
-    INSERT INTO payouts (merchant_id, amount, currency, status, created_at, resolved_at)
-    SELECT merchant_id, amount, 'EUR', 'succeeded', created_at, created_at FROM due WHERE amount > 0 ORDER BY block, merchant_id
+    INSERT INTO payouts (id, merchant_id, amount, currency, status, created_at, resolved_at)
+    SELECT uuidv7(created_at - clock_timestamp()), merchant_id, amount, 'EUR', 'succeeded', created_at, created_at
+    FROM due WHERE amount > 0 ORDER BY block, merchant_id
     RETURNING id, merchant_id, amount, created_at
   ), j AS (
     INSERT INTO journals (external_ref, created_at)
@@ -249,10 +252,10 @@ async function addPayments(client: pg.ClientBase, traffic: Traffic, count: numbe
 }
 
 export async function addTraffic(admin: pg.Pool, traffic: Traffic, payments: number): Promise<void> {
-  const endingNow = new Date(Date.now() - (traffic.next + payments) * traffic.spacing * 1000)
+  const start = new Date(Date.now() - (traffic.next + payments) * traffic.spacing * 1000)
   await withTriggersOff(admin, async (client) => {
-    await addPayments(client, traffic, payments, endingNow)
-    await client.query(REFUNDS_OF_OLDER_PAYMENTS, [traffic.receivable, traffic.fees, Math.ceil(payments / 36)])
+    await addPayments(client, traffic, payments, start)
+    await client.query(REFUNDS_OF_OLDER_PAYMENTS, [traffic.receivable, traffic.fees, Math.ceil(payments / NEW_PAYMENTS_PER_LATE_REFUND)])
     await client.query(KEYS, [traffic.client, traffic.admin])
     await client.query(BALANCES)
   })

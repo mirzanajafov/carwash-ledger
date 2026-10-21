@@ -22,9 +22,12 @@ const TOUCHED_PAYMENTS = `
   SELECT r.payment_id FROM refunds r
   WHERE r.updated_xid >= pg_snapshot_xmin($1::pg_snapshot) AND NOT pg_visible_in_snapshot(r.updated_xid, $1::pg_snapshot)
   UNION
-  SELECT substr(j.external_ref, 9)::uuid FROM journals j
-  WHERE j.created_xid >= pg_snapshot_xmin($1::pg_snapshot) AND NOT pg_visible_in_snapshot(j.created_xid, $1::pg_snapshot)
-    AND j.external_ref LIKE 'capture:%' AND pg_input_is_valid(substr(j.external_ref, 9), 'uuid')
+  SELECT p.id FROM payments p
+  WHERE p.id IN (
+    SELECT substr(j.external_ref, 9)::uuid FROM journals j
+    WHERE j.created_xid >= pg_snapshot_xmin($1::pg_snapshot) AND NOT pg_visible_in_snapshot(j.created_xid, $1::pg_snapshot)
+      AND j.external_ref LIKE 'capture:%' AND pg_input_is_valid(substr(j.external_ref, 9), 'uuid')
+  )
   UNION
   SELECT r.payment_id FROM refunds r
   WHERE r.id IN (

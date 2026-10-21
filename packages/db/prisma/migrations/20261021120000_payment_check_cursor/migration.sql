@@ -13,10 +13,13 @@ BEGIN
 END
 $$;
 
-CREATE TRIGGER payments_stamp BEFORE UPDATE ON "payments" FOR EACH ROW EXECUTE FUNCTION stamp_updated_xid();
+CREATE TRIGGER payments_stamp BEFORE INSERT OR UPDATE ON "payments" FOR EACH ROW EXECUTE FUNCTION stamp_updated_xid();
 ALTER TABLE "payments" ENABLE ALWAYS TRIGGER payments_stamp;
-CREATE TRIGGER refunds_stamp BEFORE UPDATE ON "refunds" FOR EACH ROW EXECUTE FUNCTION stamp_updated_xid();
+CREATE TRIGGER refunds_stamp BEFORE INSERT OR UPDATE ON "refunds" FOR EACH ROW EXECUTE FUNCTION stamp_updated_xid();
 ALTER TABLE "refunds" ENABLE ALWAYS TRIGGER refunds_stamp;
+
+CREATE TRIGGER payments_protect BEFORE UPDATE ON "payments" FOR EACH ROW EXECUTE FUNCTION ledger_protect('id');
+CREATE TRIGGER refunds_protect BEFORE UPDATE ON "refunds" FOR EACH ROW EXECUTE FUNCTION ledger_protect('id', 'payment_id');
 
 CREATE INDEX "payments_updated_xid_idx" ON "payments"("updated_xid");
 CREATE INDEX "refunds_updated_xid_idx" ON "refunds"("updated_xid");

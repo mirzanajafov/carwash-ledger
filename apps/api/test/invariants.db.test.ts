@@ -10,12 +10,12 @@ import {
   checkSettled,
   checkSettledIn,
   checkSettlementIn,
-  inSnapshot,
   violations,
   type InvariantId,
   type InvariantResult,
   type PaymentBase,
 } from '@carwash/invariants'
+import { inSnapshot } from '@carwash/pg'
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -358,5 +358,56 @@ describe('the payment invariants, continued from the last clean run', () => {
     const restored = await checkPaymentsIncrementally(audit)
     expect(restored.since).toBeUndefined()
     expect((await checkPaymentsIncrementally(audit)).since?.snapshot).toBe(restored.base?.snapshot)
+  })
+
+  it('see a payment changed by a transaction that was still open when the clean run took its snapshot', async () => {
+    const audit = stack.ledgerDb.pool('ledger_audit', 2)
+    const open = await stack.admin.connect()
+    try {
+      await open.query('BEGIN')
+      await open.query('UPDATE payments SET captured_amount = captured_amount - 1 WHERE id = $1', [payments.auto])
+      const clean = await inSnapshot(audit, (client) => checkPaymentsIn(client))
+      expect(clean.base).toBeDefined()
+      await open.query('COMMIT')
+      const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
+      expect(counts(resumed.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
+    } finally {
+      open.release()
+    }
+    await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [payments.auto])
+  })
+
+  it('replay a merchant from the start when a debit that was open at the clean run commits behind a payout', async () => {
+    const audit = stack.ledgerDb.pool('ledger_audit', 2)
+    const merchant = await accountId('merchant_payable:wash_1')
+    const receivable = await accountId('psp_receivable:EUR')
+    const bank = await accountId('bank:EUR')
+    expect((await stack.call('POST', '/v1/payments', { body: pay('tok_ok') })).body.status).toBe('captured')
+    const open = await stack.admin.connect()
+    const payout = await stack.admin.connect()
+    try {
+      await open.query('BEGIN')
+      await postJournal(open, 'debit-open-at-the-clean-run', [
+        [merchant, 100],
+        [receivable, -100],
+      ])
+      await payout.query('BEGIN')
+      const { rows } = await payout.query<{ payable: number }>('SELECT (-sum(amount))::int AS payable FROM entries WHERE account_id = $1', [merchant])
+      const payable = rows[0]!.payable
+      await postJournal(payout, `payout:${randomUUID()}`, [
+        [merchant, payable],
+        [bank, -payable],
+      ])
+      await payout.query('COMMIT')
+      const clean = await inSnapshot(audit, (client) => checkPaymentsIn(client))
+      expect(counts(clean.results)).toEqual({ S3: 0, S5: 0, S6: 0 })
+      await open.query('COMMIT')
+      const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
+      expect(counts(resumed.results)).toEqual({ S3: 0, S5: 0, S6: 1 })
+      expect(resumed.results).toEqual((await inSnapshot(audit, (client) => checkPaymentsIn(client))).results)
+    } finally {
+      open.release()
+      payout.release()
+    }
   })
 })
