@@ -556,6 +556,9 @@ importers:
 
   tools/chaos:
     dependencies:
+      '@carwash/audit-pg':
+        specifier: workspace:*
+        version: link:../../packages/audit-pg
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db

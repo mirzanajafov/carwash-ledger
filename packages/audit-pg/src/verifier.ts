@@ -11,10 +11,10 @@ export interface SignedRoot {
   signature: string
 }
 
-export interface WitnessedRoots {
+export interface WitnessAnchor {
   origin: string
   publicKey: string
-  checkpoints: readonly SignedRoot[]
+  latest: SignedRoot | undefined
 }
 
 export interface VerifierState extends FrontierState {
@@ -34,7 +34,7 @@ export type Finding =
   | { kind: 'unsequenced'; journalId: string }
 
 export interface VerifyOptions {
-  witness?: WitnessedRoots
+  witness?: WitnessAnchor
   from?: VerifierState
   batch?: number
   examples?: number
@@ -78,16 +78,17 @@ const UNSEQUENCED = `
     AND NOT EXISTS (SELECT 1 FROM audit_queue q WHERE q.journal_id = j.id)
   ORDER BY j.id`
 
-function signedRoots(witness: WitnessedRoots | undefined, report: (finding: Finding) => void): SignedRoot[] {
-  if (!witness) return []
-  const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: witness.publicKey }, format: 'jwk' })
-  const good: SignedRoot[] = []
-  for (const checkpoint of [...witness.checkpoints].sort((a, b) => a.size - b.size)) {
-    const body = Buffer.from(checkpointBody(checkpoint, witness.origin))
-    if (verify(null, body, key, Buffer.from(checkpoint.signature, 'base64'))) good.push(checkpoint)
-    else report({ kind: 'signature', size: checkpoint.size })
-  }
-  return good
+const COPIES = `
+  SELECT c.size::text, c.root, c.signature FROM audit_checkpoints c
+  WHERE c.size > $1 AND c.size <= $2
+  ORDER BY c.size`
+
+async function claimedRoots(db: Queryable, latest: SignedRoot | undefined, above: number, through: number): Promise<SignedRoot[]> {
+  const { rows } = await db.query<{ size: string; root: Buffer; signature: Buffer }>(COPIES, [above, through])
+  const roots = rows.map((row) => ({ size: Number(row.size), root: row.root.toString('hex'), signature: row.signature.toString('base64') }))
+  const isLatest = (root: SignedRoot) => root.size === latest?.size && root.root === latest.root && root.signature === latest.signature
+  if (latest && latest.size > above && latest.size <= through && !roots.some(isLatest)) roots.push(latest)
+  return roots.sort((a, b) => a.size - b.size)
 }
 
 export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Promise<VerifyReport> {
@@ -129,13 +130,29 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (!stored || toHex(stored) !== options.from.root) report({ kind: 'history', size: start, what: 'root' })
   }
 
-  const checkpoints = signedRoots(options.witness, report).filter((c) => c.size > start)
-  let next = 0
+  const witness = options.witness && {
+    ...options.witness,
+    key: createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: options.witness.publicKey }, format: 'jwk' }),
+  }
+  const signedRoots = async (above: number, through: number): Promise<SignedRoot[]> => {
+    if (!witness) return []
+    const good: SignedRoot[] = []
+    for (const root of await timed(() => claimedRoots(db, witness.latest, above, through))) {
+      if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
+      else report({ kind: 'signature', size: root.size })
+    }
+    return good
+  }
+
+  let witnessed = 0
   let lastMatched = start
   let journals = 0
   let position = start
   for (let from = start; from < size; from += batch) {
-    const { rows } = await timed(() => db.query<Row>(ROWS, [from, Math.min(from + batch, size)]))
+    const to = Math.min(from + batch, size)
+    const { rows } = await timed(() => db.query<Row>(ROWS, [from, to]))
+    const roots = await signedRoots(from, to)
+    let next = 0
     for (const row of rows) {
       const seq = Number(row.seq)
       if (seq !== position) {
@@ -158,11 +175,10 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
       chain = chainHash(chain, leaf)
       if (broken) continue
       frontier.push(leaf)
-      while (next < checkpoints.length && checkpoints[next]!.size <= frontier.size) {
-        const checkpoint = checkpoints[next++]!
-        if (checkpoint.size < frontier.size) continue
-        if (toHex(frontier.root()) === checkpoint.root) lastMatched = checkpoint.size
-        else report({ kind: 'root', size: checkpoint.size, after: lastMatched })
+      for (; next < roots.length && roots[next]!.size === frontier.size; next++) {
+        witnessed++
+        if (toHex(frontier.root()) === roots[next]!.root) lastMatched = frontier.size
+        else report({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }
   }
@@ -170,9 +186,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     report({ kind: 'gap', seq: position, missing: size - position })
     broken = true
   }
-  for (const checkpoint of checkpoints.slice(next)) {
-    if (checkpoint.size > size) report({ kind: 'beyond', size: checkpoint.size, treeSize: size })
-  }
+  for (const root of await signedRoots(size, Number.MAX_SAFE_INTEGER)) report({ kind: 'beyond', size: root.size, treeSize: size })
   if (!options.from) {
     const { rows } = await timed(() => db.query<{ id: string }>(UNSEQUENCED))
     for (const row of rows) report({ kind: 'unsequenced', journalId: row.id })
@@ -184,7 +198,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     from: start,
     size,
     journals,
-    witnessed: next,
+    witnessed,
     findings,
     examples,
     firstSeq: exact ?? ranged,

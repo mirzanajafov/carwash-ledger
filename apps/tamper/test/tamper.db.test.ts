@@ -5,7 +5,7 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessedRoots } from '@carwash/audit-pg'
+import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessAnchor } from '@carwash/audit-pg'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
@@ -21,8 +21,8 @@ let servers: Server[] = []
 let witness: Witness
 let stateDir: string
 
-function roots(): WitnessedRoots {
-  return { origin: witness.origin, publicKey: witness.publicKey, checkpoints: witness.history() }
+function anchor(): WitnessAnchor {
+  return { origin: witness.origin, publicKey: witness.publicKey, latest: witness.latest() }
 }
 
 async function serve(server: Server): Promise<string> {
@@ -91,13 +91,13 @@ describe('the tamper service', () => {
 
     const tampered = await call('POST', '/v1/tamper', { class: 2 })
     expect(tampered).toMatchObject({ status: 201, body: { tamper: { tamper_class: 2, seq: 15, witnessed_size: 30 } } })
-    expect((await verifyLog(admin, { witness: roots() })).examples).toEqual([{ kind: 'root', size: 30, after: 0 }])
+    expect((await verifyLog(admin, { witness: anchor() })).examples).toEqual([{ kind: 'root', size: 30, after: 0 }])
     expect((await call('POST', '/v1/tamper', { class: 1 })).body.error.code).toBe('already_tampered')
 
     const restarted = client(await serve(createTamperServer(new TamperService(admin, stateDir), 'tamper-token')))
     expect((await restarted('GET', '/v1/tamper')).body.tamper).toMatchObject({ tamper_class: 2, seq: 15 })
     expect(await restarted('POST', '/v1/restore')).toMatchObject({ status: 200, body: { restored: { tamper_class: 2, seq: 15 } } })
-    expect((await verifyLog(admin, { witness: roots() })).findings).toBe(0)
+    expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
     expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
   })
 
@@ -119,13 +119,13 @@ describe('the tamper service', () => {
     try {
       const tampered = await service.tamper(1)
       expect(tampered.restores_at).not.toBeNull()
-      expect((await verifyLog(admin, { witness: roots() })).findings).toBeGreaterThan(0)
+      expect((await verifyLog(admin, { witness: anchor() })).findings).toBeGreaterThan(0)
       service.close()
       const restarted = new TamperService(admin, stateDir, { autoRestoreMs: 600 })
       try {
         await sleep(1500)
         expect(restarted.current()).toBeNull()
-        expect((await verifyLog(admin, { witness: roots() })).findings).toBe(0)
+        expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
       } finally {
         restarted.close()
       }
@@ -140,12 +140,12 @@ describe('the tamper service', () => {
       'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
     )
     const { body } = await call('POST', '/v1/tamper', { class: 3 })
-    expect((await verifyLog(admin, { witness: roots() })).examples).toEqual([{ kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id }])
+    expect((await verifyLog(admin, { witness: anchor() })).examples).toEqual([{ kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id }])
     await call('POST', '/v1/restore')
     const after = await admin.query(
       'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
     )
     expect(after.rows).toEqual(before.rows)
-    expect((await verifyLog(admin, { witness: roots() })).findings).toBe(0)
+    expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
   })
 })

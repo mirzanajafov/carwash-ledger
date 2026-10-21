@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
+import { verifyLog } from '@carwash/audit-pg'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool } from '@carwash/pg'
 import {
@@ -16,6 +17,7 @@ import {
   checkSequenced,
   checkSettled,
   checkSettlement,
+  inSnapshot,
   readWitness,
   readWitnessHistory,
 } from '@carwash/invariants'
@@ -100,7 +102,7 @@ export interface PaymentsReport {
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
   pspOperations: Record<string, number>
   checks: { periodic: number; skipped: number }
-  witness: { checkpoints: number; size: number }
+  witness: { checkpoints: number; size: number; compared: number }
   harnessErrors: string[]
   violations: Violation[]
 }
@@ -215,7 +217,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     ledger: { anomalies: {}, webhooks: {} },
     pspOperations: {},
     checks: { periodic: 0, skipped: 0 },
-    witness: { checkpoints: 0, size: 0 },
+    witness: { checkpoints: 0, size: 0, compared: 0 },
     harnessErrors: [],
     violations: found.list,
   }
@@ -545,7 +547,6 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const [witness, history] = await Promise.all([readWitness(WITNESS_URL), readWitnessHistory(WITNESS_URL)])
     const witnessed = witness.latest?.size ?? 0
     const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
-    report.witness = { checkpoints, size: witnessed }
 
     stopping = true
     await Promise.all([...services.values()].map((s) => s.stop()))
@@ -556,6 +557,15 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
     found.addResults(await checkEvents(audit), 'final')
     found.addResults([await checkAudit(audit, witness), await checkSequenced(audit, witness)], 'final')
+    const verification = await inSnapshot(audit, (client) => verifyLog(client, { witness }))
+    report.witness = { checkpoints, size: witnessed, compared: verification.witnessed }
+    found.add(
+      'verify',
+      'final',
+      "the audit verifier finds nothing against the stored copies and the witness's latest checkpoint",
+      verification.findings,
+      verification.examples.slice(0, 5).map((finding) => JSON.stringify(finding)),
+    )
     found.addResults(
       [
         await checkSettlement(audit, {
@@ -780,6 +790,7 @@ export function summarizePayments(reports: readonly PaymentsReport[]) {
     settlementBreaks: merged((r) => r.settlement.breaks),
     kafkaRecoveryMsMedian: median(reports.flatMap((r) => r.kafka.recoveryMs)),
     witnessCheckpoints: sum((r) => r.witness.checkpoints),
+    witnessRootsCompared: sum((r) => r.witness.compared),
     events: merged((r) => r.events),
     toxics: merged((r) => r.toxics),
     toxicsByProxy: merged((r) => r.toxicsByProxy),
@@ -804,7 +815,7 @@ export function describePaymentsRun(index: number, r: PaymentsReport): string {
     `run ${index} seed ${r.seed}: ${r.journeys} journeys, ${r.payouts} payouts, ${r.requests} requests, ${r.sends} sends, ` +
     `kills ${total(r.kills.random)} random + ${total(r.kills.failpoints)} at failpoints, crashes ${r.exits.crash}, ` +
     `postgres ${r.postgres.kills}, kafka ${r.kafka.kills}, toxics ${total(r.toxics)}, surprises ${r.surprises.count}, ` +
-    `witnessed ${r.witness.size} leaves in ${r.witness.checkpoints} checkpoints, ` +
+    `witnessed ${r.witness.size} leaves in ${r.witness.checkpoints} checkpoints, ${r.witness.compared} compared by the verifier, ` +
     `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}`
   )
 }

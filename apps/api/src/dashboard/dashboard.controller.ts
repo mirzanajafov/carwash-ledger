@@ -1,5 +1,5 @@
 import { Body, Controller, HttpCode, Inject, Injectable, Logger, Post, Req, type OnModuleDestroy } from '@nestjs/common'
-import { verifyLog, WitnessClient, type WitnessedRoots } from '@carwash/audit-pg'
+import { verifyLog } from '@carwash/audit-pg'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
 import { checkAudit, checkLedger, checkPayments, checkSequenced, readWitness } from '@carwash/invariants'
 import { checkout, createPool } from '@carwash/pg'
@@ -96,12 +96,7 @@ export class DashboardController {
   async verify(@Req() request: AuthedRequest) {
     const pool = this.#pool()
     await this.#turn(request, 'verify', this.#config.checksEveryMs)
-    let witness: WitnessedRoots | undefined
-    if (this.#config.witnessUrl) {
-      const client = new WitnessClient(this.#config.witnessUrl, '', 10_000)
-      const key = await client.key()
-      witness = { origin: key.origin, publicKey: key.public_key, checkpoints: await client.history() }
-    }
+    const witness = this.#config.witnessUrl ? await readWitness(this.#config.witnessUrl) : undefined
     const lease = await checkout(pool)
     let broken = false
     try {
