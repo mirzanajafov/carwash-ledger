@@ -75,9 +75,10 @@ export class AnomaliesService {
   }
 
   async dispute(id: number, clientId: string): Promise<AnomalyRow> {
-    await this.#find(id)
-    if (!(await resolveAnomaly(this.#db.pool, id, 'disputed', clientId))) throw refuse('this anomaly is already resolved')
-    return this.#find(id)
+    const resolved = await resolveAnomaly(this.#db.pool, id, 'disputed', clientId)
+    const row = await this.#find(id)
+    if (!resolved) throw refuse('this anomaly is already resolved')
+    return row
   }
 
   async #adjustPayout(client: pg.ClientBase, payoutId: string, amount: bigint): Promise<void> {
