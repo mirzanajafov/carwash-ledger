@@ -1,20 +1,16 @@
 import { Module, type DynamicModule } from '@nestjs/common'
-import { APP_FILTER } from '@nestjs/core'
-import { HealthController } from '../app.module.ts'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
-import { AuditDatabase } from '../db/audit-database.ts'
-import { Database } from '../db/database.ts'
-import { ErrorFilter } from '../http/api-error.ts'
-import { IdempotencyService } from '../idempotency/idempotency.service.ts'
-import { Chart } from '../ledger/chart.service.ts'
-import { AttemptsService } from '../payments/attempts.service.ts'
-import { PspClient } from '../psp/psp.client.ts'
-import { WebhooksService } from '../webhooks/webhooks.service.ts'
-import { EventConsumers } from '../consumers/event-consumers.service.ts'
+import { AuditModule } from '../audit/audit.module.ts'
 import { Sequencer } from '../audit/sequencer.service.ts'
 import { VerificationJob } from '../audit/verification-job.ts'
-import { VerificationRuns } from '../audit/verification-runs.ts'
-import { Settlements } from '../settlement/settlements.service.ts'
+import type { ApiConfig } from '../config.ts'
+import { EventConsumers } from '../consumers/event-consumers.service.ts'
+import { CoreModule } from '../core/core.module.ts'
+import { HealthModule } from '../health/health.module.ts'
+import { IdempotencyModule } from '../idempotency/idempotency.module.ts'
+import { AttemptsModule } from '../payments/attempts.module.ts'
+import { PspModule } from '../psp/psp.module.ts'
+import { SettlementModule } from '../settlement/settlement.module.ts'
+import { WebhooksModule } from '../webhooks/webhooks.module.ts'
 import { OutboxRelay } from './outbox-relay.service.ts'
 import { Recovery } from './recovery.service.ts'
 
@@ -23,25 +19,8 @@ export class WorkerModule {
   static register(config: ApiConfig): DynamicModule {
     return {
       module: WorkerModule,
-      controllers: [HealthController],
-      providers: [
-        { provide: API_CONFIG, useValue: config },
-        Database,
-        Chart,
-        PspClient,
-        IdempotencyService,
-        AttemptsService,
-        WebhooksService,
-        OutboxRelay,
-        EventConsumers,
-        Settlements,
-        Sequencer,
-        Recovery,
-        AuditDatabase,
-        VerificationRuns,
-        VerificationJob,
-        { provide: APP_FILTER, useClass: ErrorFilter },
-      ],
+      imports: [CoreModule.register(config), HealthModule, AttemptsModule, AuditModule, IdempotencyModule, PspModule, SettlementModule, WebhooksModule],
+      providers: [OutboxRelay, EventConsumers, Sequencer, Recovery, VerificationJob],
     }
   }
 }

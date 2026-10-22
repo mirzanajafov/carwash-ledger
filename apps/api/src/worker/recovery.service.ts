@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common'
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { takeSnapshots } from '@carwash/ledger'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -17,7 +17,7 @@ import { OutboxRelay } from './outbox-relay.service.ts'
 export type RecoveryOutcome = 'applied' | 'already' | 'anomaly' | 'unknown' | 'error'
 
 @Injectable()
-export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
+export class Recovery implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
   readonly #attempts: AttemptsService
   readonly #psp: PspClient
@@ -67,7 +67,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     if (this.#config.hotAccountMode === 'derived') this.#every('snapshots', 1000, () => takeSnapshots(this.#db.pool))
   }
 
-  async onApplicationShutdown(): Promise<void> {
+  async onModuleDestroy(): Promise<void> {
     this.#stop.abort()
     await Promise.all(this.#loops)
   }

@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common'
-import { insertAccount, postInTransaction, readBalance, sqlStateOf } from '@carwash/ledger'
+import { postInTransaction } from '@carwash/ledger'
 import { firstRow } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { ApiError, notFound } from '../http/api-error.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
-import { Chart, merchantAccountCode } from '../ledger/chart.service.ts'
+import { Chart } from '../ledger/chart.service.ts'
+import type { MerchantRow } from '../merchants/merchants.service.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { loadPayout, payoutView, pendingAttempt } from '../payments/records.ts'
 
@@ -13,20 +14,6 @@ export interface PayoutInput {
   merchant: string
   amount?: number
   currency: string
-}
-
-export interface MerchantInput {
-  code: string
-  name: string
-  currency: string
-}
-
-interface MerchantRow {
-  id: string
-  code: string
-  name: string
-  currency: string
-  account_id: string
 }
 
 const MAX_ROUNDS = 5
@@ -43,36 +30,6 @@ export class PayoutsService {
     this.#chart = chart
     this.#attempts = attempts
     this.#idempotency = idempotency
-  }
-
-  async createMerchant(owned: OwnedKey, input: MerchantInput): Promise<Final> {
-    this.#chart.accounts(input.currency)
-    try {
-      return await this.#db.transaction(async (client) => {
-        const account = await insertAccount(client, {
-          code: merchantAccountCode(input.code),
-          type: 'liability',
-          currency: input.currency,
-          balanceMode: 'locked',
-        })
-        const inserted = await client.query<MerchantRow>(
-          'INSERT INTO merchants (code, name, currency, account_id) VALUES ($1, $2, $3, $4) RETURNING id::text, code, name, currency, account_id::text',
-          [input.code, input.name, input.currency, account.id],
-        )
-        return this.#idempotency.finish(client, owned, { status: 200, body: this.#merchantView(firstRow(inserted), 0n) })
-      })
-    } catch (error) {
-      if (sqlStateOf(error) === '23505') throw new ApiError(409, 'merchant_exists', `merchant ${input.code} already exists`)
-      throw error
-    }
-  }
-
-  async merchant(code: string) {
-    const { rows } = await this.#db.pool.query<MerchantRow>('SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1', [code])
-    const merchant = rows[0]
-    if (!merchant) throw notFound(`merchant ${code}`)
-    const account = await this.#chart.registry.account(BigInt(merchant.account_id))
-    return this.#merchantView(merchant, -(await readBalance(this.#db.pool, account)))
   }
 
   async create(owned: OwnedKey, input: PayoutInput): Promise<Final> {
@@ -131,16 +88,5 @@ export class PayoutsService {
       const payout = (await loadPayout(client, payoutId))!
       return this.#idempotency.finish(client, owned, { status: 200, body: payoutView(payout) })
     })
-  }
-
-  #merchantView(merchant: MerchantRow, payable: bigint) {
-    return {
-      id: merchant.code,
-      object: 'merchant',
-      name: merchant.name,
-      currency: merchant.currency,
-      account: merchantAccountCode(merchant.code),
-      payable: Number(payable),
-    }
   }
 }
