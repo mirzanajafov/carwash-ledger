@@ -51,8 +51,10 @@ function Section({ title, note, children }: { title: string; note: string; child
 
 export default function EvidencePage() {
   const base = evidence.chaos.runs.filter((r) => !r.mutant)
-  const order = (id: string) => Number(id.match(/\d+/)?.[0] ?? 0) + (id.includes('+') ? 0.5 : 0) + (/a$/.test(id) ? 0.1 : 0)
-  const mutants = evidence.chaos.runs.filter((r) => r.mutant).sort((a, b) => order(a.mutant!) - order(b.mutant!) || a.dir.localeCompare(b.dir))
+  const order = (id: string) => Number(/\d+/.exec(id)?.[0] ?? 0) + (id.includes('+') ? 0.5 : 0) + (id.endsWith('a') ? 0.1 : 0)
+  const mutants = evidence.chaos.runs
+    .flatMap((r) => (r.mutant ? [{ ...r, mutant: r.mutant }] : []))
+    .sort((a, b) => order(a.mutant) - order(b.mutant) || a.dir.localeCompare(b.dir))
   const total = (pick: (r: (typeof base)[number]) => number) => base.reduce((sum, r) => sum + pick(r), 0)
   const violations = base.reduce((sum, r) => sum + r.runsWithViolations, 0)
   const e2 = evidence.e2.rows.filter((r) => r.mode === 'locked' && r.concurrency === 1)
@@ -111,7 +113,7 @@ export default function EvidencePage() {
                 <tr key={m.dir}>
                   <td className="px-4 py-2 font-mono">{m.mutant}</td>
                   <td className="px-2 py-2 text-muted">
-                    {MUTANTS[m.mutant!] ?? ''}
+                    {MUTANTS[m.mutant] ?? ''}
                     <span className={`block text-xs sm:hidden ${m.firstViolatingRun ? 'text-ok' : 'text-warn'}`}>
                       {m.mode}: {m.firstViolatingRun ? `caught in run ${m.firstViolatingRun} by ${m.caughtBy.join(', ')}` : `survived ${m.runs} runs`}
                     </span>
@@ -194,20 +196,20 @@ export default function EvidencePage() {
                 {evidence.e4.steady.map((r) => (
                   <tr key={r.rate}>
                     <td className="px-4 py-2 font-mono tabular-nums">{r.rate.toLocaleString('en')}</td>
-                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50?.median.toFixed(1)} ms</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50.median.toFixed(1)} ms</td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.ackP99?.median.toFixed(1)} ms{' '}
+                      {r.ackP99.median.toFixed(1)} ms{' '}
                       <span className="text-xs text-muted">
-                        ({r.ackP99?.min.toFixed(0)}–{r.ackP99?.max.toFixed(0)})
+                        ({r.ackP99.min.toFixed(0)}–{r.ackP99.max.toFixed(0)})
                       </span>
                     </td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.consumedP99?.median.toFixed(1)} ms{' '}
+                      {r.consumedP99.median.toFixed(1)} ms{' '}
                       <span className="text-xs text-muted">
-                        ({r.consumedP99?.min.toFixed(0)}–{r.consumedP99?.max.toFixed(0)})
+                        ({r.consumedP99.min.toFixed(0)}–{r.consumedP99.max.toFixed(0)})
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent?.median.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent.median.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -264,9 +266,7 @@ export default function EvidencePage() {
             {evidence.e6.incremental.length > 0
               ? `Checking only what was added on top of a million: ${evidence.e6.incremental.map((r) => `${r.journals.toLocaleString('en')} journals in ${r.ms.toLocaleString('en')} ms`).join(', ')}. `
               : ''}
-            {evidence.e6.lag
-              ? `Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.`
-              : ''}
+            {`Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.`}
           </p>
           {evidence.e6.trials.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-line bg-surface">

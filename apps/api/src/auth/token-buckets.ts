@@ -24,7 +24,10 @@ export class TokenBuckets {
     bucket.at = now
     this.#buckets.delete(key)
     this.#buckets.set(key, bucket)
-    if (this.#buckets.size > MAX_BUCKETS) this.#buckets.delete(this.#buckets.keys().next().value!)
+    if (this.#buckets.size > MAX_BUCKETS) {
+      const oldest = this.#buckets.keys().next()
+      if (!oldest.done) this.#buckets.delete(oldest.value)
+    }
     if (bucket.tokens < 1) return false
     bucket.tokens -= 1
     return true

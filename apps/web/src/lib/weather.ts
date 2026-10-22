@@ -103,7 +103,7 @@ export function describePlan(plan: Plan): string[] {
     [plan.webhook?.reorder, 'webhooks out of order'],
     [plan.webhook?.drop, 'webhooks lost'],
   ]
-  const settlement = Object.values(plan.settlement ?? {}).reduce((sum, p) => sum + (p ?? 0), 0)
+  const settlement = Object.values(plan.settlement ?? {}).reduce((sum, p) => sum + p, 0)
   if (settlement > 0) parts.push([settlement, 'settlement lines off'])
-  return parts.filter(([p]) => (p ?? 0) > 0).map(([p, name]) => `${percent(p!)} ${name}`)
+  return parts.flatMap(([p, name]) => (p !== undefined && p > 0 ? [`${percent(p)} ${name}`] : []))
 }

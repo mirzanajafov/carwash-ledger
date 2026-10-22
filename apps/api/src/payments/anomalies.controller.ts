@@ -1,5 +1,6 @@
 import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
 import { postInTransaction } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { Database } from '../db/database.ts'
@@ -174,7 +175,6 @@ export class AnomaliesController {
   }
 
   async #attempt(id: string): Promise<AttemptRecord> {
-    const { rows } = await this.#db.pool.query<AttemptRecord>(`SELECT ${ATTEMPT_COLUMNS} FROM attempts WHERE id = $1`, [id])
-    return rows[0]!
+    return firstRow(await this.#db.pool.query<AttemptRecord>(`SELECT ${ATTEMPT_COLUMNS} FROM attempts WHERE id = $1`, [id]))
   }
 }

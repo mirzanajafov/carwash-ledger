@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import type { Faults, SettlementFault } from './faults.ts'
 
@@ -186,12 +186,11 @@ export class Settlements {
   }
 
   async #generate(client: pg.ClientBase, day: number, currency: string): Promise<SettlementFile | undefined> {
-    const { rows: clock } = await client.query<{ now: Date; closed: boolean }>(
-      'SELECT now(), EXISTS (SELECT 1 FROM settlement_closures WHERE day = $1) AS closed',
-      [day],
+    const clock = firstRow(
+      await client.query<{ now: Date; closed: boolean }>('SELECT now(), EXISTS (SELECT 1 FROM settlement_closures WHERE day = $1) AS closed', [day]),
     )
-    const ended = clock[0]!.now.getTime() / 1000 >= (day + 1) * this.#settings.daySeconds
-    if (!ended && !clock[0]!.closed) return undefined
+    const ended = clock.now.getTime() / 1000 >= (day + 1) * this.#settings.daySeconds
+    if (!ended && !clock.closed) return undefined
     const settled = new Set(
       (await client.query<{ day: string }>('SELECT day::text FROM settlement_files WHERE currency = $1', [currency])).rows.map((row) => Number(row.day)),
     )

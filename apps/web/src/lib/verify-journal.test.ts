@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 import { checkpointBody, completedBy, fromHex, inclusionProof, rootOf, toHex, type Hash } from '@carwash/audit'
-import { describe, expect, it } from 'vitest'
+import { assert, describe, expect, it } from 'vitest'
 import { checkJournal, leafOf, type CheckpointJson, type JournalJson } from './verify-journal'
 
 function journalAt(n: number, amount = 2400): JournalJson {
@@ -19,25 +19,35 @@ function journalAt(n: number, amount = 2400): JournalJson {
 
 function tree(journals: JournalJson[]) {
   const nodes = new Map<string, Hash>()
-  const source = (level: number, index: number) => nodes.get(`${level}:${index}`)!
+  const source = (level: number, index: number) => {
+    const hash = nodes.get(`${level}:${index}`)
+    if (!hash) throw new Error(`no subtree ${level}:${index}`)
+    return hash
+  }
   journals.forEach((journal, index) => {
     for (const node of completedBy(index, fromHex(leafOf(journal)), source)) nodes.set(`${node.level}:${node.index}`, node.hash)
   })
   return {
     root: (size: number) => toHex(rootOf(size, source)),
-    proof: (seq: number, size: number) => ({
-      journal_id: journals[seq]!.id,
-      seq,
-      leaf: leafOf(journals[seq]!),
-      tree_size: size,
-      root: toHex(rootOf(size, source)),
-      proof: inclusionProof(seq, size, source).map(toHex),
-    }),
+    proof: (seq: number, size: number) => {
+      const journal = journals[seq]
+      assert(journal)
+      return {
+        journal_id: journal.id,
+        seq,
+        leaf: leafOf(journal),
+        tree_size: size,
+        root: toHex(rootOf(size, source)),
+        proof: inclusionProof(seq, size, source).map(toHex),
+      }
+    },
   }
 }
 
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
-const witnessKey = publicKey.export({ format: 'jwk' }).x!
+const { x } = publicKey.export({ format: 'jwk' })
+assert(x)
+const witnessKey = x
 
 function signedCheckpoint(size: number, root: string): CheckpointJson {
   const signature = sign(null, Buffer.from(checkpointBody({ size, root }, 'carwash-ledger')), privateKey).toString('base64')
@@ -53,7 +63,7 @@ const verdicts = async (journal: JournalJson | null, proof = honest.proof(5, 13)
 
 describe('checking one journal in the browser', () => {
   it('accepts an honest journal on all four counts', async () => {
-    expect(await verdicts(journals[5]!)).toEqual({ signature: true, key: true, rows: true, inclusion: true })
+    expect(await verdicts(journalAt(5))).toEqual({ signature: true, key: true, rows: true, inclusion: true })
   })
 
   it('sees changed amounts with untouched hashes (class 1) in the rows and in the tree', async () => {
@@ -63,7 +73,7 @@ describe('checking one journal in the browser', () => {
   it('sees rewritten hashes that agree with the rows (class 2) only against the signed root', async () => {
     const forged = [...journals]
     forged[5] = journalAt(5, 2500)
-    expect(await verdicts(forged[5]!, tree(forged).proof(5, 13))).toEqual({ signature: true, key: true, rows: true, inclusion: false })
+    expect(await verdicts(forged[5], tree(forged).proof(5, 13))).toEqual({ signature: true, key: true, rows: true, inclusion: false })
   })
 
   it('reports a deleted journal (class 3) whose leaf is still in the signed tree', async () => {
@@ -71,7 +81,7 @@ describe('checking one journal in the browser', () => {
   })
 
   it('refuses a checkpoint the witness did not sign and a key the witness does not publish', async () => {
-    expect((await verdicts(journals[5]!, honest.proof(5, 13), { ...checkpoint, root: honest.root(12) })).signature).toBe(false)
-    expect((await verdicts(journals[5]!, honest.proof(5, 13), { ...checkpoint, witness_key: 'A'.repeat(43) })).key).toBe(false)
+    expect((await verdicts(journalAt(5), honest.proof(5, 13), { ...checkpoint, root: honest.root(12) })).signature).toBe(false)
+    expect((await verdicts(journalAt(5), honest.proof(5, 13), { ...checkpoint, witness_key: 'A'.repeat(43) })).key).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import type { Behaviour, Faults, OperationKind, TokenEffect } from './faults.ts'
 import { HttpError } from './http.ts'
@@ -308,8 +308,7 @@ export class Psp {
   }
 
   async #render(client: pg.PoolClient, operationId: string): Promise<unknown> {
-    const { rows } = await client.query<OperationRow>(`${SELECT_OPERATION} WHERE o.id = $1`, [operationId])
-    return operationJson(rows[0]!)
+    return operationJson(firstRow(await client.query<OperationRow>(`${SELECT_OPERATION} WHERE o.id = $1`, [operationId])))
   }
 
   async #enqueueWebhook(client: pg.PoolClient, operationId: string, status: Outcome['status'], body: unknown, behaviour: Behaviour): Promise<void> {

@@ -47,10 +47,11 @@ export function parseFailpoints(spec: string): Map<FailpointName, number> {
     .map((p) => p.trim())
     .filter(Boolean)) {
     const [name, value] = part.split('=')
-    if (!(FAILPOINTS as readonly string[]).includes(name!)) throw new Error(`unknown failpoint ${name}`)
+    const failpoint = FAILPOINTS.find((known) => known === name)
+    if (failpoint === undefined) throw new Error(`unknown failpoint ${String(name)}`)
     const probability = Number(value)
-    if (!(probability >= 0 && probability <= 1)) throw new Error(`failpoint ${name} needs a probability in [0, 1]`)
-    parsed.set(name as FailpointName, probability)
+    if (!(probability >= 0 && probability <= 1)) throw new Error(`failpoint ${failpoint} needs a probability in [0, 1]`)
+    parsed.set(failpoint, probability)
   }
   return parsed
 }

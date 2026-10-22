@@ -28,14 +28,20 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
+export function pick<T>(random: () => number, items: readonly T[]): T {
+  const item = items[Math.floor(random() * items.length)]
+  if (item === undefined) throw new Error('there is nothing to pick from')
+  return item
+}
+
 export function visit(random: () => number, merchants: readonly string[]): Visit {
-  const program = PROGRAMS[Math.floor(random() * PROGRAMS.length)]!
+  const program = pick(random, PROGRAMS)
   const manual = random() < 0.15
   const refunded = random() < 0.08
   return {
     program: program.name,
     amount: program.price,
-    merchant: merchants[Math.floor(random() * merchants.length)]!,
+    merchant: pick(random, merchants),
     token: random() < 0.04 ? 'tok_decline' : 'tok_ok',
     capture: manual ? 'manual' : 'auto',
     captureAfterMs: manual ? 3000 + Math.floor(random() * 5000) : 0,

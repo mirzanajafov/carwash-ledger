@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, assert, describe, expect, it } from 'vitest'
 import { armFailpoints, disarmFailpoints, failpoint, parseFailpoints, type FailpointName } from '../src/index.ts'
 
 afterEach(() => disarmFailpoints())
@@ -17,7 +17,11 @@ describe('failpoints', () => {
     armFailpoints(
       new Map([['post.before_commit', 0.1]]),
       (name) => hits.push(name),
-      () => draws.shift()!,
+      () => {
+        const draw = draws.shift()
+        assert(draw !== undefined)
+        return draw
+      },
     )
     failpoint('post.after_commit')
     failpoint('post.before_commit')

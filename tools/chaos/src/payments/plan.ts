@@ -81,7 +81,7 @@ export function split(random: Random, total: number, parts: number): number[] {
   const cuts = new Set<number>()
   while (cuts.size < parts - 1) cuts.add(between(random, 1, total - 1))
   const sorted = [...cuts].sort((a, b) => a - b)
-  return [...sorted, total].map((cut, i) => cut - (i === 0 ? 0 : sorted[i - 1]!))
+  return [...sorted, total].map((cut, i) => cut - (sorted[i - 1] ?? 0))
 }
 
 function weighted<T extends string>(random: Random, weights: Record<T, number>): T {
@@ -91,7 +91,9 @@ function weighted<T extends string>(random: Random, weights: Record<T, number>):
     left -= weight
     if (left < 0) return name
   }
-  return entries[entries.length - 1]![0]
+  const last = entries.at(-1)
+  if (last === undefined) throw new Error('there are no weights to choose from')
+  return last[0]
 }
 
 function journey(random: Random, options: PaymentsPlanOptions, at: number, index: number): PaymentJourney {

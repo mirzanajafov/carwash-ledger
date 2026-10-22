@@ -21,12 +21,13 @@ import {
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
-import { createSeedAccounts, MERCHANTS, seedJournals, type SeedAccounts } from './ledger-seed.ts'
-import { mulberry32, runOpenLoop } from './loadgen.ts'
+import { createSeedAccounts, grossOf, seedJournals, type SeedAccounts } from './ledger-seed.ts'
+import { mulberry32, pick, runOpenLoop } from './loadgen.ts'
 
 const { values } = parseArgs({
   options: {
@@ -210,8 +211,8 @@ async function proofs(lab: Lab, size: number, count: number, random: () => numbe
 }
 
 async function scale(dir: string) {
-  const targets = values.sizes!.split(',').map(Number)
-  const increments = values.increments!.split(',').map(Number)
+  const targets = values.sizes.split(',').map(Number)
+  const increments = values.increments.split(',').map(Number)
   const repeats = Number(values.repeats)
   const every = Number(values['checkpoint-every'])
   const random = mulberry32(Number(values.seed))
@@ -244,7 +245,8 @@ async function scale(dir: string) {
       result.push(step)
       console.log(`size ${size}: sequencer ${sequencer.perSecond}/s, full verification median ${step.verifyMedianMs} ms`)
     }
-    const base = (await verifyInSnapshot(lab)).state!
+    const { state: base } = await verifyInSnapshot(lab)
+    if (base === null) throw new Error('the full verification left no state to continue from')
     let added = 0
     for (const increment of increments) {
       await seed(lab, size + added, size + increment)
@@ -298,7 +300,7 @@ async function lag(dir: string) {
     }
   })()
   try {
-    const startedAt = (await lab.admin.query<{ now: Date }>('SELECT clock_timestamp() AS now')).rows[0]!.now
+    const startedAt = firstRow(await lab.admin.query<{ now: Date }>('SELECT clock_timestamp() AS now')).now
     const warmupMs = Number(values.warmup) * 1000
     const load = await runOpenLoop({
       rate: Number(values.rate),
@@ -307,20 +309,20 @@ async function lag(dir: string) {
       seed: Number(values.seed),
       maxInFlight: 64,
       task: async (index) => {
-        const gross = [900, 1500, 2400, 3500, 4900][index % 5]!
+        const gross = grossOf(index)
         const fee = Math.floor((gross * 2) / 100) + 10
         await poster.post({
           externalRef: `lag:${index}`,
           entries: [
             { accountId: BigInt(lab.accounts.receivable), amount: BigInt(gross) },
-            { accountId: BigInt(lab.accounts.merchants[Math.floor(random() * MERCHANTS)]!), amount: BigInt(-(gross - fee)) },
+            { accountId: BigInt(pick(random, lab.accounts.merchants)), amount: BigInt(-(gross - fee)) },
             { accountId: BigInt(lab.accounts.fees), amount: BigInt(-fee) },
           ],
         })
         return 'ok'
       },
     })
-    while ((await lab.app.query<{ n: number }>('SELECT count(*)::int AS n FROM audit_queue')).rows[0]!.n > 0) await sleep(200)
+    while (firstRow(await lab.app.query<{ n: number }>('SELECT count(*)::int AS n FROM audit_queue')).n > 0) await sleep(200)
     stop.abort()
     await sequencer
     const { rows } = await lab.admin.query<{ ms: number }>(
@@ -329,7 +331,7 @@ async function lag(dir: string) {
        WHERE j.created_at >= $1::timestamptz + make_interval(secs => $2::double precision / 1000)`,
       [startedAt, warmupMs],
     )
-    const result = { load, lagMs: stats(rows.map((r) => Number(r.ms))), checkpoints }
+    const result = { load, lagMs: stats(rows.map((r) => r.ms)), checkpoints }
     writeJson(join(dir, 'lag.json'), result)
     console.log(`lag at ${values.rate}/s: p50 ${round(result.lagMs.p50)} ms, p99 ${round(result.lagMs.p99)} ms, max ${round(result.lagMs.max)} ms`)
   } finally {
@@ -357,7 +359,8 @@ async function trials(dir: string) {
     await seed(lab, 0, size)
     await sequenceAll(lab, every, false)
     const witnessed = anchor(lab)
-    const covered = witnessed.latest!.size
+    if (witnessed.latest === undefined) throw new Error('the witness has signed no checkpoint of the seeded log')
+    const covered = witnessed.latest.size
     const summary: Record<string, { trials: number; caught: number; named: number; caughtWithoutWitness: number; ms: number[] }> = {}
     for (const tamperClass of [1, 2, 3] as const) {
       for (let i = 0; i < perClass; i++) {
@@ -407,7 +410,7 @@ async function trials(dir: string) {
 }
 
 await prepareTemplate()
-const dir = createResultsDir(values.out!)
+const dir = createResultsDir(values.out)
 const probe = await createTestDatabase()
 writeJson(join(dir, 'run.json'), { experiment: 'e6', mode: values.mode, options: values, environment: await describeEnvironment(probe.pool('admin', 1)) })
 await probe.drop()

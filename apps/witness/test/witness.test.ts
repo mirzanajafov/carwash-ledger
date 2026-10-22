@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, assert, describe, expect, it } from 'vitest'
 import { checkpointBody, completedBy, consistencyProof, leafHash, rootOf, toHex, type Hash, type SubtreeSource } from '@carwash/audit'
 import { createWitnessServer, Refusal, Witness, type Signed } from '../src/index.ts'
 
@@ -103,8 +103,8 @@ describe('the witness', () => {
     const witness = new Witness(tempDir(), 'test-log')
     await witness.submit(submission(source, 10))
     const results = await Promise.allSettled([witness.submit(submission(source, 30, 10)), witness.submit(submission(source, 40, 10))])
-    expect(results[0]!.status).toBe('fulfilled')
-    expect(results[1]!.status).toBe('rejected')
+    expect(results[0].status).toBe('fulfilled')
+    expect(results[1].status).toBe('rejected')
     expect(((results[1] as PromiseRejectedResult).reason as Refusal).code).toBe('stale')
   })
 
@@ -121,7 +121,9 @@ describe('the witness', () => {
     expect(await signedHistory(second)).toEqual(await signedHistory(first))
     expect(await refusal(second.submit(submission(source, 49)))).toBe('rollback')
     const lines = readFileSync(join(dir, 'checkpoints.jsonl'), 'utf8').trim().split('\n')
-    const forged = { ...(JSON.parse(lines[1]!) as Signed), root: toHex(rootOf(50, log(7, 50))) }
+    const [, newest] = lines
+    assert(newest)
+    const forged = { ...(JSON.parse(newest) as Signed), root: toHex(rootOf(50, log(7, 50))) }
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${lines[0]}\n${JSON.stringify(forged)}\n`)
     expect(() => new Witness(dir, 'test-log')).toThrow(/did not sign/)
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${lines[0]}\n`)

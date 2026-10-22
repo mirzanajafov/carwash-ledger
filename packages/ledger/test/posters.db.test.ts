@@ -1,5 +1,5 @@
 import { checkLedger, violations } from '@carwash/invariants'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { BALANCE_MODES, readBalance, RetriesExhaustedError, takeSnapshots } from '../src/index.ts'
 import { capture, createModeAccounts, inParallel, openLedger, type LedgerFixture } from './support.ts'
 
@@ -21,7 +21,8 @@ describe('concurrent captures on the hot accounts', () => {
   for (const name of ['pg-cte', 'prisma-api', 'prisma-sql', 'prisma-cte']) {
     for (const mode of BALANCE_MODES) {
       it(`${name} keeps ${mode} balances exact`, async () => {
-        const poster = ledger.posters.find((p) => p.name === name)!
+        const poster = ledger.posters.find((p) => p.name === name)
+        assert(poster)
         const accounts = await createModeAccounts(ledger.app, mode, { prefix: `${poster.name}:` })
         const refs = Array.from({ length: journals }, (_, i) => `${poster.name}:${mode}:${i}`)
         const gaveUp: string[] = []

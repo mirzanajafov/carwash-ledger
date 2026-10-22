@@ -1,4 +1,4 @@
-import { inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -86,11 +86,8 @@ function bound(sql: string, values: readonly unknown[]): string {
 }
 
 export async function checkSettlementIn(client: pg.ClientBase, options: SettlementChecks): Promise<InvariantResult> {
-  let through = options.completeThrough
-  if (through === undefined) {
-    const { rows } = await client.query<{ day: number | null }>('SELECT max(day)::int - 1 AS day FROM settlement_files')
-    through = rows[0]!.day ?? -1
-  }
+  const through =
+    options.completeThrough ?? firstRow(await client.query<{ day: number | null }>('SELECT max(day)::int - 1 AS day FROM settlement_files')).day ?? -1
   const values = [Math.trunc(options.feeBps), Math.trunc(options.feeFixed), Math.trunc(options.daySeconds), Math.trunc(through)]
   const l5 = await collect(
     client,

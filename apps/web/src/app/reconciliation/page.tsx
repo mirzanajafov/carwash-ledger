@@ -49,7 +49,7 @@ function when(day: number, daySeconds: number | null): string {
   const start = new Date(day * daySeconds * 1000)
   return daySeconds >= 86_400
     ? start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    : `${start.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+    : start.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 async function load(requested: number | null) {
@@ -108,9 +108,9 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
             </ul>
           </section>
 
-          {data.detail?.file ? (
+          {data.pick !== null && data.detail?.file ? (
             <section className="space-y-4">
-              <h2 className="text-base font-semibold">{when(data.pick!, data.daySeconds)}</h2>
+              <h2 className="text-base font-semibold">{when(data.pick, data.daySeconds)}</h2>
               <div className="grid gap-3 sm:grid-cols-4">
                 {[
                   ['Gross', money(data.detail.file.gross)],

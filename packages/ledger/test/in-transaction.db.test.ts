@@ -1,6 +1,7 @@
 import { checkLedger, violations } from '@carwash/invariants'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { firstRow } from '@carwash/pg'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { AccountRegistry, DuplicateJournalError, InvalidJournalError, checkout, pgAccountLoader, postInTransaction } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
@@ -10,15 +11,14 @@ let locked: ModeAccounts
 let sharded: ModeAccounts
 
 async function storedBalance(accountId: bigint): Promise<bigint> {
-  const { rows } = await ledger.app.query<{ amount: string }>('SELECT coalesce(sum(amount), 0) AS amount FROM balances WHERE account_id = $1', [
-    accountId.toString(),
-  ])
-  return BigInt(rows[0]!.amount)
+  const { amount } = firstRow(
+    await ledger.app.query<{ amount: string }>('SELECT coalesce(sum(amount), 0) AS amount FROM balances WHERE account_id = $1', [accountId.toString()]),
+  )
+  return BigInt(amount)
 }
 
 async function journalCount(ref: string): Promise<number> {
-  const { rows } = await ledger.app.query<{ n: number }>('SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [ref])
-  return rows[0]!.n
+  return firstRow(await ledger.app.query<{ n: number }>('SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [ref])).n
 }
 
 beforeAll(async () => {
@@ -47,7 +47,9 @@ describe('postInTransaction', () => {
     lease.release()
     expect(id).toBeGreaterThan(0n)
     expect(await storedBalance(sharded.receivable.id)).toBe(1000n)
-    expect(await storedBalance(sharded.merchants[0]!.id)).toBe(-970n)
+    const [merchant] = sharded.merchants
+    assert(merchant)
+    expect(await storedBalance(merchant.id)).toBe(-970n)
     expect(violations(await checkLedger(ledger.admin))).toEqual([])
   })
 

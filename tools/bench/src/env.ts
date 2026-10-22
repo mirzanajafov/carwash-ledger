@@ -63,11 +63,10 @@ export function writeResults(dir: string, data: unknown): string {
 }
 
 export function percentile(sorted: ArrayLike<number>, p: number): number {
-  if (sorted.length === 0) return Number.NaN
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!
+  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] ?? Number.NaN
 }
 
 export function median(xs: readonly number[]): number {
   const sorted = [...xs].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)]!
+  return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN
 }

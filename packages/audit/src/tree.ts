@@ -37,10 +37,7 @@ export function chainHash(previous: Hash, leaf: Hash): Hash {
 export const EMPTY_CHAIN: Hash = new Uint8Array(32)
 
 export function equal(a: Hash, b: Hash): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!
-  return diff === 0
+  return a.length === b.length && a.every((byte, i) => byte === b[i])
 }
 
 export function toHex(hash: Hash): string {
@@ -137,17 +134,18 @@ export function verifyInclusion(leaf: Hash, index: number, size: number, proof: 
 export function verifyConsistency(first: number, second: number, firstRoot: Hash, secondRoot: Hash, proof: readonly Hash[]): boolean {
   if (first <= 0 || first > second) return false
   if (first === second) return proof.length === 0 && equal(firstRoot, secondRoot)
-  if (proof.length === 0) return false
-  const path = isPowerOfTwo(first) ? [firstRoot, ...proof] : [...proof]
+  const [head, ...tail] = proof
+  if (head === undefined) return false
+  const path = isPowerOfTwo(first) ? proof : tail
   let fn = first - 1
   let sn = second - 1
   while (fn % 2 === 1) {
     fn = Math.floor(fn / 2)
     sn = Math.floor(sn / 2)
   }
-  let fr = path[0]!
-  let sr = path[0]!
-  for (const c of path.slice(1)) {
+  let fr = isPowerOfTwo(first) ? firstRoot : head
+  let sr = fr
+  for (const c of path) {
     if (sn === 0) return false
     if (fn % 2 === 1 || fn === sn) {
       fr = nodeHash(c, fr)
@@ -184,10 +182,11 @@ export function completedBy(index: number, leaf: Hash, source: SubtreeSource): {
 
 export function rootFromLeaves(leaves: readonly Hash[]): Hash {
   if (leaves.length === 0) return sha256(new Uint8Array(0))
-  const build = (start: number, n: number): Hash => {
-    if (n === 1) return leaves[start]!
-    const k = largestPowerOfTwoBelow(n)
-    return nodeHash(build(start, k), build(start + k, n - k))
+  const build = (part: readonly Hash[]): Hash => {
+    const [leaf, ...more] = part
+    if (leaf !== undefined && more.length === 0) return leaf
+    const k = largestPowerOfTwoBelow(part.length)
+    return nodeHash(build(part.slice(0, k)), build(part.slice(k)))
   }
-  return build(0, leaves.length)
+  return build(leaves)
 }

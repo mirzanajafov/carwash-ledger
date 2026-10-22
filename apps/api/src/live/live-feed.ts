@@ -152,24 +152,26 @@ export class LiveFeed implements OnModuleDestroy {
         this.#last = { type: 'balances', data: balances }
         this.#emit(this.#last)
       }
-      const first = this.#cursor === undefined
-      const rows = first ? (await pool.query<JournalRow>(LATEST_JOURNALS)).rows : await this.#fresh(pool, this.#cursor!)
-      if (first) {
+      let rows: JournalRow[]
+      if (this.#cursor === undefined) {
+        rows = (await pool.query<JournalRow>(LATEST_JOURNALS)).rows
         this.#cursor = rows.reduce((max, row) => (BigInt(row.id) > max ? BigInt(row.id) : max), 0n)
         const shown = new Set(rows.map((row) => BigInt(row.id)))
         for (const id of await this.#window(pool, this.#cursor)) if (!shown.has(id) && id <= this.#cursor) this.#seen.add(id)
+      } else {
+        rows = await this.#fresh(pool, this.#cursor)
       }
       for (const row of rows) {
         const id = BigInt(row.id)
         if (this.#seen.has(id)) continue
         this.#seen.add(id)
-        if (id > this.#cursor!) this.#cursor = id
+        if (id > this.#cursor) this.#cursor = id
         const event: JournalEvent = { type: 'journal', data: { ...row, posted_at: row.posted_at.toISOString() } }
         this.#journals.push(event)
         if (this.#journals.length > RECENT_JOURNALS) this.#journals.shift()
         this.#emit(event)
       }
-      for (const id of this.#seen) if (id <= this.#cursor! - LOOK_BACK) this.#seen.delete(id)
+      for (const id of this.#seen) if (id <= this.#cursor - LOOK_BACK) this.#seen.delete(id)
       const { rows: payments } = await pool.query<{
         id: string
         merchant: string
@@ -184,7 +186,7 @@ export class LiveFeed implements OnModuleDestroy {
       for (const row of payments) {
         current.add(row.id)
         const known = this.#payments.get(row.id)
-        if (known && known.data.status === row.status && known.data.updated_at === row.updated_at.toISOString()) continue
+        if (known?.data.status === row.status && known.data.updated_at === row.updated_at.toISOString()) continue
         const event: PaymentEvent = { type: 'payment', data: { ...row, updated_at: row.updated_at.toISOString() } }
         this.#payments.set(row.id, event)
         this.#emit(event)
@@ -193,7 +195,8 @@ export class LiveFeed implements OnModuleDestroy {
       this.#failures = 0
     } catch (error) {
       this.#failures++
-      if (this.#failures === 1 || this.#failures % 60 === 0) this.#logger.warn(`the live poll failed: ${(error as Error).message}`)
+      if (this.#failures === 1 || this.#failures % 60 === 0)
+        this.#logger.warn(`the live poll failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       this.#polling = false
     }

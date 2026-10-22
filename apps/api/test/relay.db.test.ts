@@ -4,7 +4,7 @@ import { checkEvents, violations } from '@carwash/invariants'
 import { kafkaClient, type Envelope } from '@carwash/outbox'
 import { NestFactory } from '@nestjs/core'
 import type { INestApplicationContext } from '@nestjs/common'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { EventConsumers } from '../src/consumers/event-consumers.service.ts'
 import { OutboxRelay } from '../src/worker/outbox-relay.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
@@ -26,7 +26,7 @@ afterAll(async () => {
   await admin.connect()
   await admin.deleteTopics({ topics: [`${PREFIX}payments`, `${PREFIX}ledger`] }).catch(() => undefined)
   await admin.disconnect()
-  await stack?.close()
+  await stack.close()
 })
 
 describe('the worker relay', () => {
@@ -55,7 +55,8 @@ describe('the worker relay', () => {
         void consumer.run({
           eachMessage: async ({ message }) => {
             if (message.key?.toString() !== payment.id) return
-            types.push((JSON.parse(message.value!.toString()) as Envelope).type)
+            assert(message.value)
+            types.push((JSON.parse(message.value.toString()) as Envelope).type)
             if (types.length === 4) {
               clearTimeout(timer)
               resolve()
@@ -78,7 +79,8 @@ describe('the worker relay', () => {
       await sleep(250)
       found = violations(await checkEvents(stack.admin))
     }
-    expect(worker!.get(EventConsumers).running).toBe(true)
+    assert(worker)
+    expect(worker.get(EventConsumers).running).toBe(true)
     expect(found).toEqual([])
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM receipts')).toBe(2)
   })

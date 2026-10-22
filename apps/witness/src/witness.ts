@@ -90,7 +90,9 @@ export class Witness {
   }
 
   get publicKey(): string {
-    return this.#publicKey.export({ format: 'jwk' }).x!
+    const { x } = this.#publicKey.export({ format: 'jwk' })
+    if (!x) throw new Error('an Ed25519 key exports its public half as x')
+    return x
   }
 
   get origin(): string {

@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createScratchDatabase, type ScratchDatabase } from '@carwash/testkit'
 import pg from 'pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { startPsp, type RunningPsp } from '../src/app.ts'
 import { NO_FAULTS } from '../src/faults.ts'
 import { verifySignature } from '../src/signature.ts'
@@ -81,8 +81,7 @@ beforeAll(async () => {
       databaseUrl: db.url,
       apiKey: API_KEY,
       adminKey: ADMIN_KEY,
-      webhookUrl: `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/webhooks/psp`,
-      webhookSecret: SECRET,
+      webhook: { url: `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/webhooks/psp`, secret: SECRET },
       authorizationTtlSeconds: 3600,
       idempotencyWindowSeconds: 24 * 3600,
       hangMs: 1500,
@@ -96,11 +95,11 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await running?.close()
-  await sql?.end()
-  receiver?.closeAllConnections()
-  receiver?.close()
-  await db?.drop()
+  await running.close()
+  await sql.end()
+  receiver.closeAllConnections()
+  receiver.close()
+  await db.drop()
 })
 
 beforeEach(() => {
@@ -215,7 +214,9 @@ describe('PSP simulator', () => {
     for (const delivery of deliveries) {
       expect(verifySignature(SECRET, delivery.body, delivery.signature, Math.floor(Date.now() / 1000))).toBe(true)
     }
-    expect(JSON.parse(deliveries[1]!.body)).toMatchObject({ type: 'operation.succeeded', data: { object: { kind: 'payout', destination: 'merchant_7' } } })
+    const [, redelivered] = deliveries
+    assert(redelivered)
+    expect(JSON.parse(redelivered.body)).toMatchObject({ type: 'operation.succeeded', data: { object: { kind: 'payout', destination: 'merchant_7' } } })
   })
 
   it('delivers a duplicated webhook twice with one event id and never sends a dropped one', async () => {
@@ -322,15 +323,18 @@ interface FileLine {
   net: number
 }
 
-async function settlementFile(day: number): Promise<{ status: number; text: string; head: Record<string, string>; lines: FileLine[] }> {
+async function settlementFile(day: number): Promise<{ status: number; text: string; head: Record<string, string | undefined>; lines: FileLine[] }> {
   const response = await fetch(`${running.url}/v1/settlements/${day}?currency=EUR`, { headers: { authorization: `Bearer ${API_KEY}` } })
   const text = await response.text()
   if (response.status !== 200) return { status: response.status, text, head: {}, lines: [] }
   const [headNames, headValues, , ...rows] = text.trim().split('\n')
-  const head = Object.fromEntries(headNames!.split(',').map((name, i) => [name, headValues!.split(',')[i]!]))
+  assert(headNames !== undefined && headValues !== undefined)
+  const values = headValues.split(',')
+  const head = Object.fromEntries(headNames.split(',').map((name, i) => [name, values[i]]))
   const lines = rows.map((row) => {
     const [line, operation, reference, kind, gross, fee, net] = row.split(',')
-    return { line: Number(line), operation: operation!, reference: reference!, kind: kind!, gross: Number(gross), fee: Number(fee), net: Number(net) }
+    assert(operation !== undefined && reference !== undefined && kind !== undefined)
+    return { line: Number(line), operation, reference, kind, gross: Number(gross), fee: Number(fee), net: Number(net) }
   })
   return { status: 200, text, head, lines }
 }

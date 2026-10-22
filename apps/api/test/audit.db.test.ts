@@ -1,8 +1,9 @@
 import { canonicalJournal, fromHex, leafHash, rootFromLeaves, toHex, verifyConsistency, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, checkSequenced, violations } from '@carwash/invariants'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '@carwash/audit-pg'
+import { firstRow } from '@carwash/pg'
 import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
 
@@ -40,7 +41,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await stack?.close()
+  await stack.close()
 })
 
 describe('the audit log', () => {
@@ -69,18 +70,21 @@ describe('the audit log', () => {
     const consistency = (await stack.call('GET', `/v1/audit/consistency?first=${first.tree_size}&second=${second.tree_size}`)).body
     expect(consistency.first_root).toBe(first.root)
     expect(verifyConsistency(first.tree_size, second.tree_size, fromHex(first.root), fromHex(second.root), consistency.proof.map(fromHex))).toBe(true)
-    const old = (await stack.call('GET', `/v1/journals/${journals[0]!.id}/proof?tree_size=${first.tree_size}`)).body
+    const [oldest] = journals
+    assert(oldest)
+    const old = (await stack.call('GET', `/v1/journals/${oldest.id}/proof?tree_size=${first.tree_size}`)).body
     expect(old.root).toBe(first.root)
-    expect((await stack.call('GET', `/v1/journals/${journals[0]!.id}/proof?tree_size=0`)).status).toBe(400)
+    expect((await stack.call('GET', `/v1/journals/${oldest.id}/proof?tree_size=0`)).status).toBe(400)
   })
 
   it('catches a changed amount, a rewritten leaf, a deleted journal, a missing record and a forged subtree (S7)', async () => {
     await sequenceAll()
     expect(await s7(async () => undefined)).toEqual([])
-    const { rows } = await stack.admin.query<{ journal_id: string; seq: string }>(
-      `SELECT a.journal_id::text, a.seq::text FROM audit_log a JOIN journals j ON j.id = a.journal_id WHERE j.external_ref LIKE 'capture:%' ORDER BY a.seq LIMIT 1`,
+    const { journal_id: journal, seq } = firstRow(
+      await stack.admin.query<{ journal_id: string; seq: string }>(
+        `SELECT a.journal_id::text, a.seq::text FROM audit_log a JOIN journals j ON j.id = a.journal_id WHERE j.external_ref LIKE 'capture:%' ORDER BY a.seq LIMIT 1`,
+      ),
     )
-    const { journal_id: journal, seq } = rows[0]!
     const changed = await s7((c) =>
       c.query(
         `UPDATE entries SET amount = amount + CASE WHEN amount > 0 THEN 1 ELSE -1 END
@@ -130,8 +134,10 @@ describe('the audit log', () => {
       )
       expect(toHex(leaf)).toBe(toHex(new Uint8Array(row.leaf)))
     }
-    const top = (await stack.call('GET', `/v1/audit/leaves/${rows[0]!.seq}`)).body
-    expect(top).toEqual({ object: 'leaf', seq: Number(rows[0]!.seq), journal_id: rows[0]!.journal_id, leaf: toHex(new Uint8Array(rows[0]!.leaf)) })
+    const [newest] = rows
+    assert(newest)
+    const top = (await stack.call('GET', `/v1/audit/leaves/${newest.seq}`)).body
+    expect(top).toEqual({ object: 'leaf', seq: Number(newest.seq), journal_id: newest.journal_id, leaf: toHex(new Uint8Array(newest.leaf)) })
     expect((await stack.call('GET', '/v1/audit/leaves/999999')).status).toBe(404)
     expect((await stack.call('GET', '/v1/journals/999999999')).status).toBe(404)
     expect((await stack.call('GET', '/v1/journals/1', { as: 'nobody' })).status).toBe(401)

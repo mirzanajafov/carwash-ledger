@@ -117,9 +117,9 @@ export async function migrate(pool: pg.Pool): Promise<number> {
     await client.query('CREATE TABLE IF NOT EXISTS psp_migrations (version int PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())')
     const { rows } = await client.query<{ version: number | null }>('SELECT max(version) AS version FROM psp_migrations')
     const current = rows[0]?.version ?? 0
-    for (let version = current + 1; version <= MIGRATIONS.length; version++) {
-      await client.query(MIGRATIONS[version - 1]!)
-      await client.query('INSERT INTO psp_migrations (version) VALUES ($1)', [version])
+    for (const [offset, migration] of MIGRATIONS.slice(current).entries()) {
+      await client.query(migration)
+      await client.query('INSERT INTO psp_migrations (version) VALUES ($1)', [current + offset + 1])
     }
     await client.query('COMMIT')
     return MIGRATIONS.length - current

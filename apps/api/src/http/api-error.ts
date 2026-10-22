@@ -56,9 +56,9 @@ export class ErrorFilter implements ExceptionFilter {
       code = 'database_unavailable'
       message = 'the database could not be reached, so retry with the same idempotency key'
       response.setHeader('Retry-After', '1')
-      this.#logger.warn(`database unavailable: ${(exception as Error).message}`)
+      this.#logger.warn(`database unavailable: ${exception instanceof Error ? exception.message : String(exception)}`)
     } else {
-      this.#logger.error((exception as Error)?.stack ?? String(exception))
+      this.#logger.error(exception instanceof Error ? (exception.stack ?? String(exception)) : String(exception))
     }
     response.status(status).json({ error: { code, message } })
   }

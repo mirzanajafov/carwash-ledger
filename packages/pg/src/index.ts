@@ -9,6 +9,12 @@ export function createPool(config: pg.PoolConfig): pg.Pool {
   return pool
 }
 
+export function firstRow<R extends pg.QueryResultRow>(result: pg.QueryResult<R>): R {
+  const [row] = result.rows
+  if (row === undefined) throw new Error(`expected a row from ${result.command}, got none`)
+  return row
+}
+
 export interface Checkout {
   readonly client: pg.PoolClient
   readonly failed: boolean

@@ -14,19 +14,18 @@ export interface CurrencyAccounts {
 }
 
 interface Spec {
-  role: keyof CurrencyAccounts
   name: string
   type: AccountType
   hot: boolean
 }
 
-const CHART: readonly Spec[] = [
-  { role: 'receivable', name: 'psp_receivable', type: 'asset', hot: true },
-  { role: 'fees', name: 'platform_fee_revenue', type: 'revenue', hot: true },
-  { role: 'bank', name: 'bank', type: 'asset', hot: false },
-  { role: 'pspFees', name: 'psp_fee_expense', type: 'expense', hot: false },
-  { role: 'suspense', name: 'suspense', type: 'liability', hot: false },
-]
+const CHART: Record<keyof CurrencyAccounts, Spec> = {
+  receivable: { name: 'psp_receivable', type: 'asset', hot: true },
+  fees: { name: 'platform_fee_revenue', type: 'revenue', hot: true },
+  bank: { name: 'bank', type: 'asset', hot: false },
+  pspFees: { name: 'psp_fee_expense', type: 'expense', hot: false },
+  suspense: { name: 'suspense', type: 'liability', hot: false },
+}
 
 export function merchantAccountCode(merchant: string): string {
   return `merchant_payable:${merchant}`
@@ -59,19 +58,29 @@ export class Chart implements OnModuleInit {
   }
 
   async #ensure(currency: string): Promise<CurrencyAccounts> {
-    const codes = CHART.map((spec) => `${spec.name}:${currency}`)
-    for (const [index, spec] of CHART.entries()) {
-      const found = await findAccounts(this.#db.pool, [codes[index]!])
-      if (found.size > 0) continue
-      const mode: BalanceMode = spec.hot ? this.#config.hotAccountMode : 'locked'
-      try {
-        await createAccount(this.#db.pool, { code: codes[index]!, type: spec.type, currency, balanceMode: mode, shards: this.#config.hotAccountShards })
-        this.#logger.log(`created ${codes[index]} (${mode})`)
-      } catch (error) {
-        if (sqlStateOf(error) !== '23505') throw error
-      }
+    return {
+      receivable: await this.#ensureAccount(CHART.receivable, currency),
+      fees: await this.#ensureAccount(CHART.fees, currency),
+      bank: await this.#ensureAccount(CHART.bank, currency),
+      pspFees: await this.#ensureAccount(CHART.pspFees, currency),
+      suspense: await this.#ensureAccount(CHART.suspense, currency),
     }
-    const found = await findAccounts(this.#db.pool, codes)
-    return Object.fromEntries(CHART.map((spec, index) => [spec.role, found.get(codes[index]!)!])) as unknown as CurrencyAccounts
+  }
+
+  async #ensureAccount(spec: Spec, currency: string): Promise<Account> {
+    const code = `${spec.name}:${currency}`
+    const existing = (await findAccounts(this.#db.pool, [code])).get(code)
+    if (existing) return existing
+    const mode: BalanceMode = spec.hot ? this.#config.hotAccountMode : 'locked'
+    try {
+      const created = await createAccount(this.#db.pool, { code, type: spec.type, currency, balanceMode: mode, shards: this.#config.hotAccountShards })
+      this.#logger.log(`created ${code} (${mode})`)
+      return created
+    } catch (error) {
+      if (sqlStateOf(error) !== '23505') throw error
+      const raced = (await findAccounts(this.#db.pool, [code])).get(code)
+      if (!raced) throw error
+      return raced
+    }
   }
 }

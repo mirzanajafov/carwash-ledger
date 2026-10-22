@@ -12,21 +12,125 @@ const E1_MAIN = '20261009-110802'
 const E1_OVERRIDES: Record<string, string> = { 'locked-async': '20261009-132846' }
 const E1_MODES = ['locked', 'locked-async', 'serializable', 'derived', 'sharded-16']
 
-function json(path: string): any {
+interface Stat {
+  median: number
+}
+
+interface Range extends Stat {
+  min: number
+  max: number
+}
+
+interface E1Line {
+  mode: string
+  connections: number
+  rate: number
+  load: { achievedPerSecond: number; latencyMs: { p99: number } }
+}
+
+interface E2Results {
+  summary: { variant: string; mode: string; concurrency: number; journalsPerSecond: Stat; p50Ms: Stat; p99Ms: Stat; roundTripsPerJournal: Stat }[]
+}
+
+interface E5Row {
+  perDay: number
+  fallback: string
+  lines: number
+  falseBreaks: number
+  faults: Record<string, { detectionRate: number }>
+  dropped: { placedRight: number; placedWrong: number; unplaced: number }
+}
+
+interface E4Rate {
+  rate: number
+  validCells: number
+  ackP50: Range | null
+  ackP99: Range | null
+  consumedP50: Range | null
+  consumedP99: Range | null
+  transactionsPerEvent: Range | null
+  walSyncsPerEvent: Range | null
+}
+
+interface E4Outage {
+  valid: boolean
+  kafkaAcceptsAfterMs: number
+  firstPublishAfterKafkaMs: number
+  peakBacklog: number
+  drainPerSecond: number
+  drainSeconds: number
+  recoveredAfterKafkaMs: number | null
+}
+
+interface E6Size {
+  size: number
+  sequencer: { perSecond: number }
+  verifyMedianMs: number
+  proofs: { bytes: number; ms: { p50: number } }
+  bytes: { audit_log: number; audit_nodes: number }
+}
+
+interface E6Increment {
+  incremental: number
+  verifyMedianMs: number
+}
+
+interface E6Trial {
+  trials: number
+  caught: number
+  named: number
+  caughtWithoutWitness: number
+}
+
+interface E7Procedure {
+  procedure: string
+  changeMs: number
+  duringChange: { requests: number; errors: number; p99: number }
+  baseline: { p99: number }
+  longestLockWaitMs: number
+  walBytes: number
+}
+
+type Counts = Record<string, number> | number | undefined
+
+interface ChaosSummary {
+  mode?: string
+  mutant: string | null
+  runs: number
+  journeys: number
+  randomKills: Counts
+  failpointKills: Counts
+  postgresKills?: number
+  kafkaKills?: number
+  runsWithViolations: number
+  firstViolatingRun: number | null
+  violationsByInvariant?: Record<string, number>
+}
+
+function json(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-function lines(path: string): any[] {
+function lines(path: string): unknown[] {
   return readFileSync(path, 'utf8')
     .split('\n')
     .filter((line) => line.trim())
-    .map((line) => JSON.parse(line))
+    .map((line): unknown => JSON.parse(line))
+}
+
+function latest(dir: string): string {
+  const name = readdirSync(dir).sort().at(-1)
+  if (name === undefined) throw new Error(`${dir} has no results`)
+  return name
 }
 
 function median(xs: number[]): number {
   const sorted = [...xs].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+  const upper = sorted[mid]
+  const lower = sorted.length % 2 ? upper : sorted[mid - 1]
+  if (lower === undefined || upper === undefined) throw new Error('there is no median of nothing')
+  return sorted.length % 2 ? upper : (lower + upper) / 2
 }
 
 function round(x: number, digits = 1): number {
@@ -45,7 +149,7 @@ interface E1Cell {
 function e1() {
   const cells = new Map<string, E1Cell>()
   const take = (dir: string, only?: string) => {
-    for (const cell of lines(join(BENCH, 'e1', dir, 'cells.jsonl'))) {
+    for (const cell of lines(join(BENCH, 'e1', dir, 'cells.jsonl')) as E1Line[]) {
       if (!E1_MODES.includes(cell.mode) || (only && cell.mode !== only)) continue
       if (!only && E1_OVERRIDES[cell.mode]) continue
       const key = `${cell.mode}:${cell.connections}:${cell.rate}`
@@ -69,9 +173,8 @@ function e1() {
 }
 
 function e2() {
-  const dir = readdirSync(join(BENCH, 'e2')).sort().at(-1)!
-  const result = json(join(BENCH, 'e2', dir, 'results.json'))
-  const rows = (result.summary as any[]).map((s) => ({
+  const dir = latest(join(BENCH, 'e2'))
+  const rows = (json(join(BENCH, 'e2', dir, 'results.json')) as E2Results).summary.map((s) => ({
     variant: s.variant,
     mode: s.mode,
     concurrency: s.concurrency,
@@ -84,13 +187,13 @@ function e2() {
 }
 
 function e5() {
-  const dir = readdirSync(RECON).sort().at(-1)!
-  const rows = (json(join(RECON, dir, 'summary.json')) as any[]).map((r) => ({
+  const dir = latest(RECON)
+  const rows = (json(join(RECON, dir, 'summary.json')) as E5Row[]).map((r) => ({
     perDay: r.perDay,
     fallback: r.fallback,
     lines: r.lines,
     falseBreaks: r.falseBreaks,
-    detection: Object.fromEntries(Object.entries(r.faults as Record<string, any>).map(([name, f]) => [name, round(f.detectionRate * 100)])),
+    detection: Object.fromEntries(Object.entries(r.faults).map(([name, f]) => [name, round(f.detectionRate * 100)])),
     dropped: { right: r.dropped.placedRight, wrong: r.dropped.placedWrong, unplaced: r.dropped.unplaced },
   }))
   return { source: dir, rows }
@@ -98,12 +201,11 @@ function e5() {
 
 function e4() {
   const dirs = existsSync(join(BENCH, 'e4')) ? readdirSync(join(BENCH, 'e4')).sort() : []
-  const mode = (dir: string) => json(join(BENCH, 'e4', dir, 'run.json')).mode as string
+  const mode = (dir: string) => (json(join(BENCH, 'e4', dir, 'run.json')) as { mode: string }).mode
   const steadyDir = dirs.filter((d) => existsSync(join(BENCH, 'e4', d, 'summary.json')) && mode(d) === 'steady').at(-1)
-  const range = (r: { median: number; min: number; max: number } | null, digits = 1) =>
-    r ? { median: round(r.median, digits), min: round(r.min, digits), max: round(r.max, digits) } : null
+  const range = (r: Range | null, digits = 1) => (r ? { median: round(r.median, digits), min: round(r.min, digits), max: round(r.max, digits) } : null)
   const steady = steadyDir
-    ? (json(join(BENCH, 'e4', steadyDir, 'summary.json')) as any[]).map((r) => ({
+    ? (json(join(BENCH, 'e4', steadyDir, 'summary.json')) as E4Rate[]).map((r) => ({
         rate: r.rate,
         cells: r.validCells,
         ackP50: range(r.ackP50),
@@ -118,7 +220,7 @@ function e4() {
     .filter((d) => existsSync(join(BENCH, 'e4', d, 'outage.json')))
     .slice(-3)
     .map((d) => {
-      const o = json(join(BENCH, 'e4', d, 'outage.json'))
+      const o = json(join(BENCH, 'e4', d, 'outage.json')) as E4Outage
       return {
         dir: d,
         valid: o.valid,
@@ -136,36 +238,33 @@ function e4() {
 function e6() {
   const root = join(BENCH, 'e6')
   const dirs = existsSync(root) ? readdirSync(root).sort() : []
-  const latest = (file: string) => dirs.filter((d) => existsSync(join(root, d, file))).at(-1)
-  const scaleDir = latest('scale.json')
-  const lagDir = latest('lag.json')
-  const trialsDir = latest('trials.json')
-  const scale = scaleDir
-    ? (json(join(root, scaleDir, 'scale.json')) as any[])
-        .filter((step) => step.size)
-        .map((step) => ({
-          size: step.size,
-          sequencerPerSecond: step.sequencer.perSecond,
-          verifyS: round(step.verifyMedianMs / 1000, 2),
-          proofBytes: step.proofs.bytes,
-          proofP50Ms: round(step.proofs.ms.p50, 2),
-          auditBytesPerJournal: Math.round((step.bytes.audit_log + step.bytes.audit_nodes) / step.size),
-        }))
-    : []
-  const incremental = scaleDir
-    ? (json(join(root, scaleDir, 'scale.json')) as any[])
-        .filter((step) => step.incremental)
-        .map((step) => ({ journals: step.incremental, ms: step.verifyMedianMs }))
-    : []
-  const lag = lagDir ? json(join(root, lagDir, 'lag.json')).lagMs : null
-  const trials = trialsDir ? json(join(root, trialsDir, 'trials.json')) : null
+  const latestWith = (file: string) => dirs.filter((d) => existsSync(join(root, d, file))).at(-1)
+  const scaleDir = latestWith('scale.json')
+  const lagDir = latestWith('lag.json')
+  const trialsDir = latestWith('trials.json')
+  const steps = scaleDir ? (json(join(root, scaleDir, 'scale.json')) as (E6Size | E6Increment)[]) : []
+  const scale = steps
+    .flatMap((step) => ('size' in step && step.size ? [step] : []))
+    .map((step) => ({
+      size: step.size,
+      sequencerPerSecond: step.sequencer.perSecond,
+      verifyS: round(step.verifyMedianMs / 1000, 2),
+      proofBytes: step.proofs.bytes,
+      proofP50Ms: round(step.proofs.ms.p50, 2),
+      auditBytesPerJournal: Math.round((step.bytes.audit_log + step.bytes.audit_nodes) / step.size),
+    }))
+  const incremental = steps
+    .flatMap((step) => ('incremental' in step && step.incremental ? [step] : []))
+    .map((step) => ({ journals: step.incremental, ms: step.verifyMedianMs }))
+  const lag = lagDir ? (json(join(root, lagDir, 'lag.json')) as { lagMs: { p50: number; p99: number; max: number } }).lagMs : null
+  const trials = trialsDir ? (json(join(root, trialsDir, 'trials.json')) as { result: Record<string, E6Trial> }) : null
   return {
     source: [scaleDir, lagDir, trialsDir].filter(Boolean),
     scale,
     incremental,
     lag: lag ? { rate: 200, p50: Math.round(lag.p50), p99: Math.round(lag.p99), max: Math.round(lag.max) } : null,
     trials: trials
-      ? Object.entries(trials.result as Record<string, any>)
+      ? Object.entries(trials.result)
           .map(([key, row]) => ({
             key,
             trials: row.trials,
@@ -185,7 +284,11 @@ function e7() {
         .sort()
         .filter((d) => existsSync(join(root, d, 'summary.json')))
     : []
-  const runs = dirs.map((dir) => ({ dir, seed: json(join(root, dir, 'seed.json')), summary: json(join(root, dir, 'summary.json')) as any[] }))
+  const runs = dirs.map((dir) => ({
+    dir,
+    seed: json(join(root, dir, 'seed.json')) as { entries: number },
+    summary: json(join(root, dir, 'summary.json')) as E7Procedure[],
+  }))
   const biggest = runs.sort((a, b) => b.seed.entries - a.seed.entries)[0]
   if (!biggest) return { source: null, entries: 0, rows: [] }
   return {
@@ -206,7 +309,12 @@ function e7() {
 
 function tracked(dir: string): Set<string> {
   const files = execFileSync('git', ['ls-files', '--', dir], { cwd: ROOT, encoding: 'utf8' }).split('\n')
-  return new Set(files.filter(Boolean).map((file) => file.slice(dir.length + 1).split('/')[0]!))
+  return new Set(
+    files.filter(Boolean).map((file) => {
+      const [top = ''] = file.slice(dir.length + 1).split('/')
+      return top
+    }),
+  )
 }
 
 function chaos() {
@@ -216,9 +324,8 @@ function chaos() {
     if (!committed.has(dir)) continue
     const file = join(CHAOS, dir, 'summary.json')
     if (!existsSync(file)) continue
-    const s = json(file)
-    const sum = (counts: Record<string, number> | number | undefined): number =>
-      typeof counts === 'number' ? counts : Object.values(counts ?? {}).reduce((a, b) => a + b, 0)
+    const s = json(file) as ChaosSummary
+    const sum = (counts: Counts): number => (typeof counts === 'number' ? counts : Object.values(counts ?? {}).reduce((a, b) => a + b, 0))
     runs.push({
       dir,
       mode: s.mode ?? 'ledger',

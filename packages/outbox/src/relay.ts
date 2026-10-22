@@ -128,7 +128,7 @@ export class Relay {
         if (next.waitMs > 0) await sleep(next.waitMs, undefined, { signal }).catch(() => undefined)
       } catch (error) {
         failures++
-        if (failures === 1 || failures % 50 === 0) this.#log(`relay: ${(error as Error).message}`)
+        if (failures === 1 || failures % 50 === 0) this.#log(`relay: ${error instanceof Error ? error.message : String(error)}`)
         await sleep(Math.min(2000, 50 * 2 ** Math.min(failures, 6)), undefined, { signal }).catch(() => undefined)
       }
     }

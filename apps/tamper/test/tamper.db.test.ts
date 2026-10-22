@@ -17,7 +17,7 @@ let db: TestDatabase
 let app: pg.Pool
 let admin: pg.Pool
 let dirs: string[] = []
-let servers: Server[] = []
+const servers: Server[] = []
 let witness: Witness
 let stateDir: string
 
@@ -39,7 +39,7 @@ function client(base: string, token = 'tamper-token') {
       headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
     })
-    return { status: response.status, body: (await response.json()) as any }
+    return { status: response.status, body: await response.json() }
   }
 }
 
@@ -78,14 +78,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const server of servers) server.close()
-  await db?.drop()
+  await db.drop()
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
 })
 
 describe('the tamper service', () => {
   it('tampers with one witnessed journal at a time, survives a restart, and restores it so that verification is clean again', async () => {
-    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.5 }), 'tamper-token')))
-    expect((await client(`http://127.0.0.1:${(servers.at(-1)!.address() as AddressInfo).port}`, 'nope')('GET', '/v1/tamper')).status).toBe(401)
+    const base = await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.5 }), 'tamper-token'))
+    const call = client(base)
+    expect((await client(base, 'nope')('GET', '/v1/tamper')).status).toBe(401)
     expect(await call('GET', '/v1/tamper')).toEqual({ status: 200, body: { tamper: null } })
     expect((await call('POST', '/v1/tamper', { class: 4 })).status).toBe(400)
 

@@ -1,4 +1,4 @@
-import { inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, EXAMPLES, type Check, type Finding } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -243,12 +243,13 @@ const MARGIN = 300
 
 export async function checkPaymentsIn(client: pg.ClientBase, options: PaymentChecks = {}): Promise<PaymentChecksRun> {
   const window = Math.max(0, Math.floor(options.keyWindowSeconds ?? DAY) - MARGIN)
-  const { rows } = await client.query<{ snapshot: string; taken_at: Date; resumable: boolean }>(
-    `SELECT pg_current_snapshot()::text AS snapshot, now() AS taken_at,
-            coalesce(pg_snapshot_xmax($1::pg_snapshot) <= pg_snapshot_xmax(pg_current_snapshot()), false) AS resumable`,
-    [options.since?.snapshot ?? null],
+  const now = firstRow(
+    await client.query<{ snapshot: string; taken_at: Date; resumable: boolean }>(
+      `SELECT pg_current_snapshot()::text AS snapshot, now() AS taken_at,
+              coalesce(pg_snapshot_xmax($1::pg_snapshot) <= pg_snapshot_xmax(pg_current_snapshot()), false) AS resumable`,
+      [options.since?.snapshot ?? null],
+    ),
   )
-  const now = rows[0]!
   const since = now.resumable ? options.since : undefined
   const scope: Scope = since ? { sql: TOUCHED_PAYMENTS, params: [since.snapshot] } : { sql: ALL_PAYMENTS, params: [] }
   const looked = await client.query<{ payments: number }>(`SELECT count(*)::int AS payments FROM (${scope.sql}) AS s`, scope.params)
@@ -266,7 +267,7 @@ export async function checkPaymentsIn(client: pg.ClientBase, options: PaymentChe
       { id: 'S6', description: "replaying each merchant's entries in journal order, the payable covers every payout", ...s6 },
     ],
     since,
-    payments: looked.rows[0]!.payments,
+    payments: firstRow(looked).payments,
     entries,
     base: s3.count === 0 && s6.count === 0 ? { snapshot: now.snapshot, takenAt: now.taken_at, merchants } : undefined,
   }
@@ -339,7 +340,7 @@ interface PspOperation {
 
 interface LedgerAttempt {
   id: string
-  kind: string
+  kind: 'capture' | 'refund' | 'payout'
   status: string
   amount: string
   operation: string | null
@@ -362,8 +363,8 @@ const LEDGER_MONEY = `${MONEY}
   FROM money
   GROUP BY external_ref`
 
-const JOURNAL_PREFIX: Record<string, string> = { capture: 'capture:', refund: 'refund:', payout: 'payout:' }
-const DID: Record<string, string> = { capture: 'captured', refund: 'refunded' }
+const JOURNAL_PREFIX: Record<LedgerAttempt['kind'], string> = { capture: 'capture:', refund: 'refund:', payout: 'payout:' }
+const DID: Record<'capture' | 'refund', string> = { capture: 'captured', refund: 'refunded' }
 
 async function readOperations(psp: pg.Pool | pg.ClientBase): Promise<Map<string, PspOperation>> {
   const { rows } = await psp.query<PspOperation>(PSP_OPERATIONS)
@@ -393,7 +394,7 @@ export function comparePsp(
       found.push(`the ledger has ${attempt.kind} ${attempt.id} ${attempt.status}, the PSP has no operation for it`)
       continue
     }
-    const ref = JOURNAL_PREFIX[attempt.kind]! + attempt.parent
+    const ref = JOURNAL_PREFIX[attempt.kind] + attempt.parent
     const journal = money.get(ref)
     if (attempt.kind === 'payout') {
       const reversal = money.get(`payout-reversal:${attempt.parent}`)

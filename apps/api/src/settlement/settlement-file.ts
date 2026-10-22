@@ -1,4 +1,4 @@
-import type { FileLine, Kind } from '@carwash/recon'
+import type { FileLine } from '@carwash/recon'
 
 export interface ParsedFile {
   id: string
@@ -20,14 +20,14 @@ function integer(value: string | undefined, what: string): bigint {
 }
 
 export function parseSettlementFile(csv: string): ParsedFile {
-  const rows = csv.replace(/\r\n/g, '\n').trimEnd().split('\n')
-  if (rows[0] !== HEAD || rows[2] !== COLUMNS) throw new Error('settlement file: unexpected header')
-  const [id, day, currency, count, gross, fee, net] = rows[1]!.split(',')
-  if (!id || !/^[A-Z]{3}$/.test(currency ?? '')) throw new Error('settlement file: bad header record')
+  const [head, record, columns, ...rows] = csv.replace(/\r\n/g, '\n').trimEnd().split('\n')
+  if (head !== HEAD || record === undefined || columns !== COLUMNS) throw new Error('settlement file: unexpected header')
+  const [id, day, currency, count, gross, fee, net] = record.split(',')
+  if (!id || currency === undefined || !/^[A-Z]{3}$/.test(currency)) throw new Error('settlement file: bad header record')
   const dayNumber = Number(integer(day, 'day'))
   const lines: FileLine[] = []
   const operatedAt: Date[] = []
-  for (const row of rows.slice(3)) {
+  for (const row of rows) {
     const cells = row.split(',')
     if (cells.length !== 8) throw new Error(`settlement file: line "${row}" has ${cells.length} fields`)
     const [line, operation, reference, kind, lineGross, lineFee, lineNet, at] = cells as [string, string, string, string, string, string, string, string]
@@ -40,7 +40,7 @@ export function parseSettlementFile(csv: string): ParsedFile {
       line: Number(integer(line, 'line')),
       operation,
       reference,
-      kind: kind as Kind,
+      kind,
       gross: integer(lineGross, 'gross'),
       fee: integer(lineFee, 'fee'),
       net: integer(lineNet, 'net'),
@@ -52,7 +52,7 @@ export function parseSettlementFile(csv: string): ParsedFile {
   const file = {
     id,
     day: dayNumber,
-    currency: currency!,
+    currency,
     lines,
     gross: integer(gross, 'gross'),
     fee: integer(fee, 'fee'),

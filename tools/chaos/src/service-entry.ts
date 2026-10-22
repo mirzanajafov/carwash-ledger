@@ -12,5 +12,7 @@ process.on('message', (message: { type?: string }) => {
 })
 process.on('disconnect', () => process.exit(0))
 
-await import(pathToFileURL(process.env.CHAOS_ENTRY!).href)
+const entry = process.env.CHAOS_ENTRY
+if (!entry) throw new Error('CHAOS_ENTRY is required')
+await import(pathToFileURL(entry).href)
 process.send?.({ type: 'ready' })

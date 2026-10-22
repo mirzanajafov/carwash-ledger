@@ -31,14 +31,11 @@ export async function seedCaptureAccounts(
      WHERE a.balance_mode <> 'derived'`,
   )
   const byCode = new Map(hot.rows.map((r) => [r.code, BigInt(r.id)]))
-  const account = (code: string, type: Account['type']): Account => ({
-    id: byCode.get(code)!,
-    code,
-    type,
-    currency: 'EUR',
-    balanceMode: mode,
-    shards,
-  })
+  const account = (code: string, type: Account['type']): Account => {
+    const id = byCode.get(code)
+    if (id === undefined) throw new Error(`account ${code} was not created`)
+    return { id, code, type, currency: 'EUR', balanceMode: mode, shards }
+  }
   return {
     hot: [account('psp_receivable', 'asset'), account('platform_fees', 'revenue')],
     merchants: merchants.rows.map((r) => BigInt(r.id)),

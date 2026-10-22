@@ -3,16 +3,8 @@ import { performance } from 'node:perf_hooks'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import {
-  AccountRegistry,
-  PgCtePoster,
-  pgAccountLoader,
-  readBalance,
-  RetriesExhaustedError,
-  takeSnapshots,
-  type Account,
-  type BalanceMode,
-} from '@carwash/ledger'
+import { AccountRegistry, PgCtePoster, pgAccountLoader, readBalance, RetriesExhaustedError, takeSnapshots, type BalanceMode } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate } from '@carwash/testkit'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
@@ -98,7 +90,9 @@ function merchantPicker(seed: number): () => number {
     let hi = merchantCount - 1
     while (lo < hi) {
       const mid = (lo + hi) >> 1
-      if (cdf[mid]! < target) lo = mid + 1
+      const weight = cdf[mid]
+      if (weight === undefined) throw new Error(`there is no cumulative weight at ${mid}`)
+      if (weight < target) lo = mid + 1
       else hi = mid
     }
     return lo
@@ -110,7 +104,8 @@ async function databaseStats(admin: pg.Pool, name: string): Promise<{ deadlocks:
     'SELECT deadlocks::text, xact_rollback::text FROM pg_stat_database WHERE datname = $1',
     [name],
   )
-  return { deadlocks: Number(result.rows[0]!.deadlocks), rollbacks: Number(result.rows[0]!.xact_rollback) }
+  const row = firstRow(result)
+  return { deadlocks: Number(row.deadlocks), rollbacks: Number(row.xact_rollback) }
 }
 
 async function runCell(spec: ModeSpec, connections: number, rate: number, repeat: number): Promise<Cell> {
@@ -126,11 +121,11 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     await registry.resolve([...hot.map((a) => a.id), ...merchants])
     const poster = new PgCtePoster(app, registry)
     const pick = merchantPicker(baseSeed * 7919 + repeat)
-    const [receivable, fees] = hot as [Account, Account]
+    const [receivable, fees] = hot
 
     let attempts = 0
     let posted = 0
-    let running = true
+    const stop = new AbortController()
     const reads: number[] = []
     const readLog: { at: number; ms: number }[] = []
     const snapshots: number[] = []
@@ -142,7 +137,7 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     }
 
     const reader = (async () => {
-      while (running) {
+      while (!stop.signal.aborted) {
         for (const account of hot) {
           const started = performance.now()
           await readBalance(side, account)
@@ -155,7 +150,7 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
     })()
     const snapshotter = (async () => {
       if (!spec.snapshots) return
-      while (running) {
+      while (!stop.signal.aborted) {
         await sleep(snapshotEvery)
         const started = performance.now()
         await takeSnapshots(side)
@@ -171,7 +166,9 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
       seed: baseSeed * 104729 + repeat * 1009 + rate,
       maxInFlight: Math.max(1000, rate * 2),
       task: async (index) => {
-        const merchant = merchants[pick()]!
+        const picked = pick()
+        const merchant = merchants[picked]
+        if (merchant === undefined) throw new Error(`there is no merchant ${picked}`)
         const gross = 500n + BigInt(index % 3000)
         const fee = gross / 50n + 10n
         try {
@@ -192,7 +189,7 @@ async function runCell(spec: ModeSpec, connections: number, rate: number, repeat
         }
       },
     })
-    running = false
+    stop.abort()
     await Promise.all([reader, snapshotter])
     if (holder) {
       await holder.query('ROLLBACK')

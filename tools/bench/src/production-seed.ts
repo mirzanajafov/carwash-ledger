@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { sequenceBatch, treeSize } from '@carwash/audit-pg'
 import type { WitnessView } from '@carwash/invariants'
 import { createAccount, type Account } from '@carwash/ledger'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import { signCopies } from '@carwash/testkit'
 import type pg from 'pg'
 
@@ -236,12 +236,14 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
      RETURNING id::text, account_id::text AS account`,
     [accounts.merchants.map((m) => m.code), accounts.merchants.map((m) => m.account.id.toString())],
   )
-  const { rows: clients } = await admin.query<{ client: string; admin: string }>(
-    `WITH c AS (
-       INSERT INTO api_clients (name, key_hash, scope) VALUES ('traffic', $1, 'client'), ('admin', $2, 'admin') RETURNING id, scope
-     )
-     SELECT max(id) FILTER (WHERE scope = 'client')::text AS client, max(id) FILTER (WHERE scope = 'admin')::text AS admin FROM c`,
-    [randomBytes(32), randomBytes(32)],
+  const clients = firstRow(
+    await admin.query<{ client: string; admin: string }>(
+      `WITH c AS (
+         INSERT INTO api_clients (name, key_hash, scope) VALUES ('traffic', $1, 'client'), ('admin', $2, 'admin') RETURNING id, scope
+       )
+       SELECT max(id) FILTER (WHERE scope = 'client')::text AS client, max(id) FILTER (WHERE scope = 'admin')::text AS admin FROM c`,
+      [randomBytes(32), randomBytes(32)],
+    ),
   )
   const payments = Math.round(shape.days * shape.paymentsPerDay)
   const spacing = 86_400 / shape.paymentsPerDay
@@ -253,7 +255,7 @@ export async function seedProductionLedger(admin: pg.Pool, app: pg.Pool, shape: 
     receivable: accounts.receivable.id.toString(),
     fees: accounts.fees.id.toString(),
     bank: accounts.bank.id.toString(),
-    ...clients[0]!,
+    ...clients,
   }
   while (traffic.next < payments) {
     const count = Math.min(BATCH, payments - traffic.next)

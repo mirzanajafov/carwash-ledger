@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Faults, NO_FAULTS, parseFaultPlan, parseToken, parseWeather } from '../src/faults.ts'
+import { Faults, NO_FAULTS, parseFaultPlan, parseToken, parseWeather, type TokenEffect } from '../src/faults.ts'
 
 describe('parseToken', () => {
   it('reads every kind of test token and rejects anything else', () => {
@@ -18,7 +18,7 @@ describe('parseToken', () => {
 describe('Faults', () => {
   it('fails a fail_once operation only the first time its key is seen', () => {
     const faults = new Faults()
-    const token = parseToken('tok_fail_once_capture')!
+    const token: TokenEffect = { kind: 'fail_once', operation: 'capture' }
     expect(faults.behaviour('k1', 'capture', token).fail).toBe(true)
     expect(faults.behaviour('k1', 'capture', token).fail).toBe(false)
     expect(faults.behaviour('k2', 'capture', token).fail).toBe(true)
@@ -27,18 +27,18 @@ describe('Faults', () => {
 
   it('applies a token only to the operation it names', () => {
     const faults = new Faults()
-    const token = parseToken('tok_timeout_after_capture')!
+    const token: TokenEffect = { kind: 'timeout_after', operation: 'capture' }
     expect(faults.behaviour('a', 'capture', token).afterCommit).toBe('hang')
     expect(faults.behaviour('b', 'authorize', token).afterCommit).toBe('answer')
-    expect(faults.behaviour('c', 'authorize', parseToken('tok_decline')!).decline).toBe(true)
-    expect(faults.behaviour('d', 'capture', parseToken('tok_decline')!).decline).toBe(false)
-    expect(faults.behaviour('e', 'capture', parseToken('tok_wrong_amount_capture')!).wrongAmount).toBe(true)
-    expect(faults.behaviour('f', 'refund', parseToken('tok_wrong_amount_capture')!).wrongAmount).toBe(false)
+    expect(faults.behaviour('c', 'authorize', { kind: 'decline' }).decline).toBe(true)
+    expect(faults.behaviour('d', 'capture', { kind: 'decline' }).decline).toBe(false)
+    expect(faults.behaviour('e', 'capture', { kind: 'wrong_amount', operation: 'capture' }).wrongAmount).toBe(true)
+    expect(faults.behaviour('f', 'refund', { kind: 'wrong_amount', operation: 'capture' }).wrongAmount).toBe(false)
   })
 
   it('declines authorizations and payouts from the plan, never captures or refunds', () => {
     const faults = new Faults(parseFaultPlan({ decline: 1, wrongAmount: 1 }))
-    const ok = parseToken('tok_ok')!
+    const ok: TokenEffect = { kind: 'ok' }
     expect(faults.behaviour('a', 'authorize', ok)).toMatchObject({ decline: true, wrongAmount: false })
     expect(faults.behaviour('b', 'payout', ok)).toMatchObject({ decline: true, wrongAmount: true })
     expect(faults.behaviour('c', 'capture', ok)).toMatchObject({ decline: false, wrongAmount: true })
@@ -47,7 +47,7 @@ describe('Faults', () => {
 
   it('draws the same faults for the same seed and key whatever else was asked in between', () => {
     const plan = parseFaultPlan({ seed: 7, fail: 0.3, slow: 0.3, timeoutAfterCommit: 0.3, webhook: { duplicate: 0.3, drop: 0.3 } })
-    const ok = parseToken('tok_ok')!
+    const ok: TokenEffect = { kind: 'ok' }
     const first = new Faults(plan)
     const second = new Faults(plan)
     for (let i = 0; i < 50; i++) second.behaviour(`noise-${i}`, 'authorize', ok)

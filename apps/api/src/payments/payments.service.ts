@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { sqlStateOf } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import type { ApiClientIdentity } from '../auth/api-keys.ts'
 import { Database } from '../db/database.ts'
 import { ApiError, notFound } from '../http/api-error.ts'
@@ -55,7 +56,7 @@ export class PaymentsService {
            VALUES ($1, $2, $3, $4, $5::capture_mode, $6) RETURNING id`,
           [owned.clientId, merchant.id, input.amount, input.currency, input.capture, input.token],
         )
-        const paymentId = inserted.rows[0]!.id
+        const paymentId = firstRow(inserted).id
         await client.query(`INSERT INTO attempts (kind, payment_id, amount, currency) VALUES ('authorize', $1, $2, $3)`, [
           paymentId,
           input.amount,
@@ -92,16 +93,18 @@ export class PaymentsService {
       await this.#db.transaction(async (client) => {
         const payment = this.#visible(await loadPayment(client, paymentId, true), caller, paymentId)
         if (payment.status !== 'captured') throw new ApiError(409, 'payment_not_refundable', `payment ${payment.id} is ${payment.status}`)
-        const { rows } = await client.query<{ pending: string }>(
-          `SELECT coalesce(sum(amount), 0)::text AS pending FROM refunds WHERE payment_id = $1 AND status = 'pending'`,
-          [payment.id],
+        const { pending } = firstRow(
+          await client.query<{ pending: string }>(
+            `SELECT coalesce(sum(amount), 0)::text AS pending FROM refunds WHERE payment_id = $1 AND status = 'pending'`,
+            [payment.id],
+          ),
         )
-        const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - BigInt(rows[0]!.pending)
+        const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - BigInt(pending)
         if (BigInt(amount) > available) {
           throw new ApiError(409, 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
         }
         const inserted = await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [payment.id, amount])
-        const refundId = inserted.rows[0]!.id
+        const refundId = firstRow(inserted).id
         await client.query(`INSERT INTO attempts (kind, payment_id, refund_id, amount, currency) VALUES ('refund', $1, $2, $3, $4)`, [
           payment.id,
           refundId,

@@ -9,7 +9,7 @@ import { ClientLedger, type Op } from './client.ts'
 import { compareWithClient, unsettled } from './compare.ts'
 import type { EntrySpec, FromWorker, Outcome } from './messages.ts'
 import { crashPostgres, holdToxic } from './outages.ts'
-import { fee, planRun, TOXIC_KINDS, type Fault, type Journey } from './plan.ts'
+import { fee, planRun, type Fault, type Journey, type ToxicKind } from './plan.ts'
 import type { LocalPostgres } from './postgres.ts'
 import { mulberry32 } from './random.ts'
 import type { Toxiproxy } from './toxiproxy.ts'
@@ -60,7 +60,7 @@ export interface LedgerReport {
   workerStarts: number
   crashes: number
   postgres: { kills: number; recoveryMs: number[] }
-  toxics: Record<string, number>
+  toxics: Record<ToxicKind, number>
   snapshots: { taken: number; errors: number }
   checks: { periodic: number; skipped: number }
   harnessErrors: string[]
@@ -77,10 +77,12 @@ function withPort(url: string, port: number): string {
 }
 
 function captureEntries(journey: Journey, receivable: Account, fees: Account, merchants: Account[]): EntrySpec[] {
+  const merchant = merchants[journey.merchant]
+  if (merchant === undefined) throw new Error(`there is no merchant ${journey.merchant} for ${journey.ref}`)
   const cut = fee(journey.gross)
   return [
     { accountId: receivable.id.toString(), amount: journey.gross.toString() },
-    { accountId: merchants[journey.merchant]!.id.toString(), amount: (-(journey.gross - cut)).toString() },
+    { accountId: merchant.id.toString(), amount: (-(journey.gross - cut)).toString() },
     { accountId: fees.id.toString(), amount: (-cut).toString() },
   ]
 }
@@ -110,7 +112,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     workerStarts: 0,
     crashes: 0,
     postgres: { kills: 0, recoveryMs: [] },
-    toxics: Object.fromEntries(TOXIC_KINDS.map((k) => [k, 0])),
+    toxics: { latency: 0, timeout: 0, reset_peer: 0, limit_data: 0, down: 0 },
     snapshots: { taken: 0, errors: 0 },
     checks: { periodic: 0, skipped: 0 },
     harnessErrors: [],
@@ -154,7 +156,8 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     const events: WorkerEvents = {
       outcome: (ref: string, outcome: Outcome) => {
         if (client.record(ref, outcome, now()) !== 'acknowledged') return
-        const op = client.ops.get(ref)!
+        const op = client.ops.get(ref)
+        if (op === undefined) throw new Error(`op ${ref} was acknowledged but the client ledger has no such op`)
         if (op.kind !== 'capture' || !journeys.get(ref)?.reverse) return
         client.add({
           ref: `rev:${ref}`,
@@ -225,26 +228,27 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
     }
 
-    let postgresBusy = false
+    const crashing = new Set<'postgres'>()
     let toxicCount = 0
     const applyFault = async (fault: Fault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
-          const worker = fault.worker === 'snapshotter' ? snapshotter : posters[fault.index % posters.length]!
+          const worker = fault.worker === 'snapshotter' ? snapshotter : posters[fault.index % posters.length]
+          if (worker === undefined) throw new Error(`there is no poster ${fault.index % posters.length}`)
           if (!worker.alive) return
           worker.kill()
           report.kills.random++
         } else if (fault.kind === 'postgres') {
-          if (postgresBusy) return
-          postgresBusy = true
+          if (crashing.has('postgres')) return
+          crashing.add('postgres')
           try {
             report.postgres.kills++
             report.postgres.recoveryMs.push(await crashPostgres(postgres, fault.downMs))
           } finally {
-            postgresBusy = false
+            crashing.delete('postgres')
           }
         } else {
-          report.toxics[fault.toxic]!++
+          report.toxics[fault.toxic]++
           await holdToxic(toxiproxy, fault.proxy, fault.toxic, fault.lastsMs, `${fault.toxic}-${toxicCount++}`, mulberry32(seed * 7919 + index))
         }
       } catch (error) {
@@ -273,15 +277,12 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     for (;;) {
       const t = now()
       if (settleStarted === undefined) {
-        while (nextJourney < plan.journeys.length && plan.journeys[nextJourney]!.at <= t) {
-          const journey = plan.journeys[nextJourney++]!
+        for (let journey = plan.journeys[nextJourney]; journey !== undefined && journey.at <= t; journey = plan.journeys[++nextJourney]) {
           client.add({ ref: journey.ref, kind: 'capture', entries: captureEntries(journey, receivable, fees, merchants), retryAt: t })
           report.captures++
         }
-        while (nextFault < plan.faults.length && plan.faults[nextFault]!.at <= t) {
-          faultTasks.push(applyFault(plan.faults[nextFault]!, nextFault))
-          nextFault++
-        }
+        for (let fault = plan.faults[nextFault]; fault !== undefined && fault.at <= t; fault = plan.faults[++nextFault])
+          faultTasks.push(applyFault(fault, nextFault))
         if (t >= options.durationMs) {
           await Promise.all(faultTasks)
           await toxiproxy.reset()
@@ -297,7 +298,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
         }
       }
       for (const op of client.due(t)) dispatch(op)
-      if (!checking && postgres.running && !postgresBusy && t - lastCheck >= options.checkEveryMs) {
+      if (!checking && postgres.running && !crashing.has('postgres') && t - lastCheck >= options.checkEveryMs) {
         lastCheck = t
         checking = true
         void periodicCheck()
@@ -312,7 +313,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
       await sleep(5)
     }
-    report.settleMs = Math.round(now() - settleStarted!)
+    report.settleMs = Math.round(now() - settleStarted)
     report.outcomes = { ...client.stats }
 
     stopping = true
@@ -329,7 +330,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
   } finally {
     stopping = true
     await Promise.all(workers.map((w) => w.stop())).catch(() => undefined)
-    await db.drop().catch((error) => log(`drop failed: ${String(error)}`))
+    await db.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
   }
 }
 

@@ -5,8 +5,7 @@ export interface Config {
   databaseUrl: string
   apiKey: string
   adminKey: string
-  webhookUrl: string | undefined
-  webhookSecret: string | undefined
+  webhook: { url: string; secret: string } | undefined
   authorizationTtlSeconds: number
   idempotencyWindowSeconds: number
   hangMs: number
@@ -31,16 +30,15 @@ function integer(env: NodeJS.ProcessEnv, name: string, fallback: number): number
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
-  const webhookUrl = env.PSP_WEBHOOK_URL || undefined
-  const webhookSecret = env.PSP_WEBHOOK_SECRET || undefined
-  if (webhookUrl && !webhookSecret) throw new Error('PSP_WEBHOOK_SECRET is required when PSP_WEBHOOK_URL is set')
+  const url = env.PSP_WEBHOOK_URL || undefined
+  const secret = env.PSP_WEBHOOK_SECRET || undefined
+  if (url && !secret) throw new Error('PSP_WEBHOOK_SECRET is required when PSP_WEBHOOK_URL is set')
   return {
     port: integer(env, 'PSP_PORT', 3142),
     databaseUrl: required(env, 'PSP_DATABASE_URL'),
     apiKey: required(env, 'PSP_API_KEY'),
     adminKey: required(env, 'PSP_ADMIN_KEY'),
-    webhookUrl,
-    webhookSecret,
+    webhook: url && secret ? { url, secret } : undefined,
     authorizationTtlSeconds: integer(env, 'PSP_AUTHORIZATION_TTL_SECONDS', 7 * 24 * 3600),
     idempotencyWindowSeconds: integer(env, 'PSP_IDEMPOTENCY_WINDOW_SECONDS', 24 * 3600),
     hangMs: integer(env, 'PSP_HANG_MS', 10_000),

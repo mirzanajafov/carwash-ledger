@@ -56,18 +56,22 @@ export class EventConsumers implements OnApplicationBootstrap, OnModuleDestroy {
     const kafka = kafkaClient({ brokers, clientId: 'carwash-consumers' })
     for (let attempt = 1; !this.#stop.signal.aborted; attempt++) {
       try {
-        await ensureTopics(kafka, topicSpecs(prefix))
-        for (const spec of CONSUMERS.slice(this.#consumers.length)) {
-          if (this.#stop.signal.aborted) return
-          const consumer = new EventConsumer(kafka, this.#db.pool, spec, { topicPrefix: prefix, batchSize: 200 }, (message) => this.#logger.warn(message))
-          await consumer.start()
-          this.#consumers.push(consumer)
-        }
+        await this.#startConsumers(kafka, prefix)
         return
       } catch (error) {
-        if (attempt === 1 || attempt % 30 === 0) this.#logger.warn(`cannot start the consumers yet: ${(error as Error).message}`)
+        if (attempt === 1 || attempt % 30 === 0) this.#logger.warn(`cannot start the consumers yet: ${error instanceof Error ? error.message : String(error)}`)
         await sleep(Math.min(5000, 250 * attempt), undefined, { signal: this.#stop.signal }).catch(() => undefined)
       }
+    }
+  }
+
+  async #startConsumers(kafka: ReturnType<typeof kafkaClient>, prefix: string): Promise<void> {
+    await ensureTopics(kafka, topicSpecs(prefix))
+    for (const spec of CONSUMERS.slice(this.#consumers.length)) {
+      if (this.#stop.signal.aborted) return
+      const consumer = new EventConsumer(kafka, this.#db.pool, spec, { topicPrefix: prefix, batchSize: 200 }, (message) => this.#logger.warn(message))
+      await consumer.start()
+      this.#consumers.push(consumer)
     }
   }
 }

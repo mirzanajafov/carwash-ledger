@@ -1,7 +1,7 @@
 import { checkAgainstPsp, checkLedger, checkPayments, violations } from '@carwash/invariants'
 import { NO_FAULTS } from '@carwash/psp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { startStack, type Stack } from './support.ts'
+import { count, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 
@@ -24,7 +24,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await stack?.close()
+  await stack.close()
 })
 
 describe('resolving anomalies', () => {
@@ -81,17 +81,17 @@ describe('resolving anomalies', () => {
     const payable = await stack.admin.query<{ owed: string }>(
       `SELECT (-sum(b.amount))::text AS owed FROM balances b JOIN merchants m ON m.account_id = b.account_id WHERE m.code = 'wash_2'`,
     )
-    expect(payable.rows[0]!.owed).toBe('1')
+    expect(payable.rows).toEqual([{ owed: '1' }])
     await clean()
   })
 
   it('disputes without moving any money', async () => {
     expect((await stack.call('POST', '/v1/payments', { body: pay('tok_wrong_amount_capture') })).status).toBe(502)
     const [anomaly] = (await openAnomalies()).filter((a) => a.attempt?.kind === 'capture')
-    const journals = (await stack.admin.query<{ n: number }>('SELECT count(*)::int AS n FROM journals')).rows[0]!.n
+    const journals = await count(stack.admin, 'SELECT count(*)::int AS n FROM journals')
     const disputed = await stack.call('POST', `/v1/admin/anomalies/${anomaly.id}/dispute`, { as: 'admin', key: null })
     expect(disputed.body).toMatchObject({ resolution: 'disputed', attempt: { status: 'pending' } })
-    expect((await stack.admin.query<{ n: number }>('SELECT count(*)::int AS n FROM journals')).rows[0]!.n).toBe(journals)
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals')).toBe(journals)
     expect((await openAnomalies()).find((a) => a.id === anomaly.id)).toBeUndefined()
     expect((await stack.call('POST', `/v1/admin/anomalies/${anomaly.id}/accept`, { as: 'admin', key: null })).status).toBe(409)
     const resolved = (await stack.call('GET', '/v1/admin/anomalies?state=resolved', { as: 'admin' })).body.data as any[]

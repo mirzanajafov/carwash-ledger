@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 
 export interface BackfillBatch {
@@ -40,14 +41,14 @@ export async function backfillEntryCurrency(pool: pg.Pool, options: BackfillOpti
   const duty = options.dutyCycle ?? 0.5
   if (!(duty > 0 && duty <= 1)) throw new RangeError('the duty cycle is a fraction in (0, 1]')
   const started = performance.now()
-  const { rows } = await pool.query<{ lo: string | null; hi: string | null }>('SELECT min(id)::text AS lo, max(id)::text AS hi FROM entries')
+  const { lo, hi } = firstRow(await pool.query<{ lo: string | null; hi: string | null }>('SELECT min(id)::text AS lo, max(id)::text AS hi FROM entries'))
   const result: BackfillResult = { batches: 0, updated: 0, ms: 0, workMs: 0, pausedMs: 0, through: 0n, done: false }
-  if (rows[0]!.lo === null) return { ...result, done: true }
-  const last = BigInt(rows[0]!.hi!)
-  for (let from = BigInt(rows[0]!.lo!); from <= last; from += size) {
+  if (lo === null || hi === null) return { ...result, done: true }
+  const last = BigInt(hi)
+  for (let from = BigInt(lo); from <= last; from += size) {
     if (options.signal?.aborted) break
     const pausedAt = performance.now()
-    while ((await pool.query<{ waiting: number }>(WAITING)).rows[0]!.waiting > 0 || (await options.pressure?.())) {
+    while (firstRow(await pool.query<{ waiting: number }>(WAITING)).waiting > 0 || (await options.pressure?.())) {
       if (options.signal?.aborted) break
       await sleep(100)
     }

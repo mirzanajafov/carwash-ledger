@@ -78,16 +78,15 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
       const input = { amount: amountField(body, 'amount'), currency: currencyField(body, 'currency'), destination: textField(body, 'destination') }
       return psp.execute({ key, kind: 'payout', hash, token: { kind: 'ok' }, apply: async (_client, behaviour) => psp.payout(behaviour, input) })
     }
-    const action = CHARGE_ACTION.exec(path)
-    if (!action) throw new HttpError(404, 'not_found', `no route POST ${path}`)
-    const chargeId = action[1]!
+    const [, chargeId, verb] = CHARGE_ACTION.exec(path) ?? []
+    if (chargeId === undefined) throw new HttpError(404, 'not_found', `no route POST ${path}`)
     const token = tokenEffect(await psp.chargeToken(chargeId))
     let operation: Pick<OperationRequest, 'kind' | 'apply'>
-    if (action[2] === 'capture') {
+    if (verb === 'capture') {
       onlyFields(body, ['amount'])
       const amount = optionalAmountField(body, 'amount')
       operation = { kind: 'capture', apply: (client, behaviour) => psp.capture(client, behaviour, chargeId, amount) }
-    } else if (action[2] === 'cancel') {
+    } else if (verb === 'cancel') {
       onlyFields(body, [])
       operation = { kind: 'cancel', apply: (client) => psp.cancel(client, chargeId) }
     } else {
@@ -117,7 +116,7 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
             weather = parseWeather(await readJson(request))
           } catch (error) {
             if (error instanceof HttpError) throw error
-            throw badRequest((error as Error).message)
+            throw badRequest(error instanceof Error ? error.message : String(error))
           }
           faults.setWeather(weather.label, weather.plan, weather.seconds)
         } else if (method === 'DELETE') {
@@ -133,7 +132,7 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
           faults.plan = parseFaultPlan(await readJson(request))
         } catch (error) {
           if (error instanceof HttpError) throw error
-          throw badRequest((error as Error).message)
+          throw badRequest(error instanceof Error ? error.message : String(error))
         }
       } else if (method !== 'GET') {
         throw new HttpError(405, 'method_not_allowed', `${method} is not allowed on ${path}`)
@@ -143,10 +142,10 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
 
     if (!bearerMatches(request, options.apiKey)) throw new HttpError(401, 'unauthorized', 'the API key is missing or wrong')
     if (method === 'GET') {
-      const charge = CHARGE.exec(path)
-      if (charge) return sendJson(response, 200, await psp.charge(charge[1]!))
-      const operation = OPERATION.exec(path)
-      if (operation) return sendJson(response, 200, await psp.operation(decodeURIComponent(operation[1]!)))
+      const [, chargeId] = CHARGE.exec(path) ?? []
+      if (chargeId !== undefined) return sendJson(response, 200, await psp.charge(chargeId))
+      const [, operationId] = OPERATION.exec(path) ?? []
+      if (operationId !== undefined) return sendJson(response, 200, await psp.operation(decodeURIComponent(operationId)))
       if (path === '/v1/settlements') return sendJson(response, 200, settlements.calendar())
       const settlement = SETTLEMENT.exec(path)
       if (settlement) {
@@ -176,7 +175,7 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
     handle(request, response).catch((error: unknown) => {
       if (response.headersSent || request.socket.destroyed) return
       if (error instanceof HttpError) return sendError(response, error)
-      log(`psp: ${(error as Error).stack ?? String(error)}`)
+      log(`psp: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)
       sendError(response, new HttpError(500, 'internal_error', 'internal error'))
     })
   })

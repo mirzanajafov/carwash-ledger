@@ -74,7 +74,7 @@ export function evaluate(world: World, options: EvalOptions): Evaluation {
   let falseBreaks = 0
   for (const b of breaks) {
     const subject = (b.item as LabelledItem | undefined) ?? (b.line ? world.owner.get(b.line) : undefined)
-    if (!subject || subject.fault === null) {
+    if (!subject?.fault) {
       falseBreaks++
       if (falseExamples.length < 5) falseExamples.push(`${b.class}: ${b.detail}`)
       continue
@@ -85,7 +85,8 @@ export function evaluate(world: World, options: EvalOptions): Evaluation {
   const dropped = { placedRight: 0, placedWrong: 0, unplaced: 0 }
   const placedFor = new Map<LabelledItem, LabelledItem[]>()
   for (const [line, item] of placement) {
-    const truth = world.owner.get(line)!
+    const truth = world.owner.get(line)
+    if (truth === undefined) throw new Error(`line ${line.line} of ${line.fileId} has no item in the world`)
     placedFor.set(truth, [...(placedFor.get(truth) ?? []), item])
   }
   for (const item of world.items) {

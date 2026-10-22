@@ -70,8 +70,10 @@ class Writer {
 
 export function canonicalJournal(journal: CanonicalJournal): Uint8Array {
   const entries = [...journal.entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  for (let i = 1; i < entries.length; i++) {
-    if (entries[i]!.id === entries[i - 1]!.id) throw new Error(`entry ${entries[i]!.id} appears twice in journal ${journal.id}`)
+  let previous: bigint | undefined
+  for (const { id } of entries) {
+    if (id === previous) throw new Error(`entry ${id} appears twice in journal ${journal.id}`)
+    previous = id
   }
   const out = new Writer()
   out.u8(ENCODING_VERSION)

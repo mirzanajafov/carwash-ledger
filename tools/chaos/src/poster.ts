@@ -54,7 +54,7 @@ async function post(message: Extract<ToWorker, { type: 'post' }>): Promise<Outco
 }
 
 function reply(message: FromWorker): void {
-  if (process.connected) process.send!(message)
+  if (process.connected) process.send?.(message)
 }
 
 process.on('message', (message: ToWorker) => {

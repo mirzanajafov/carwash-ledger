@@ -50,6 +50,6 @@ describe('canonicalJournal', () => {
 
   it('refuses values that do not fit and an entry listed twice', () => {
     expect(() => canonicalJournal({ ...journal, id: -1n })).toThrow(RangeError)
-    expect(() => canonicalJournal({ ...journal, entries: [...journal.entries, journal.entries[0]!] })).toThrow('appears twice')
+    expect(() => canonicalJournal({ ...journal, entries: [...journal.entries, ...journal.entries.slice(0, 1)] })).toThrow('appears twice')
   })
 })

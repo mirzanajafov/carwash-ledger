@@ -70,7 +70,7 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
     answer = await deps.pay(key, body)
   } catch (error) {
     const lostAt = at()
-    yield { kind: 'lost', at: lostAt, error: (error as Error).message }
+    yield { kind: 'lost', at: lostAt, error: error instanceof Error ? error.message : String(error) }
     for (;;) {
       if (at() > deadlineMs) {
         yield { kind: 'failed', at: at(), message: 'the API did not come back in time' }

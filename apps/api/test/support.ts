@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { createServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { applyOnce, type ConsumedEvent } from '@carwash/outbox'
+import { firstRow } from '@carwash/pg'
 import { NO_FAULTS, startPsp, type RunningPsp } from '@carwash/psp'
 import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
 import { NestFactory } from '@nestjs/core'
@@ -45,7 +46,7 @@ export interface Stack {
   admin: pg.Pool
   pspSql: pg.Pool
   clientIds: Record<keyof typeof KEYS, string>
-  call(method: string, path: string, options?: CallOptions): Promise<Reply>
+  call: (method: string, path: string, options?: CallOptions) => Promise<Reply>
   close(): Promise<void>
 }
 
@@ -134,8 +135,7 @@ export async function call(base: string, method: string, path: string, options: 
 }
 
 export async function count(pool: pg.Pool, sql: string, params: unknown[] = []): Promise<number> {
-  const { rows } = await pool.query<{ n: number }>(sql, params)
-  return rows[0]!.n
+  return firstRow(await pool.query<{ n: number }>(sql, params)).n
 }
 
 async function freePort(): Promise<number> {
@@ -155,12 +155,14 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
   const pspSql = new pg.Pool({ connectionString: pspDb.url, max: 2 })
   const clientIds = {} as Record<keyof typeof KEYS, string>
   for (const [name, key] of Object.entries(KEYS) as [keyof typeof KEYS, string][]) {
-    const { rows } = await owner.query<{ id: string }>('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text', [
-      name,
-      hashApiKey(key),
-      name === 'admin' ? 'admin' : 'client',
-    ])
-    clientIds[name] = rows[0]!.id
+    const { id } = firstRow(
+      await owner.query<{ id: string }>('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text', [
+        name,
+        hashApiKey(key),
+        name === 'admin' ? 'admin' : 'client',
+      ]),
+    )
+    clientIds[name] = id
   }
   const apiPort = await freePort()
   const psp = await startPsp(
@@ -169,8 +171,7 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
       databaseUrl: pspDb.url,
       apiKey: 'sk_test_api',
       adminKey: 'sk_test_admin',
-      webhookUrl: options.webhooks ? `http://127.0.0.1:${apiPort}/webhooks/psp` : undefined,
-      webhookSecret: options.webhooks ? WEBHOOK_SECRET : undefined,
+      webhook: options.webhooks ? { url: `http://127.0.0.1:${apiPort}/webhooks/psp`, secret: WEBHOOK_SECRET } : undefined,
       authorizationTtlSeconds: 3600,
       idempotencyWindowSeconds: 24 * 3600,
       hangMs: 1500,

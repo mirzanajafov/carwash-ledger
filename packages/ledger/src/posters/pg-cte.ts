@@ -1,5 +1,5 @@
 import { failpoint } from '@carwash/failpoints'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { pgAccountLoader, type AccountRegistry } from '../accounts.ts'
 import { InvalidJournalError } from '../errors.ts'
@@ -30,7 +30,7 @@ export async function postInTransaction(client: pg.ClientBase, registry: Account
       ...entryParams(plan),
       ...deltaParams(plan),
     ])
-    const row = result.rows[0]!
+    const row = firstRow(result)
     expectApplied(Number(row.balances), plan)
     return BigInt(row.id)
   } catch (error) {
@@ -70,7 +70,7 @@ export class PgCtePoster implements Poster {
         ...entryParams(plan),
         ...deltaParams(plan),
       ])
-      const row = result.rows[0]!
+      const row = firstRow(result)
       expectApplied(Number(row.balances), plan)
       failpoint('post.before_commit')
       await client.query('COMMIT')

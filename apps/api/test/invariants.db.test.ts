@@ -15,12 +15,12 @@ import {
   type InvariantResult,
   type PaymentBase,
 } from '@carwash/invariants'
-import { inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot } from '@carwash/pg'
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { Database } from '../src/db/database.ts'
-import { deliver, outboxEvents, startStack, type Stack } from './support.ts'
+import { count, deliver, outboxEvents, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 let settledDay: number
@@ -32,16 +32,16 @@ function pay(token: string, extra: Record<string, unknown> = {}) {
 }
 
 async function attemptOf(paymentId: string, kind: string): Promise<string> {
-  const { rows } = await stack.admin.query<{ id: string }>(
-    'SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind ORDER BY created_at DESC LIMIT 1',
-    [paymentId, kind],
-  )
-  return rows[0]!.id
+  return firstRow(
+    await stack.admin.query<{ id: string }>('SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind ORDER BY created_at DESC LIMIT 1', [
+      paymentId,
+      kind,
+    ]),
+  ).id
 }
 
 async function accountId(code: string): Promise<string> {
-  const { rows } = await stack.admin.query<{ id: string }>('SELECT id::text FROM accounts WHERE code = $1', [code])
-  return rows[0]!.id
+  return firstRow(await stack.admin.query<{ id: string }>('SELECT id::text FROM accounts WHERE code = $1', [code])).id
 }
 
 function counts(results: readonly InvariantResult[]): Partial<Record<InvariantId, number>> {
@@ -112,10 +112,10 @@ const corruptions = {
   'a payment captured without its journal': (client) =>
     client.query(`UPDATE payments SET status = 'captured', captured_amount = amount WHERE id = $1`, [payments.authorized]),
   'a refund beyond the capture': async (client) => {
-    const { rows } = await client.query<{ id: string }>(`INSERT INTO refunds (payment_id, amount, status) VALUES ($1, 1000, 'succeeded') RETURNING id`, [
-      payments.manual,
-    ])
-    await postJournal(client, `refund:${rows[0]!.id}`, [
+    const { id } = firstRow(
+      await client.query<{ id: string }>(`INSERT INTO refunds (payment_id, amount, status) VALUES ($1, 1000, 'succeeded') RETURNING id`, [payments.manual]),
+    )
+    await postJournal(client, `refund:${id}`, [
       [await accountId('psp_receivable:EUR'), -1000],
       [await accountId('merchant_payable:wash_1'), 1000],
     ])
@@ -141,18 +141,20 @@ const corruptions = {
 } satisfies Record<string, (client: pg.PoolClient) => Promise<unknown>>
 
 async function postJournal(client: pg.ClientBase, ref: string, entries: [string, number][], id?: number): Promise<string> {
-  const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO journals (id, external_ref) VALUES (coalesce($1, nextval('journals_id_seq')), $2) RETURNING id::text`,
-    [id ?? null, ref],
+  const { id: journalId } = firstRow(
+    await client.query<{ id: string }>(`INSERT INTO journals (id, external_ref) VALUES (coalesce($1, nextval('journals_id_seq')), $2) RETURNING id::text`, [
+      id ?? null,
+      ref,
+    ]),
   )
   for (const [account, amount] of entries) {
     await client.query('INSERT INTO entries (journal_id, account_id, amount, currency) SELECT $1, id, $3, currency FROM accounts WHERE id = $2', [
-      rows[0]!.id,
+      journalId,
       account,
       amount,
     ])
   }
-  return rows[0]!.id
+  return journalId
 }
 
 beforeAll(async () => {
@@ -175,11 +177,13 @@ beforeAll(async () => {
   expect((await call('POST', `/v1/settlements/${settledDay}/ingest`, { as: 'admin' })).body.outcome).toBe('ingested')
   const app = stack.app.get(Database).pool
   await deliver(app, [await outboxEvents(app)])
-  base = (await inSnapshot(stack.admin, (client) => checkPaymentsIn(client))).base!
+  const clean = await inSnapshot(stack.admin, (client) => checkPaymentsIn(client))
+  assert(clean.base)
+  base = clean.base
 })
 
 afterAll(async () => {
-  await stack?.close()
+  await stack.close()
 })
 
 describe('the payment invariants', () => {
@@ -223,6 +227,8 @@ describe('the payment invariants', () => {
       `SELECT a.id, p.status::text FROM attempts a JOIN payouts p ON p.id = a.payout_id ORDER BY a.created_at`,
     )
     expect(payouts.map((p) => p.status)).toEqual(['succeeded', 'failed'])
+    const [succeeded] = payouts
+    assert(succeeded)
     expect(await atPsp((psp) => psp.query('UPDATE operations SET amount = amount + 1 WHERE idempotency_key = $1', [capture]))).toEqual({
       S4: 1,
     })
@@ -235,7 +241,7 @@ describe('the payment invariants', () => {
         ]),
       ),
     ).toEqual({ S4: 1 })
-    expect(await atPsp((psp) => psp.query(`UPDATE operations SET status = 'declined' WHERE idempotency_key = $1`, [payouts[0]!.id]))).toEqual({ S4: 2 })
+    expect(await atPsp((psp) => psp.query(`UPDATE operations SET status = 'declined' WHERE idempotency_key = $1`, [succeeded.id]))).toEqual({ S4: 2 })
     expect(await atPsp(async () => undefined)).toEqual({ S4: 0 })
   })
 })
@@ -289,8 +295,7 @@ describe('the event invariants', () => {
 describe('the settlement invariant', () => {
   const lineOf = async (paymentId: string) => {
     const capture = await attemptOf(paymentId, 'capture')
-    const { rows } = await stack.admin.query<{ file_id: string; line: number }>('SELECT file_id, line FROM settlement_lines WHERE reference = $1', [capture])
-    return rows[0]!
+    return firstRow(await stack.admin.query<{ file_id: string; line: number }>('SELECT file_id, line FROM settlement_lines WHERE reference = $1', [capture]))
   }
 
   it('finds nothing wrong in a settled day, a refused PSP answer included', async () => {
@@ -331,9 +336,9 @@ describe('the settlement invariant', () => {
 describe('the payment invariants, continued from the last clean run', () => {
   it('check every payment the first time, then only what changed, and keep their place while something is broken', async () => {
     const audit = stack.ledgerDb.pool('ledger_audit', 2)
-    const { rows } = await stack.admin.query<{ n: number }>('SELECT count(*)::int AS n FROM payments')
+    const total = await count(stack.admin, 'SELECT count(*)::int AS n FROM payments')
     const first = await checkPaymentsIncrementally(audit)
-    expect(first).toMatchObject({ since: undefined, payments: rows[0]!.n })
+    expect(first).toMatchObject({ since: undefined, payments: total })
     const quiet = await checkPaymentsIncrementally(audit)
     expect(quiet).toMatchObject({ payments: 0, entries: 0 })
     expect(quiet.since?.snapshot).toBe(first.base?.snapshot)
@@ -392,8 +397,9 @@ describe('the payment invariants, continued from the last clean run', () => {
         [receivable, -100],
       ])
       await payout.query('BEGIN')
-      const { rows } = await payout.query<{ payable: number }>('SELECT (-sum(amount))::int AS payable FROM entries WHERE account_id = $1', [merchant])
-      const payable = rows[0]!.payable
+      const { payable } = firstRow(
+        await payout.query<{ payable: number }>('SELECT (-sum(amount))::int AS payable FROM entries WHERE account_id = $1', [merchant]),
+      )
       await postJournal(payout, `payout:${randomUUID()}`, [
         [merchant, payable],
         [bank, -payable],
