@@ -20,6 +20,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@carwash/audit": "workspace:*",
     "@carwash/pg": "workspace:*",
     "pg": "catalog:"
   },

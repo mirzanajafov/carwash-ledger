@@ -46,11 +46,10 @@ export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy 
       return run
     }
     const onProgress = async (checked: number, size: number) => {
-      this.#stop.signal.throwIfAborted()
       if (!(await this.#runs.progress(run, checked, size))) throw new Error(`run ${run.id} was taken over by another worker`)
     }
     try {
-      const { state, ...report } = await inSnapshot(this.#pool, (client) => verifyLog(client, { witness, onProgress }))
+      const { state, ...report } = await inSnapshot(this.#pool, (client) => verifyLog(client, { witness, signal: this.#stop.signal, onProgress }))
       if (await this.#runs.finish(run, { ...report, root: state?.root ?? null }))
         this.#logger.log(`run ${run.id}: ${report.journals} journals, ${report.witnessed} signed roots, ${report.findings} findings in ${report.ms.total} ms`)
       else this.#logger.warn(`run ${run.id} was taken over by another worker before it finished`)

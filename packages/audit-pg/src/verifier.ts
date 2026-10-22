@@ -1,9 +1,12 @@
 import { createPublicKey, verify } from 'node:crypto'
+import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import { chainHash, checkpointBody, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash } from '@carwash/audit'
 import type pg from 'pg'
 import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
 
 type Queryable = pg.ClientBase | pg.Pool
+
+const TURN_MS = 10
 
 export interface SignedRoot {
   size: number
@@ -38,6 +41,7 @@ export interface VerifyOptions {
   from?: VerifierState
   batch?: number
   examples?: number
+  signal?: AbortSignal
   onProgress?: (done: number, size: number) => Promise<void>
 }
 
@@ -51,7 +55,7 @@ export interface VerifyReport {
   examples: Finding[]
   firstSeq: number | null
   state: VerifierState | null
-  ms: { read: number; compute: number; total: number }
+  ms: { read: number; compute: number; yielded: number; total: number }
 }
 
 interface Row extends JournalRow {
@@ -96,6 +100,7 @@ async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number
 export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Promise<VerifyReport> {
   const started = performance.now()
   const batch = options.batch ?? 5000
+  if (!Number.isSafeInteger(batch) || batch < 1) throw new RangeError(`the batch must be a positive integer, not ${batch}`)
   const limit = options.examples ?? 20
   const examples: Finding[] = []
   let findings = 0
@@ -107,6 +112,15 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if ('seq' in finding && (exact === null || finding.seq < exact)) exact = finding.seq
     if (finding.kind === 'root' && (ranged === null || finding.after < ranged)) ranged = finding.after
   }
+  let yielded = 0
+  let turnAt = performance.now()
+  const handBack = async (work: () => Promise<unknown>) => {
+    const at = performance.now()
+    await work()
+    turnAt = performance.now()
+    yielded += turnAt - at
+  }
+  const turn = () => handBack(() => yieldToLoop(undefined, { signal: options.signal }))
   let read = 0
   const timed = async <T>(work: () => Promise<T>): Promise<T> => {
     const at = performance.now()
@@ -140,6 +154,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (!witness) return []
     const good: SignedRoot[] = []
     for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
+      if (performance.now() - turnAt >= TURN_MS) await turn()
       if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
       else report({ kind: 'signature', size: root.size })
     }
@@ -151,11 +166,13 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
   let journals = 0
   let position = start
   for (let from = start; from < size; from += batch) {
+    options.signal?.throwIfAborted()
     const to = Math.min(from + batch, size)
     const { rows } = await timed(() => db.query<Row>(ROWS, [from, to]))
     const roots = await signedRoots(from, to)
     let next = 0
     for (const row of rows) {
+      if (performance.now() - turnAt >= TURN_MS) await turn()
       const seq = Number(row.seq)
       if (seq !== position) {
         report({ kind: 'gap', seq: position, missing: seq - position })
@@ -183,8 +200,9 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
         else report({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }
-    await options.onProgress?.(to, size)
+    await handBack(async () => options.onProgress?.(to, size))
   }
+  options.signal?.throwIfAborted()
   if (position < size) {
     report({ kind: 'gap', seq: position, missing: size - position })
     broken = true
@@ -206,6 +224,6 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     examples,
     firstSeq: exact ?? ranged,
     state: broken ? null : { ...frontier.toJSON(), chain: toHex(chain), root: toHex(frontier.root()) },
-    ms: { read: Math.round(read), compute: Math.round(total - read), total: Math.round(total) },
+    ms: { read: Math.round(read), compute: Math.round(total - read - yielded), yielded: Math.round(yielded), total: Math.round(total) },
   }
 }

@@ -4,9 +4,10 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
+import { createTestDatabase, signCopies, type SignedCopies, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -298,5 +299,85 @@ describe('incremental verification', () => {
     const full = await verifyLog(app, { witness: witnessed })
     expect((await tampered(1, 20, { from: full.state! })).report.findings).toBe(0)
     expect((await tampered(1, 20)).report.findings).toBeGreaterThan(0)
+  })
+})
+
+describe('sharing the process', () => {
+  const BULK = 10_000
+  let client: pg.PoolClient
+  let stand: SignedCopies
+
+  async function measured(work: () => Promise<unknown>): Promise<{ longest: number; total: number; cpu: number }> {
+    const loop = monitorEventLoopDelay({ resolution: 1 })
+    const started = performance.now()
+    const cpu = process.cpuUsage()
+    loop.enable()
+    try {
+      await work()
+    } finally {
+      loop.disable()
+    }
+    const used = process.cpuUsage(cpu)
+    return { longest: loop.max / 1e6, total: performance.now() - started, cpu: (used.user + used.system) / 1000 }
+  }
+
+  beforeAll(async () => {
+    client = await admin.connect()
+    await client.query('BEGIN')
+    await client.query(
+      `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
+       INSERT INTO entries (journal_id, account_id, amount)
+       SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
+      [accounts[0], accounts[1], BULK],
+    )
+    let sequenced: number
+    do {
+      sequenced = await sequenceBatch(client, 1000)
+    } while (sequenced > 0)
+    await client.query('DELETE FROM audit_checkpoints')
+    stand = await signCopies(client, posted + BULK, 1)
+  })
+
+  afterAll(async () => {
+    await client.query('ROLLBACK')
+    client.release()
+  })
+
+  it('lets other work run between journals instead of hashing the whole log in one go', async () => {
+    const run = await measured(async () => {
+      expect(await verifyLog(client, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
+    })
+    expect(run.longest).toBeLessThan(run.total / 3)
+  })
+
+  it('lets other work run between signatures, and stops at the next turn when asked', async () => {
+    const whole = await measured(async () => {
+      expect(await verifyLog(client, { witness: stand, batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: stand.count, findings: 0 })
+    })
+    expect(whole.longest).toBeLessThan(whole.total / 3)
+
+    const stop = new AbortController()
+    const progress: number[] = []
+    setTimeout(() => {
+      stop.abort()
+    }, 50)
+    const stopped = await measured(async () => {
+      await expect(
+        verifyLog(client, {
+          witness: stand,
+          batch: 50_000,
+          signal: stop.signal,
+          onProgress: async (done) => {
+            progress.push(done)
+          },
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' })
+    })
+    expect(progress).toEqual([])
+    expect(stopped.cpu).toBeLessThan(whole.cpu / 4)
+  })
+
+  it('refuses a batch that would never move', async () => {
+    await expect(verifyLog(client, { batch: 0 })).rejects.toThrow(RangeError)
   })
 })
