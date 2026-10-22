@@ -38,7 +38,7 @@ async function call(method: string, path: string, options: { key?: string; body?
       'content-type': 'application/json',
       ...(options.key ? { 'idempotency-key': options.key } : {}),
     },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.body === undefined ? null : JSON.stringify(options.body),
     signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
   })
   return { status: response.status, body: await response.json(), replayed: response.headers.get('idempotent-replayed') === 'true' }

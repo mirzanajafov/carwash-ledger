@@ -6,14 +6,14 @@ export interface Op {
   kind: 'capture' | 'reversal'
   entries: EntrySpec[]
   reversesRef?: string
-  reversesId?: string
+  reversesId?: string | undefined
   journalId?: string
   acknowledged: boolean
   rejected?: string
   conflicts: string[]
   attempts: number
   inFlight: number
-  retryAt?: number
+  retryAt?: number | undefined
   lastError?: string
 }
 

@@ -1,7 +1,7 @@
 --- a/apps/api/src/payments/attempts.repository.ts
 +++ b/apps/api/src/payments/attempts.repository.ts
-@@ -67,7 +67,7 @@
- export async function resolveAttempt(client: pg.ClientBase, id: string, outcome: AttemptOutcome): Promise<boolean> {
+@@ -66,7 +66,7 @@
+ export async function resolveAttempt(client: Transaction, id: string, outcome: AttemptOutcome): Promise<boolean> {
    const updated = await client.query(
      `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
 -     WHERE id = $1 AND status = 'pending'`,
@@ -11,7 +11,7 @@
    return updated.rowCount === 1
 --- a/apps/api/src/payments/payments.repository.ts
 +++ b/apps/api/src/payments/payments.repository.ts
-@@ -79,7 +79,7 @@
+@@ -78,7 +78,7 @@
    const assignments = set.map(([column], index) => `, ${column} = $${index + 4}`).join('')
    const moved = await client.query(
      `UPDATE payments SET status = $3::payment_status, updated_at = now()${assignments}

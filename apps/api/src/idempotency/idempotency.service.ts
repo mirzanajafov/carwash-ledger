@@ -1,7 +1,6 @@
 import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
-import { firstRow } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Transaction } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
@@ -148,7 +147,7 @@ export class IdempotencyService {
     })
   }
 
-  async recordPoint(client: pg.ClientBase, owned: OwnedKey, point: string, refs: ResourceRefs): Promise<void> {
+  async recordPoint(client: Transaction, owned: OwnedKey, point: string, refs: ResourceRefs): Promise<void> {
     const recorded = await client.query(
       `UPDATE idempotency_keys
        SET recovery_point = $4, payment_id = coalesce($5, payment_id), refund_id = coalesce($6, refund_id), payout_id = coalesce($7, payout_id)
@@ -158,7 +157,7 @@ export class IdempotencyService {
     if (recorded.rowCount !== 1) throw leaseLost()
   }
 
-  async finish(client: pg.ClientBase, owned: OwnedKey, final: Final): Promise<Final> {
+  async finish(client: Transaction, owned: OwnedKey, final: Final): Promise<Final> {
     failpoint('request.before_finish')
     const finished = await client.query(
       `UPDATE idempotency_keys

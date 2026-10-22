@@ -1,4 +1,4 @@
-import { firstRow, inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -89,7 +89,7 @@ const STORED_BALANCES: readonly Check[] = [
   },
 ]
 
-async function hasEntryCurrency(client: pg.ClientBase): Promise<boolean> {
+async function hasEntryCurrency(client: Transaction): Promise<boolean> {
   const { present } = firstRow(
     await client.query<{ present: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'entries'::regclass AND attname = 'currency' AND NOT attisdropped) AS present`,
@@ -98,7 +98,7 @@ async function hasEntryCurrency(client: pg.ClientBase): Promise<boolean> {
   return present
 }
 
-export async function checkLedgerIn(client: pg.ClientBase): Promise<InvariantResult[]> {
+export async function checkLedgerIn(client: Transaction): Promise<InvariantResult[]> {
   const s1 = await collect(client, (await hasEntryCurrency(client)) ? [...JOURNALS_BALANCE, ENTRY_CURRENCY] : JOURNALS_BALANCE)
   const s2 = await collect(client, STORED_BALANCES)
   return [

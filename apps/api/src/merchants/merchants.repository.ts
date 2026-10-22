@@ -1,5 +1,4 @@
-import { firstRow, type Queryable } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
 
 export interface MerchantRow {
   id: string
@@ -16,10 +15,7 @@ export async function findMerchant(db: Queryable, code: string): Promise<Merchan
   return rows[0]
 }
 
-export async function insertMerchant(
-  client: pg.ClientBase,
-  merchant: { code: string; name: string; currency: string; accountId: bigint },
-): Promise<MerchantRow> {
+export async function insertMerchant(client: Transaction, merchant: { code: string; name: string; currency: string; accountId: bigint }): Promise<MerchantRow> {
   return firstRow(
     await client.query<MerchantRow>(`INSERT INTO merchants (code, name, currency, account_id) VALUES ($1, $2, $3, $4) RETURNING ${COLUMNS}`, [
       merchant.code,

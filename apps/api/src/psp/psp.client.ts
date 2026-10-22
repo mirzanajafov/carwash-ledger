@@ -99,7 +99,7 @@ export class PspClient {
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
           ...(key === undefined ? {} : { 'idempotency-key': key }),
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? null : JSON.stringify(body),
         signal: AbortSignal.timeout(this.#config.pspTimeoutMs),
       })
     } catch (error) {

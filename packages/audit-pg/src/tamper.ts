@@ -1,6 +1,5 @@
 import { leafHash, nodeHash, type Hash } from '@carwash/audit'
-import { firstRow } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Transaction } from '@carwash/pg'
 import { canonicalOf, SEQUENCER_LOCK, type JournalRow } from './log.ts'
 
 export type TamperClass = 1 | 2 | 3
@@ -28,7 +27,7 @@ const RECHAIN = `
   )
   UPDATE audit_log a SET chain = r.chain FROM rechained r WHERE a.seq = r.seq`
 
-async function moveCents(client: pg.ClientBase, journalId: string, cents: number): Promise<{ id: string; amount: string }[]> {
+async function moveCents(client: Transaction, journalId: string, cents: number): Promise<{ id: string; amount: string }[]> {
   const { rows } = await client.query<{ id: string; amount: string }>(
     `WITH plus AS (SELECT id FROM entries WHERE journal_id = $1 AND amount > 0 ORDER BY id LIMIT 1),
           minus AS (SELECT id FROM entries WHERE journal_id = $1 AND amount < 0 ORDER BY id LIMIT 1),
@@ -42,7 +41,7 @@ async function moveCents(client: pg.ClientBase, journalId: string, cents: number
   return rows
 }
 
-async function rewriteHashes(client: pg.ClientBase, seq: number, journalId: string): Promise<void> {
+async function rewriteHashes(client: Transaction, seq: number, journalId: string): Promise<void> {
   let hash: Hash = leafHash(canonicalOf(firstRow(await client.query<JournalRow>(JOURNAL, [journalId]))))
   await client.query('UPDATE audit_log SET leaf = $2 WHERE seq = $1', [seq, Buffer.from(hash)])
   await client.query(RECHAIN, [seq])
@@ -65,7 +64,7 @@ async function rewriteHashes(client: pg.ClientBase, seq: number, journalId: stri
   }
 }
 
-export async function tamper(client: pg.ClientBase, tamperClass: TamperClass, seq: number, cents = 100): Promise<Tampered> {
+export async function tamper(client: Transaction, tamperClass: TamperClass, seq: number, cents = 100): Promise<Tampered> {
   await client.query('SET LOCAL session_replication_role = replica')
   await client.query('SELECT pg_advisory_xact_lock($1)', [SEQUENCER_LOCK])
   const { rows } = await client.query<{ journal_id: string }>('SELECT journal_id::text FROM audit_log WHERE seq = $1', [seq])
@@ -84,7 +83,7 @@ export async function tamper(client: pg.ClientBase, tamperClass: TamperClass, se
   return { tamperClass, seq, journalId, undo: { amounts } }
 }
 
-export async function restore(client: pg.ClientBase, tampered: Tampered): Promise<void> {
+export async function restore(client: Transaction, tampered: Tampered): Promise<void> {
   await client.query('SET LOCAL session_replication_role = replica')
   await client.query('SELECT pg_advisory_xact_lock($1)', [SEQUENCER_LOCK])
   if (tampered.tamperClass === 3) {

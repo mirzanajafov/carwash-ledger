@@ -1,5 +1,5 @@
 import { failpoint } from '@carwash/failpoints'
-import { firstRow, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { pgAccountLoader, type AccountRegistry } from '../accounts.ts'
 import { InvalidJournalError } from '../errors.ts'
@@ -10,7 +10,7 @@ import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal, Poster } from '../types.ts'
 import { expectApplied, postWith } from './common.ts'
 
-async function writeJournal(client: pg.ClientBase, plan: JournalPlan): Promise<bigint> {
+async function writeJournal(client: Transaction, plan: JournalPlan): Promise<bigint> {
   if (plan.locks.length > 0) {
     await client.query(LOCK_BALANCES, lockParams(plan))
     failpoint('post.after_lock')
@@ -27,7 +27,7 @@ async function writeJournal(client: pg.ClientBase, plan: JournalPlan): Promise<b
   return BigInt(row.id)
 }
 
-export async function postInTransaction(client: pg.ClientBase, registry: AccountRegistry, input: JournalInput): Promise<bigint> {
+export async function postInTransaction(client: Transaction, registry: AccountRegistry, input: JournalInput): Promise<bigint> {
   const accounts = await registry.resolve(
     input.entries.map((e) => e.accountId),
     pgAccountLoader(client),

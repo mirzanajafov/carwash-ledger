@@ -29,9 +29,10 @@ export async function startPsp(config: Config, log?: (message: string) => void):
     idempotencyWindowSeconds: config.idempotencyWindowSeconds,
     webhooks: config.webhook !== undefined,
   })
-  const webhooks = config.webhook && new WebhookSender(pool, { ...config.webhook, log })
+  const logging = log === undefined ? {} : { log }
+  const webhooks = config.webhook && new WebhookSender(pool, { ...config.webhook, ...logging })
   const settlements = new Settlements(pool, faults, { daySeconds: config.settlementDaySeconds, feeBps: config.feeBps, feeFixed: config.feeFixed })
-  const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, log })
+  const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, ...logging })
   server.listen(config.port, '0.0.0.0')
   await once(server, 'listening')
   webhooks?.start()

@@ -12,8 +12,7 @@ import {
   type Node,
   type SubtreeSource,
 } from '@carwash/audit'
-import { firstRow, type Queryable } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
 
 export const SEQUENCER_LOCK = 7_240_300
 
@@ -86,7 +85,7 @@ export function canonicalOf(journal: JournalRow): Uint8Array {
   })
 }
 
-export async function sequenceBatch(client: pg.ClientBase, limit: number): Promise<number> {
+export async function sequenceBatch(client: Transaction, limit: number): Promise<number> {
   const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SEQUENCER_LOCK]))
   if (!locked) return 0
   const { rows: queued } = await client.query<{ journal_id: string }>('SELECT q.journal_id::text FROM audit_queue q ORDER BY q.journal_id LIMIT $1', [limit])

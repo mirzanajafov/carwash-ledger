@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessAnchor } from '@carwash/audit-pg'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { withTransaction } from '@carwash/pg'
+import { inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -36,7 +36,7 @@ function client(base: string, token = 'tamper-token') {
     const response = await fetch(`${base}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-      body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
+      body: body === undefined ? null : typeof body === 'string' ? body : JSON.stringify(body),
     })
     return { status: response.status, body: await response.json() }
   }
@@ -87,13 +87,13 @@ describe('the tamper service', () => {
 
     const tampered = await call('POST', '/v1/tamper', { class: 2 })
     expect(tampered).toMatchObject({ status: 201, body: { tamper: { tamper_class: 2, seq: 15, witnessed_size: 30 } } })
-    expect((await verifyLog(admin, { witness: anchor() })).examples).toEqual([{ kind: 'root', size: 30, after: 0 }])
+    expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).examples).toEqual([{ kind: 'root', size: 30, after: 0 }])
     expect((await call('POST', '/v1/tamper', { class: 1 })).body.error.code).toBe('already_tampered')
 
     const restarted = client(await serve(createTamperServer(new TamperService(admin), 'tamper-token')))
     expect((await restarted('GET', '/v1/tamper')).body.tamper).toMatchObject({ tamper_class: 2, seq: 15 })
     expect(await restarted('POST', '/v1/restore')).toMatchObject({ status: 200, body: { restored: { tamper_class: 2, seq: 15 } } })
-    expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
+    expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).findings).toBe(0)
     expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
   })
 
@@ -102,7 +102,7 @@ describe('the tamper service', () => {
     const done = tampers.flatMap((tamper) => (tamper.status === 'fulfilled' ? [tamper.value] : []))
     expect(done).toHaveLength(1)
     expect(tampers.flatMap((tamper) => (tamper.status === 'rejected' ? [tamper.reason] : []))).toEqual([expect.objectContaining({ code: 'already_tampered' })])
-    const leaves = (await verifyLog(admin, { witness: anchor() })).examples.filter((example) => example.kind === 'leaf')
+    const leaves = (await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).examples.filter((example) => example.kind === 'leaf')
     expect(leaves).toEqual(done.map((tamper) => ({ kind: 'leaf', seq: tamper.seq, journalId: tamper.journal_id })))
   })
 
@@ -122,13 +122,13 @@ describe('the tamper service', () => {
   it('restores on its own after the configured time, also after a restart', async () => {
     const tampered = await new TamperService(admin, { random: () => 0.7, autoRestoreMs: 600 }).tamper(1)
     expect(tampered.restores_at).not.toBeNull()
-    expect((await verifyLog(admin, { witness: anchor() })).findings).toBeGreaterThan(0)
+    expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).findings).toBeGreaterThan(0)
     const restarted = new TamperService(admin, { autoRestoreMs: 600 })
     const stop = new AbortController()
     const restoring = restarted.restoreWhenDue(stop.signal)
     try {
       await vi.waitFor(async () => expect(await restarted.current()).toBeNull(), { timeout: 5000, interval: 100 })
-      expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
+      expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).findings).toBe(0)
     } finally {
       stop.abort()
       await restoring
@@ -141,12 +141,14 @@ describe('the tamper service', () => {
       'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
     )
     const { body } = await call('POST', '/v1/tamper', { class: 3 })
-    expect((await verifyLog(admin, { witness: anchor() })).examples).toEqual([{ kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id }])
+    expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).examples).toEqual([
+      { kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id },
+    ])
     await call('POST', '/v1/restore')
     const after = await admin.query(
       'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
     )
     expect(after.rows).toEqual(before.rows)
-    expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
+    expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).findings).toBe(0)
   })
 })

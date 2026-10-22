@@ -1,5 +1,4 @@
-import { firstRow, type Queryable } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
 import type { PaymentStatus } from './payment-state.ts'
 
 export interface PaymentRecord {
@@ -60,12 +59,12 @@ export async function loadPayment(db: Queryable, id: string): Promise<PaymentRec
   return rows[0]
 }
 
-export async function lockPayment(client: pg.ClientBase, id: string): Promise<PaymentRecord | undefined> {
+export async function lockPayment(client: Transaction, id: string): Promise<PaymentRecord | undefined> {
   const { rows } = await client.query<PaymentRecord>(`${PAYMENT} FOR UPDATE OF p`, [id])
   return rows[0]
 }
 
-export async function insertPayment(client: pg.ClientBase, payment: NewPayment): Promise<string> {
+export async function insertPayment(client: Transaction, payment: NewPayment): Promise<string> {
   const inserted = await client.query<{ id: string }>(
     `INSERT INTO payments (client_id, merchant_id, amount, currency, capture_mode, token)
      VALUES ($1, $2, $3, $4, $5::capture_mode, $6) RETURNING id`,
@@ -74,7 +73,7 @@ export async function insertPayment(client: pg.ClientBase, payment: NewPayment):
   return firstRow(inserted).id
 }
 
-export async function movePayment(client: pg.ClientBase, id: string, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<boolean> {
+export async function movePayment(client: Transaction, id: string, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<boolean> {
   const set = Object.entries(changes)
   const assignments = set.map(([column], index) => `, ${column} = $${index + 4}`).join('')
   const moved = await client.query(
@@ -85,7 +84,7 @@ export async function movePayment(client: pg.ClientBase, id: string, from: Payme
   return moved.rowCount === 1
 }
 
-export async function setPaymentRefunded(client: pg.ClientBase, id: string, amount: bigint): Promise<void> {
+export async function setPaymentRefunded(client: Transaction, id: string, amount: bigint): Promise<void> {
   await client.query(`UPDATE payments SET refunded_amount = $2, updated_at = now() WHERE id = $1 AND status = 'captured'`, [id, amount])
 }
 
@@ -97,7 +96,7 @@ export async function loadRefund(db: Queryable, id: string): Promise<RefundRecor
   return rows[0]
 }
 
-export async function pendingRefundTotal(client: pg.ClientBase, paymentId: string): Promise<bigint> {
+export async function pendingRefundTotal(client: Transaction, paymentId: string): Promise<bigint> {
   const { pending } = firstRow(
     await client.query<{ pending: string }>(`SELECT coalesce(sum(amount), 0)::text AS pending FROM refunds WHERE payment_id = $1 AND status = 'pending'`, [
       paymentId,
@@ -106,23 +105,23 @@ export async function pendingRefundTotal(client: pg.ClientBase, paymentId: strin
   return BigInt(pending)
 }
 
-export async function insertRefund(client: pg.ClientBase, paymentId: string, amount: bigint): Promise<string> {
+export async function insertRefund(client: Transaction, paymentId: string, amount: bigint): Promise<string> {
   return firstRow(await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [paymentId, amount])).id
 }
 
-export async function lockRefund(client: pg.ClientBase, id: string): Promise<void> {
+export async function lockRefund(client: Transaction, id: string): Promise<void> {
   await client.query('SELECT 1 FROM refunds WHERE id = $1 FOR UPDATE', [id])
 }
 
-export async function correctRefundAmount(client: pg.ClientBase, id: string, amount: bigint): Promise<void> {
+export async function correctRefundAmount(client: Transaction, id: string, amount: bigint): Promise<void> {
   await client.query(`UPDATE refunds SET amount = $2 WHERE id = $1 AND status = 'pending'`, [id, amount])
 }
 
-export async function failRefund(client: pg.ClientBase, id: string, reason: string): Promise<void> {
+export async function failRefund(client: Transaction, id: string, reason: string): Promise<void> {
   await client.query(`UPDATE refunds SET status = 'failed', failure_reason = $2, resolved_at = now() WHERE id = $1 AND status = 'pending'`, [id, reason])
 }
 
-export async function succeedRefund(client: pg.ClientBase, id: string, feeRefund: bigint, journalId: bigint): Promise<void> {
+export async function succeedRefund(client: Transaction, id: string, feeRefund: bigint, journalId: bigint): Promise<void> {
   await client.query(`UPDATE refunds SET status = 'succeeded', fee_refund = $2, journal_id = $3, resolved_at = now() WHERE id = $1 AND status = 'pending'`, [
     id,
     feeRefund,

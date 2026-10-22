@@ -1,4 +1,4 @@
-import { inSnapshot } from '@carwash/pg'
+import { inSnapshot, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -77,7 +77,7 @@ const CONSUMED: readonly Check[] = [
   },
 ]
 
-export async function checkEventsIn(client: pg.ClientBase): Promise<InvariantResult[]> {
+export async function checkEventsIn(client: Transaction): Promise<InvariantResult[]> {
   const l2 = await collect(client, DELIVERED)
   const l3 = await collect(client, CONSUMED)
   return [

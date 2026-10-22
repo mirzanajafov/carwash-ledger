@@ -1,5 +1,4 @@
-import { firstRow, type Queryable } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
 import type { AttemptKind } from '../psp/answers.ts'
 
 export interface AttemptRecord {
@@ -53,7 +52,7 @@ export async function attemptsToRecover(db: Queryable, olderThanSeconds: number,
   return rows
 }
 
-export async function insertAttempt(client: pg.ClientBase, attempt: NewAttempt): Promise<void> {
+export async function insertAttempt(client: Transaction, attempt: NewAttempt): Promise<void> {
   await client.query(`INSERT INTO attempts (kind, payment_id, refund_id, payout_id, amount, currency) VALUES ($1::attempt_kind, $2, $3, $4, $5, $6)`, [
     attempt.kind,
     'paymentId' in attempt ? attempt.paymentId : null,
@@ -64,7 +63,7 @@ export async function insertAttempt(client: pg.ClientBase, attempt: NewAttempt):
   ])
 }
 
-export async function resolveAttempt(client: pg.ClientBase, id: string, outcome: AttemptOutcome): Promise<boolean> {
+export async function resolveAttempt(client: Transaction, id: string, outcome: AttemptOutcome): Promise<boolean> {
   const updated = await client.query(
     `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
      WHERE id = $1 AND status = 'pending'`,
@@ -79,7 +78,7 @@ export async function attemptOutcome(db: Queryable, id: string): Promise<{ statu
   )
 }
 
-export async function setAttemptAmount(client: pg.ClientBase, id: string, amount: bigint): Promise<boolean> {
+export async function setAttemptAmount(client: Transaction, id: string, amount: bigint): Promise<boolean> {
   const moved = await client.query(`UPDATE attempts SET amount = $2 WHERE id = $1 AND status = 'pending'`, [id, amount])
   return moved.rowCount === 1
 }

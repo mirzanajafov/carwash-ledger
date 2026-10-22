@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { firstRow, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Faults, SettlementFault } from './faults.ts'
 
@@ -143,7 +143,7 @@ export class Settlements {
     })
   }
 
-  async #stored(client: pg.ClientBase, day: number, currency: string): Promise<SettlementFile | undefined> {
+  async #stored(client: Transaction, day: number, currency: string): Promise<SettlementFile | undefined> {
     const { rows } = await client.query<{ id: string; lines: number; gross: string; fee: string; net: string }>(
       'SELECT id, lines, gross::text, fee::text, net::text FROM settlement_files WHERE day = $1 AND currency = $2',
       [day, currency],
@@ -172,7 +172,7 @@ export class Settlements {
     return { ...head, csv: renderCsv(head, lines) }
   }
 
-  async #generate(client: pg.ClientBase, day: number, currency: string): Promise<SettlementFile | undefined> {
+  async #generate(client: Transaction, day: number, currency: string): Promise<SettlementFile | undefined> {
     const clock = firstRow(
       await client.query<{ now: Date; closed: boolean }>('SELECT now(), EXISTS (SELECT 1 FROM settlement_closures WHERE day = $1) AS closed', [day]),
     )

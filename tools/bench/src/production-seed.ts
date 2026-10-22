@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { sequenceBatch, treeSize } from '@carwash/audit-pg'
 import type { WitnessView } from '@carwash/invariants'
 import { createAccount, type Account } from '@carwash/ledger'
-import { firstRow, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import { signCopies, withTriggersOff } from '@carwash/testkit'
 import type pg from 'pg'
 
@@ -181,7 +181,7 @@ async function sequenceEverything(app: pg.Pool): Promise<void> {
   } while (sequenced > 0)
 }
 
-async function addPayments(client: pg.ClientBase, traffic: Traffic, count: number, start: Date): Promise<void> {
+async function addPayments(client: Transaction, traffic: Traffic, count: number, start: Date): Promise<void> {
   const merchants = [traffic.merchants.map((m) => m.id), traffic.merchants.map((m) => m.account)]
   await client.query(BATCH_ROWS, [traffic.next, traffic.next + count - 1, start, traffic.spacing, ...merchants])
   await client.query(PAYMENTS, [traffic.client])

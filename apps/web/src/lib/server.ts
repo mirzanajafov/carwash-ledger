@@ -32,7 +32,7 @@ export async function callApi(method: string, path: string, key: string | null, 
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? null : JSON.stringify(body),
     signal: AbortSignal.timeout(timeoutMs),
   })
   const retryAfter = Number(response.headers.get('retry-after'))
@@ -55,7 +55,7 @@ export async function callTamper(method: string, path: string, body?: unknown): 
     method,
     cache: 'no-store',
     headers: { authorization: `Bearer ${secret('TAMPER_TOKEN')}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? null : JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
   })
   return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }
@@ -68,7 +68,7 @@ export async function callPsp(method: string, path: string, body?: unknown): Pro
     method,
     cache: 'no-store',
     headers: { authorization: `Bearer ${secret('PSP_ADMIN_KEY')}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? null : JSON.stringify(body),
     signal: AbortSignal.timeout(5000),
   })
   return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }

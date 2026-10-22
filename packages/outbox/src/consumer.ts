@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { KafkaJS } from '@confluentinc/kafka-javascript'
 import { failpoint } from '@carwash/failpoints'
-import { withTransaction } from '@carwash/pg'
+import { withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Envelope, Topic } from './events.ts'
 
@@ -13,7 +13,7 @@ export interface ConsumedEvent {
   data: unknown
 }
 
-export type ApplyEvents = (client: pg.ClientBase, events: readonly ConsumedEvent[]) => Promise<void>
+export type ApplyEvents = (client: Transaction, events: readonly ConsumedEvent[]) => Promise<void>
 
 export interface ConsumerSpec {
   name: string

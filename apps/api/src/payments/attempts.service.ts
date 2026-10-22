@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
-import type pg from 'pg'
+import type { Transaction } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
 import { Chart } from '../ledger/chart.service.ts'
@@ -67,7 +67,7 @@ export class AttemptsService {
     return this.#db.transaction((client) => this.apply(client, call.attemptId, check.answer))
   }
 
-  async apply(client: pg.ClientBase, attemptId: string, answer: PspAnswer): Promise<Applied> {
+  async apply(client: Transaction, attemptId: string, answer: PspAnswer): Promise<Applied> {
     const attempt = await loadAttempt(client, attemptId)
     if (!attempt) throw new Error(`attempt ${attemptId} does not exist`)
     if (attempt.kind === 'payout') return this.#applyPayout(client, attempt, answer)
@@ -109,7 +109,7 @@ export class AttemptsService {
     return 'applied'
   }
 
-  async #resolve(client: pg.ClientBase, attempt: AttemptRecord, answer: PspAnswer): Promise<boolean> {
+  async #resolve(client: Transaction, attempt: AttemptRecord, answer: PspAnswer): Promise<boolean> {
     if (await resolveAttempt(client, attempt.id, answer)) return true
     const current = await attemptOutcome(client, attempt.id)
     if (current.status !== answer.status || current.psp_operation_id !== answer.operationId) {
@@ -118,12 +118,12 @@ export class AttemptsService {
     return false
   }
 
-  async #move(client: pg.ClientBase, paymentId: string, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<void> {
+  async #move(client: Transaction, paymentId: string, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<void> {
     if (!(await movePayment(client, paymentId, from, to, changes))) throw new Error(`payment ${paymentId} was not ${from} when it should have moved to ${to}`)
     await paymentEvent(client, paymentId, `payment.${to}`)
   }
 
-  async #applyRefund(client: pg.ClientBase, attempt: AttemptRecord, payment: PaymentRecord, answer: PspAnswer): Promise<Applied> {
+  async #applyRefund(client: Transaction, attempt: AttemptRecord, payment: PaymentRecord, answer: PspAnswer): Promise<Applied> {
     const refundId = attempt.refund_id!
     await lockRefund(client, refundId)
     if (answer.status === 'declined') {
@@ -160,7 +160,7 @@ export class AttemptsService {
     return 'applied'
   }
 
-  async #applyPayout(client: pg.ClientBase, attempt: AttemptRecord, answer: PspAnswer): Promise<Applied> {
+  async #applyPayout(client: Transaction, attempt: AttemptRecord, answer: PspAnswer): Promise<Applied> {
     const payout = (await lockPayout(client, attempt.payout_id!))!
     if (!(await this.#resolve(client, attempt, answer))) return 'already'
     if (answer.status === 'succeeded') {

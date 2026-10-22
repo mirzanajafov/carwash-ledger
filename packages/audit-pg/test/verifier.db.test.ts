@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { firstRow, inRollback, withTransaction } from '@carwash/pg'
+import { firstRow, inRollback, inSnapshot, withTransaction, type Transaction } from '@carwash/pg'
 import { createTestDatabase, signCopies, type SignedCopies, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -115,19 +115,21 @@ describe('full verification', () => {
   })
 
   it('finds nothing in an honest log, compares every signed root and ends where the log ends', async () => {
-    const report = await verifyLog(app, { witness: witnessed, batch: 6 })
+    const report = await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed, batch: 6 }))
     expect(report).toMatchObject({ mode: 'full', from: 0, size: 40, journals: 40, witnessed: 2, findings: 0, firstSeq: null })
     expect(report.state).toMatchObject({ size: 40, root: toHex((await head(app)).root), chain: toHex((await head(app)).chain) })
   })
 
   it('reports how far it got after every batch, ending at the size of the log', async () => {
     const progress: [number, number][] = []
-    await verifyLog(app, {
-      batch: 16,
-      onProgress: async (done, size) => {
-        progress.push([done, size])
-      },
-    })
+    await inSnapshot(app, (client) =>
+      verifyLog(client, {
+        batch: 16,
+        onProgress: async (done, size) => {
+          progress.push([done, size])
+        },
+      }),
+    )
     expect(progress).toEqual([
       [16, 40],
       [32, 40],
@@ -190,7 +192,7 @@ describe('signed roots', () => {
       return verifyLog(client, { witness: witnessed })
     })
     expect(copies).toMatchObject({ witnessed: 2, findings: 0 })
-    expect((await verifyLog(app, { witness: witnessed })).witnessed).toBe(2)
+    expect((await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed }))).witnessed).toBe(2)
   })
 
   it('still catches a rewrite through the latest checkpoint when the copies are gone, in a wider range', async () => {
@@ -251,19 +253,19 @@ describe('restoring a tamper', () => {
 
 describe('incremental verification', () => {
   it('reads only the new journals, picks up the signed roots after its state, and ends where a full run ends', async () => {
-    const full = await verifyLog(app, { witness: witnessed })
-    assert(full.state)
+    const { state } = await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed }))
+    assert(state)
     await post(30)
     expect(await checkpointer.run()).toMatchObject({ kind: 'signed', size: 70 })
     witnessed = anchor()
-    const step = await verifyLog(app, { witness: witnessed, from: full.state, batch: 6 })
+    const step = await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed, from: state, batch: 6 }))
     expect(step).toMatchObject({ mode: 'incremental', from: 40, size: 70, journals: 30, witnessed: 1, findings: 0 })
-    expect(step.state).toEqual((await verifyLog(app, { witness: witnessed })).state)
+    expect(step.state).toEqual((await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed }))).state)
   })
 
   it('catches a rewrite below its state through the stored chain and root, even where no checkpoint covers it', async () => {
     await post(5)
-    const full = await verifyLog(app, { witness: witnessed })
+    const full = await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed }))
     assert(full.state)
     expect(full.state.size).toBe(75)
     const { report } = await tampered(2, 72, { from: full.state })
@@ -277,7 +279,7 @@ describe('incremental verification', () => {
   })
 
   it('does not see an entry edited below its state with the hashes left alone, which is what a full run is for', async () => {
-    const full = await verifyLog(app, { witness: witnessed })
+    const full = await inSnapshot(app, (client) => verifyLog(client, { witness: witnessed }))
     assert(full.state)
     expect((await tampered(1, 20, { from: full.state })).report.findings).toBe(0)
     expect((await tampered(1, 20)).report.findings).toBeGreaterThan(0)
@@ -286,9 +288,6 @@ describe('incremental verification', () => {
 
 describe('sharing the process', () => {
   const BULK = 10_000
-  const scoped = new AsyncDisposableStack()
-  let client: pg.PoolClient
-  let stand: SignedCopies
 
   async function measured(work: () => Promise<unknown>): Promise<{ longest: number; total: number; cpu: number }> {
     const loop = monitorEventLoopDelay({ resolution: 1 })
@@ -304,66 +303,62 @@ describe('sharing the process', () => {
     return { longest: loop.max / 1e6, total: performance.now() - started, cpu: (used.user + used.system) / 1000 }
   }
 
-  beforeAll(async () => {
-    client = await admin.connect()
-    scoped.defer(() => {
-      client.release()
+  function withBulk<T>(work: (client: Transaction, stand: SignedCopies) => Promise<T>): Promise<T> {
+    return inRollback(admin, async (client) => {
+      await client.query(
+        `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
+         INSERT INTO entries (journal_id, account_id, amount)
+         SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
+        [accounts.receivable, accounts.merchant, BULK],
+      )
+      let sequenced: number
+      do {
+        sequenced = await sequenceBatch(client, 1000)
+      } while (sequenced > 0)
+      await client.query('DELETE FROM audit_checkpoints')
+      return work(client, await signCopies(client, posted + BULK, 1))
     })
-    await client.query('BEGIN')
-    scoped.defer(async () => {
-      await client.query('ROLLBACK')
-    })
-    await client.query(
-      `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
-       INSERT INTO entries (journal_id, account_id, amount)
-       SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
-      [accounts.receivable, accounts.merchant, BULK],
-    )
-    let sequenced: number
-    do {
-      sequenced = await sequenceBatch(client, 1000)
-    } while (sequenced > 0)
-    await client.query('DELETE FROM audit_checkpoints')
-    stand = await signCopies(client, posted + BULK, 1)
-  })
-
-  afterAll(() => scoped.disposeAsync())
+  }
 
   it('lets other work run between journals instead of hashing the whole log in one go', async () => {
-    const run = await measured(async () => {
-      expect(await verifyLog(client, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
-    })
+    const run = await withBulk((client) =>
+      measured(async () => {
+        expect(await verifyLog(client, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
+      }),
+    )
     expect(run.longest).toBeLessThan(run.total / 3)
   })
 
   it('lets other work run between signatures, and stops at the next turn when asked', async () => {
-    const whole = await measured(async () => {
-      expect(await verifyLog(client, { witness: stand, batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: stand.count, findings: 0 })
-    })
-    expect(whole.longest).toBeLessThan(whole.total / 3)
+    await withBulk(async (client, stand) => {
+      const whole = await measured(async () => {
+        expect(await verifyLog(client, { witness: stand, batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: stand.count, findings: 0 })
+      })
+      expect(whole.longest).toBeLessThan(whole.total / 3)
 
-    const stop = new AbortController()
-    const progress: number[] = []
-    setTimeout(() => {
-      stop.abort()
-    }, 50)
-    const stopped = await measured(async () => {
-      await expect(
-        verifyLog(client, {
-          witness: stand,
-          batch: 50_000,
-          signal: stop.signal,
-          onProgress: async (done) => {
-            progress.push(done)
-          },
-        }),
-      ).rejects.toMatchObject({ name: 'AbortError' })
+      const stop = new AbortController()
+      const progress: number[] = []
+      setTimeout(() => {
+        stop.abort()
+      }, 50)
+      const stopped = await measured(async () => {
+        await expect(
+          verifyLog(client, {
+            witness: stand,
+            batch: 50_000,
+            signal: stop.signal,
+            onProgress: async (done) => {
+              progress.push(done)
+            },
+          }),
+        ).rejects.toMatchObject({ name: 'AbortError' })
+      })
+      expect(progress).toEqual([])
+      expect(stopped.cpu).toBeLessThan(whole.cpu / 4)
     })
-    expect(progress).toEqual([])
-    expect(stopped.cpu).toBeLessThan(whole.cpu / 4)
   })
 
   it('refuses a batch that would never move', async () => {
-    await expect(verifyLog(client, { batch: 0 })).rejects.toThrow(RangeError)
+    await expect(inSnapshot(admin, (client) => verifyLog(client, { batch: 0 }))).rejects.toThrow(RangeError)
   })
 })

@@ -15,7 +15,7 @@ import {
   type InvariantResult,
   type PaymentBase,
 } from '@carwash/invariants'
-import { firstRow, inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot, withTransaction, type Transaction } from '@carwash/pg'
 import { inRollbackWithTriggersOff } from '@carwash/testkit'
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
@@ -51,8 +51,8 @@ function counts(results: readonly InvariantResult[]): Partial<Record<InvariantId
 
 function corrupted(
   pool: pg.Pool,
-  corrupt: (client: pg.ClientBase) => Promise<unknown>,
-  check: (client: pg.ClientBase) => Promise<InvariantResult[]>,
+  corrupt: (client: Transaction) => Promise<unknown>,
+  check: (client: Transaction) => Promise<InvariantResult[]>,
 ): Promise<Partial<Record<InvariantId, number>>> {
   return inRollbackWithTriggersOff(pool, async (client) => {
     await corrupt(client)
@@ -60,28 +60,28 @@ function corrupted(
   })
 }
 
-function inLedger(corrupt: (client: pg.ClientBase) => Promise<unknown>, since?: PaymentBase) {
+function inLedger(corrupt: (client: Transaction) => Promise<unknown>, since?: PaymentBase) {
   return corrupted(stack.admin, corrupt, async (client) => [...(await checkPaymentsIn(client, { since })).results, await checkSettledIn(client)])
 }
 
-function inEvents(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
+function inEvents(corrupt: (client: Transaction) => Promise<unknown>) {
   return corrupted(stack.admin, corrupt, checkEventsIn)
 }
 
-function inSettlement(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
+function inSettlement(corrupt: (client: Transaction) => Promise<unknown>) {
   return corrupted(stack.admin, corrupt, async (client) => [
     await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay }),
   ])
 }
 
-function settlementExamples(corrupt: (client: pg.ClientBase) => Promise<unknown>): Promise<string[]> {
+function settlementExamples(corrupt: (client: Transaction) => Promise<unknown>): Promise<string[]> {
   return inRollbackWithTriggersOff(stack.admin, async (client) => {
     await corrupt(client)
     return (await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay })).examples
   })
 }
 
-function atPsp(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
+function atPsp(corrupt: (client: Transaction) => Promise<unknown>) {
   return corrupted(stack.pspSql, corrupt, async (client) => [await checkAgainstPsp(stack.admin, client)])
 }
 
@@ -127,9 +127,9 @@ const corruptions = {
       ],
       -1,
     ),
-} satisfies Record<string, (client: pg.ClientBase) => Promise<unknown>>
+} satisfies Record<string, (client: Transaction) => Promise<unknown>>
 
-async function postJournal(client: pg.ClientBase, ref: string, entries: [string, number][], id?: number): Promise<string> {
+async function postJournal(client: Transaction, ref: string, entries: [string, number][], id?: number): Promise<string> {
   const { id: journalId } = firstRow(
     await client.query<{ id: string }>(`INSERT INTO journals (id, external_ref) VALUES (coalesce($1, nextval('journals_id_seq')), $2) RETURNING id::text`, [
       id ?? null,
@@ -255,7 +255,7 @@ describe('the event invariants', () => {
   })
 
   it('catch a second receipt, a missing one, a gap in the numbers, a receipt for nothing, and a statement off by a cent (L3)', async () => {
-    const issue = (paymentId: string) => (client: pg.ClientBase) =>
+    const issue = (paymentId: string) => (client: Transaction) =>
       client.query(
         `WITH counter AS (UPDATE receipt_counters SET last_number = last_number + 1 WHERE merchant = 'wash_1' RETURNING last_number)
          INSERT INTO receipts (merchant, number, payment_id, amount, fee, currency, captured_at, event_id)
@@ -357,19 +357,17 @@ describe('the payment invariants, continued from the last clean run', () => {
 
   it('see a payment changed by a transaction that was still open when the clean run took its snapshot', async () => {
     const audit = stack.ledgerDb.pool('ledger_audit', 2)
-    const open = await stack.admin.connect()
-    try {
-      await open.query('BEGIN')
+    const clean = await withTransaction(stack.admin, async (open) => {
       await open.query('UPDATE payments SET captured_amount = captured_amount - 1 WHERE id = $1', [payments.auto])
-      const clean = await inSnapshot(audit, (client) => checkPaymentsIn(client))
+      return inSnapshot(audit, (client) => checkPaymentsIn(client))
+    })
+    try {
       expect(clean.base).toBeDefined()
-      await open.query('COMMIT')
       const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
       expect(counts(resumed.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
     } finally {
-      open.release()
+      await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [payments.auto])
     }
-    await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [payments.auto])
   })
 
   it('replay a merchant from the start when a debit that was open at the clean run commits behind a payout', async () => {
@@ -378,32 +376,26 @@ describe('the payment invariants, continued from the last clean run', () => {
     const receivable = await accountId('psp_receivable:EUR')
     const bank = await accountId('bank:EUR')
     expect((await stack.call('POST', '/v1/payments', { body: pay('tok_ok') })).body.status).toBe('captured')
-    const open = await stack.admin.connect()
-    const payout = await stack.admin.connect()
-    try {
-      await open.query('BEGIN')
+    const clean = await withTransaction(stack.admin, async (open) => {
       await postJournal(open, 'debit-open-at-the-clean-run', [
         [merchant, 100],
         [receivable, -100],
       ])
-      await payout.query('BEGIN')
-      const { payable } = firstRow(
-        await payout.query<{ payable: number }>('SELECT (-sum(amount))::int AS payable FROM entries WHERE account_id = $1', [merchant]),
-      )
-      await postJournal(payout, `payout:${randomUUID()}`, [
-        [merchant, payable],
-        [bank, -payable],
-      ])
-      await payout.query('COMMIT')
-      const clean = await inSnapshot(audit, (client) => checkPaymentsIn(client))
-      expect(counts(clean.results)).toEqual({ S3: 0, S5: 0, S6: 0 })
-      await open.query('COMMIT')
-      const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
-      expect(counts(resumed.results)).toEqual({ S3: 0, S5: 0, S6: 1 })
-      expect(resumed.results).toEqual((await inSnapshot(audit, (client) => checkPaymentsIn(client))).results)
-    } finally {
-      open.release()
-      payout.release()
-    }
+      await withTransaction(stack.admin, async (payout) => {
+        const { payable } = firstRow(
+          await payout.query<{ payable: number }>('SELECT (-sum(amount))::int AS payable FROM entries WHERE account_id = $1', [merchant]),
+        )
+        await postJournal(payout, `payout:${randomUUID()}`, [
+          [merchant, payable],
+          [bank, -payable],
+        ])
+      })
+      const run = await inSnapshot(audit, (client) => checkPaymentsIn(client))
+      expect(counts(run.results)).toEqual({ S3: 0, S5: 0, S6: 0 })
+      return run
+    })
+    const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
+    expect(counts(resumed.results)).toEqual({ S3: 0, S5: 0, S6: 1 })
+    expect(resumed.results).toEqual((await inSnapshot(audit, (client) => checkPaymentsIn(client))).results)
   })
 })

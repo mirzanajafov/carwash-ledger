@@ -6,7 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { ensureTopics, kafkaClient, topicSpecs, writeEvent } from '@carwash/outbox'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
@@ -178,17 +178,14 @@ function writes(lab: Lab, rate: number, warmupMs: number, durationMs: number, se
     seed,
     maxInFlight: 256,
     task: async (index) => {
-      const lease = await checkout(lab.writer)
-      try {
-        await writeEvent(lease.client, {
+      await withTransaction(lab.writer, (client) =>
+        writeEvent(client, {
           topic: 'payments',
           key: pick(random, keys),
           type: 'payment.captured',
           payload: payload(index),
-        })
-      } finally {
-        lease.release()
-      }
+        }),
+      )
       return 'ok'
     },
   })
