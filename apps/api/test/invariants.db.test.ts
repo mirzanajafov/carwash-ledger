@@ -361,10 +361,13 @@ describe('the payment invariants, continued from the last clean run', () => {
       await open.query('UPDATE payments SET captured_amount = captured_amount - 1 WHERE id = $1', [payments.auto])
       return inSnapshot(audit, (client) => checkPaymentsIn(client))
     })
-    expect(clean.base).toBeDefined()
-    const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
-    expect(counts(resumed.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
-    await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [payments.auto])
+    try {
+      expect(clean.base).toBeDefined()
+      const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
+      expect(counts(resumed.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
+    } finally {
+      await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [payments.auto])
+    }
   })
 
   it('replay a merchant from the start when a debit that was open at the clean run commits behind a payout', async () => {

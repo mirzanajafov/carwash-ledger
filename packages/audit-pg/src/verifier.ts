@@ -1,7 +1,7 @@
 import { createPublicKey, verify } from 'node:crypto'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import { chainHash, checkpointBody, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash } from '@carwash/audit'
-import type { Queryable } from '@carwash/pg'
+import type { Queryable, Transaction } from '@carwash/pg'
 import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
 
 const TURN_MS = 10
@@ -118,7 +118,7 @@ async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number
   return roots.sort((a, b) => a.size - b.size)
 }
 
-export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Promise<VerifyReport> {
+export async function verifyLog(db: Transaction, options: VerifyOptions = {}): Promise<VerifyReport> {
   const started = performance.now()
   const batch = options.batch ?? 5000
   if (!Number.isSafeInteger(batch) || batch < 1) throw new RangeError(`the batch must be a positive integer, not ${batch}`)

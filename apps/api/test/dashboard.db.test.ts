@@ -296,11 +296,15 @@ describe('verification runs', () => {
   it('leaves its run to the next worker when it stops in the middle, instead of failing it', async () => {
     await sequenceAll()
     const run = (await request()).body.id
-    const { stopping } = await withTransaction(stack.admin, async (blocker) => {
+    let stopping = Promise.resolve()
+    await withTransaction(stack.admin, async (blocker) => {
       await blocker.query('LOCK TABLE audit_log IN ACCESS EXCLUSIVE MODE')
       const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, verifyEveryMs: 20 }), { logger: false })
-      await vi.waitFor(async () => expect((await latest()).body.status).toBe('running'), { timeout: 5000 })
-      return { stopping: worker.close() }
+      try {
+        await vi.waitFor(async () => expect((await latest()).body.status).toBe('running'), { timeout: 5000 })
+      } finally {
+        stopping = worker.close()
+      }
     })
     await stopping
     expect((await latest()).body).toMatchObject({ id: run, status: 'running', attempts: 1, progress: null })
