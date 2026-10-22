@@ -22,7 +22,7 @@
 +      shards,
 +      amounts,
      ])
-     const row = result.rows[0]!
+     const row = firstRow(result)
      expectApplied(Number(row.balances), plan)
 @@ -60,15 +63,18 @@
      let broken = false
@@ -46,7 +46,7 @@
 +        shards,
 +        amounts,
        ])
-       const row = result.rows[0]!
+       const row = firstRow(result)
        expectApplied(Number(row.balances), plan)
 --- a/packages/ledger/src/sql.ts
 +++ b/packages/ledger/src/sql.ts
