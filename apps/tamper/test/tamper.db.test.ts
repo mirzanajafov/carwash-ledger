@@ -36,7 +36,7 @@ function client(base: string, token = 'tamper-token') {
     const response = await fetch(`${base}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-      body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
+      body: body === undefined ? null : typeof body === 'string' ? body : JSON.stringify(body),
     })
     return { status: response.status, body: await response.json() }
   }

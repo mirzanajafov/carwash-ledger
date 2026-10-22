@@ -58,7 +58,7 @@ export function AuditPanel() {
       const response = await fetch(url, {
         method: 'POST',
         headers: body ? { 'content-type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : undefined,
+        body: body ? JSON.stringify(body) : null,
       })
       const answer = await response.json().catch(() => null)
       if (!response.ok) setNote(answer?.error?.message ?? `That answered ${response.status}.`)

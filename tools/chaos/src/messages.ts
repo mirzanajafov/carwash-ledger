@@ -9,7 +9,7 @@ export type Outcome =
   | { kind: 'retryable'; error: string }
   | { kind: 'rejected'; error: string }
 
-export type ToWorker = { type: 'post'; id: number; ref: string; entries: EntrySpec[]; reversesId?: string } | { type: 'disarm' }
+export type ToWorker = { type: 'post'; id: number; ref: string; entries: EntrySpec[]; reversesId?: string | undefined } | { type: 'disarm' }
 
 export type FromWorker = { type: 'outcome'; id: number; outcome: Outcome } | { type: 'snapshot'; accounts: number } | { type: 'snapshot-error'; error: string }
 

@@ -3,7 +3,7 @@
 @@ -11,16 +11,19 @@
  import { expectApplied, postWith } from './common.ts'
  
- async function writeJournal(client: pg.ClientBase, plan: JournalPlan): Promise<bigint> {
+ async function writeJournal(client: Transaction, plan: JournalPlan): Promise<bigint> {
 -  if (plan.locks.length > 0) {
 -    await client.query(LOCK_BALANCES, lockParams(plan))
 -    failpoint('post.after_lock')

@@ -61,7 +61,7 @@ export class WitnessClient {
         authorization: `Bearer ${this.#token}`,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? null : JSON.stringify(body),
       signal: AbortSignal.timeout(this.#timeoutMs),
     })
     return { status: response.status, body: await response.json() }

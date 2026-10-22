@@ -198,8 +198,8 @@ export interface PaymentBase {
 }
 
 export interface PaymentChecks {
-  keyWindowSeconds?: number
-  since?: PaymentBase
+  keyWindowSeconds?: number | undefined
+  since?: PaymentBase | undefined
 }
 
 export interface PaymentChecksRun {

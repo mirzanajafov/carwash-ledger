@@ -124,7 +124,7 @@ export async function call(base: string, method: string, path: string, options: 
       ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(method === 'POST' && options.key !== null ? { 'idempotency-key': options.key ?? randomUUID() } : {}),
     },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.body === undefined ? null : JSON.stringify(options.body),
   })
   return {
     status: response.status,

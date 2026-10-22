@@ -26,7 +26,7 @@ export class ApiClient {
             ...(method === 'POST' ? { 'idempotency-key': idempotencyKey } : {}),
             ...(body === undefined ? {} : { 'content-type': 'application/json' }),
           },
-          body: body === undefined ? undefined : JSON.stringify(body),
+          body: body === undefined ? null : JSON.stringify(body),
           signal: AbortSignal.any([this.#signal, AbortSignal.timeout(10_000)]),
         })
         const answer = { status: response.status, body: await response.json().catch(() => null) }

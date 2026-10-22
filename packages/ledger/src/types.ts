@@ -21,7 +21,7 @@ export interface EntryInput {
 export interface JournalInput {
   externalRef: string
   entries: readonly EntryInput[]
-  reversesId?: bigint
+  reversesId?: bigint | undefined
 }
 
 export interface PostedJournal {

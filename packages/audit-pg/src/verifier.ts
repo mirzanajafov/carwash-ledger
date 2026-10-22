@@ -35,8 +35,8 @@ export type Finding =
   | { kind: 'unsequenced'; journalId: string }
 
 export interface VerifyOptions {
-  witness?: WitnessAnchor
-  from?: VerifierState
+  witness?: WitnessAnchor | undefined
+  from?: VerifierState | undefined
   batch?: number
   examples?: number
   signal?: AbortSignal

@@ -10,7 +10,7 @@ interface ErrorReply {
   status: number
   code: string
   message: string
-  retryAfterSeconds?: number
+  retryAfterSeconds?: number | undefined
 }
 
 function httpExceptionMessage(exception: HttpException): string {
