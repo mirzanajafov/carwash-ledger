@@ -1,4 +1,5 @@
 import { createPublicKey, verify } from 'node:crypto'
+import { setImmediate } from 'node:timers/promises'
 import { chainHash, checkpointBody, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash } from '@carwash/audit'
 import type pg from 'pg'
 import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
@@ -79,6 +80,8 @@ const UNSEQUENCED = `
     AND NOT EXISTS (SELECT 1 FROM audit_queue q WHERE q.journal_id = j.id)
   ORDER BY j.id`
 
+const YIELD_EVERY = 100
+
 const COPIES = `
   SELECT c.size::text, c.root, c.signature FROM audit_checkpoints c
   WHERE c.size > $1 AND c.size <= $2 AND c.witness_key = $3
@@ -106,6 +109,10 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (examples.length < limit) examples.push(finding)
     if ('seq' in finding && (exact === null || finding.seq < exact)) exact = finding.seq
     if (finding.kind === 'root' && (ranged === null || finding.after < ranged)) ranged = finding.after
+  }
+  let steps = 0
+  const step = async () => {
+    if (++steps % YIELD_EVERY === 0) await setImmediate()
   }
   let read = 0
   const timed = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -140,6 +147,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (!witness) return []
     const good: SignedRoot[] = []
     for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
+      await step()
       if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
       else report({ kind: 'signature', size: root.size })
     }
@@ -156,6 +164,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     const roots = await signedRoots(from, to)
     let next = 0
     for (const row of rows) {
+      await step()
       const seq = Number(row.seq)
       if (seq !== position) {
         report({ kind: 'gap', seq: position, missing: seq - position })

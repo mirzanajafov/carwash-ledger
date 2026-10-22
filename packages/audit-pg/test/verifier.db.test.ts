@@ -49,11 +49,15 @@ async function post(count: number): Promise<void> {
       ],
     })
   }
+  await sequence(7)
+}
+
+async function sequence(limit: number): Promise<void> {
   const client = await app.connect()
   try {
     for (;;) {
       await client.query('BEGIN')
-      const sequenced = await sequenceBatch(client, 7)
+      const sequenced = await sequenceBatch(client, limit)
       await client.query('COMMIT')
       if (sequenced === 0) break
     }
@@ -298,5 +302,31 @@ describe('incremental verification', () => {
     const full = await verifyLog(app, { witness: witnessed })
     expect((await tampered(1, 20, { from: full.state! })).report.findings).toBe(0)
     expect((await tampered(1, 20)).report.findings).toBeGreaterThan(0)
+  })
+})
+
+describe('sharing the process', () => {
+  it('lets other work run between journals instead of hashing a whole batch in one go', async () => {
+    await app.query(
+      `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, 10000) g RETURNING id)
+       INSERT INTO entries (journal_id, account_id, amount)
+       SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
+      [accounts[0], accounts[1]],
+    )
+    await sequence(1000)
+    let last = performance.now()
+    let longest = 0
+    const ticker = setInterval(() => {
+      const now = performance.now()
+      longest = Math.max(longest, now - last)
+      last = now
+    }, 1)
+    const started = performance.now()
+    try {
+      expect(await verifyLog(app, { batch: 5000 })).toMatchObject({ journals: 10075, findings: 0 })
+    } finally {
+      clearInterval(ticker)
+    }
+    expect(longest).toBeLessThan((performance.now() - started) / 3)
   })
 })
