@@ -539,3 +539,14 @@ model DashboardSession {
   @@index([clientId])
   @@map("dashboard_sessions")
 }
+
+model TamperUndo {
+  journalId     BigInt   @id @map("journal_id")
+  tamperClass   Int      @map("tamper_class") @db.SmallInt
+  seq           BigInt
+  witnessedSize BigInt   @map("witnessed_size")
+  undo          Json
+  at            DateTime @db.Timestamptz(6)
+
+  @@map("tamper_undo")
+}

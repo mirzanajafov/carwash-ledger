@@ -31,8 +31,8 @@ FROM node:24-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
-  && mkdir -p /var/lib/witness /var/lib/tamper \
-  && chown node:node /var/lib/witness /var/lib/tamper
+  && mkdir -p /var/lib/witness \
+  && chown node:node /var/lib/witness
 WORKDIR /app
 COPY --from=build --chown=node:node /app /app
 ENV NODE_ENV=production
