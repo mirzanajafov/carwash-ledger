@@ -7,6 +7,7 @@ import { recordAnomaly } from '../payments/anomalies.repository.ts'
 import { loadAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService, pspUnavailable } from '../payments/attempts.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
+import { markWebhookChecked, recordWebhook, unmatchedWebhooks, webhookOutcome } from './webhooks.repository.ts'
 
 export type CheckOutcome = 'applied' | 'already' | 'anomaly' | 'not_at_psp' | 'unmatched'
 
@@ -46,16 +47,16 @@ export class WebhooksService {
   }
 
   async handle(event: PspEvent): Promise<{ received: true; outcome: string; duplicate?: true }> {
-    const seen = await this.#db.pool.query<{ outcome: string }>('SELECT outcome FROM webhook_events WHERE id = $1', [event.id])
-    if (seen.rows[0]) return { received: true, outcome: seen.rows[0].outcome, duplicate: true }
+    const seen = await webhookOutcome(this.#db.pool, event.id)
+    if (seen !== undefined) return { received: true, outcome: seen, duplicate: true }
     const outcome = await this.check(event.attemptKey)
-    await this.#db.pool.query(`INSERT INTO webhook_events (id, type, attempt_id, outcome, payload) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`, [
-      event.id,
-      event.type,
-      outcome === 'unmatched' ? null : event.attemptKey,
+    await recordWebhook(this.#db.pool, {
+      id: event.id,
+      type: event.type,
+      attemptId: outcome === 'unmatched' ? null : event.attemptKey,
       outcome,
-      JSON.stringify(event.payload),
-    ])
+      payload: event.payload,
+    })
     return { received: true, outcome }
   }
 
@@ -76,23 +77,14 @@ export class WebhooksService {
   }
 
   async recheckUnmatched(reportAfterSeconds = 3600, batch = 50): Promise<number> {
-    const { rows } = await this.#db.pool.query<{ id: string; key: string; overdue: boolean }>(
-      `SELECT id, payload->'data'->'object'->>'idempotency_key' AS key, received_at <= now() - make_interval(secs => $1) AS overdue
-       FROM webhook_events WHERE outcome = 'unmatched' AND checked_at <= now() - interval '30 seconds'
-       ORDER BY received_at LIMIT $2`,
-      [reportAfterSeconds, batch],
-    )
+    const rows = await unmatchedWebhooks(this.#db.pool, reportAfterSeconds, batch)
     for (const row of rows) {
       let outcome: string = await this.check(row.key).catch(() => 'unmatched')
       if (outcome === 'unmatched' && row.overdue) {
         await recordAnomaly(this.#db.pool, null, 'unmatched_webhook', { event: row.id, key: row.key })
         outcome = 'reported'
       }
-      await this.#db.pool.query(`UPDATE webhook_events SET outcome = $2, attempt_id = $3, checks = checks + 1, checked_at = now() WHERE id = $1`, [
-        row.id,
-        outcome,
-        outcome === 'unmatched' || outcome === 'reported' ? null : row.key,
-      ])
+      await markWebhookChecked(this.#db.pool, row.id, outcome, outcome === 'unmatched' || outcome === 'reported' ? null : row.key)
     }
     return rows.length
   }

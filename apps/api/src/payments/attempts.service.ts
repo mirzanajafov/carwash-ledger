@@ -6,14 +6,24 @@ import { Database } from '../db/database.ts'
 import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
 import { ApiError } from '../http/api-error.ts'
 import { Chart } from '../ledger/chart.service.ts'
-import { failPayout, loadPayout, succeedPayout } from '../payouts/payouts.repository.ts'
+import { failPayout, loadPayout, lockPayout, succeedPayout } from '../payouts/payouts.repository.ts'
 import { checkAnswer, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
 import { PspClient, type PspCall } from '../psp/psp.client.ts'
 import { recordAnomaly } from './anomalies.repository.ts'
 import { attemptOutcome, insertAttempt, loadAttempt, resolveAttempt, type AttemptRecord } from './attempts.repository.ts'
 import { feeRefund, platformFee } from './fees.ts'
 import { resolveCardAttempt, type PaymentStatus } from './payment-state.ts'
-import { failRefund, loadPayment, lockRefund, movePayment, setRefundedAmount, succeedRefund, type PaymentRecord } from './payments.repository.ts'
+import {
+  failRefund,
+  loadPayment,
+  lockPayment,
+  lockRefund,
+  movePayment,
+  setPaymentRefunded,
+  succeedRefund,
+  type PaymentChanges,
+  type PaymentRecord,
+} from './payments.repository.ts'
 
 export type Applied = 'applied' | 'already' | 'anomaly'
 
@@ -68,7 +78,7 @@ export class AttemptsService {
     if (!attempt) throw new Error(`attempt ${attemptId} does not exist`)
     if (attempt.kind === 'payout') return this.#applyPayout(client, attempt, answer)
 
-    const payment = (await loadPayment(client, attempt.payment_id!, true))!
+    const payment = (await lockPayment(client, attempt.payment_id!))!
     if (!(await this.#resolve(client, attempt, answer))) return 'already'
     if (attempt.kind === 'refund') return this.#applyRefund(client, attempt, payment, answer)
 
@@ -83,7 +93,7 @@ export class AttemptsService {
     } else if (attempt.kind === 'authorize') {
       await this.#move(client, payment.id, from, to, { psp_charge_id: answer.chargeId })
       if (payment.capture_mode === 'auto') {
-        await insertAttempt(client, { kind: 'capture', paymentId: payment.id, amount: payment.amount, currency: payment.currency })
+        await insertAttempt(client, { kind: 'capture', paymentId: payment.id, amount: BigInt(payment.amount), currency: payment.currency })
       }
     } else if (attempt.kind === 'capture') {
       const amount = BigInt(attempt.amount)
@@ -114,8 +124,8 @@ export class AttemptsService {
     return false
   }
 
-  async #move(client: pg.ClientBase, paymentId: string, from: PaymentStatus, to: PaymentStatus, set: Record<string, unknown>): Promise<void> {
-    if (!(await movePayment(client, paymentId, from, to, set))) throw new Error(`payment ${paymentId} was not ${from} when it should have moved to ${to}`)
+  async #move(client: pg.ClientBase, paymentId: string, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<void> {
+    if (!(await movePayment(client, paymentId, from, to, changes))) throw new Error(`payment ${paymentId} was not ${from} when it should have moved to ${to}`)
     await paymentEvent(client, paymentId, `payment.${to}`)
   }
 
@@ -151,13 +161,13 @@ export class AttemptsService {
     if (after === captured) {
       await this.#move(client, payment.id, 'captured', 'refunded', { refunded_amount: after })
     } else {
-      await setRefundedAmount(client, payment.id, after)
+      await setPaymentRefunded(client, payment.id, after)
     }
     return 'applied'
   }
 
   async #applyPayout(client: pg.ClientBase, attempt: AttemptRecord, answer: PspAnswer): Promise<Applied> {
-    const payout = (await loadPayout(client, attempt.payout_id!, true))!
+    const payout = (await lockPayout(client, attempt.payout_id!))!
     if (!(await this.#resolve(client, attempt, answer))) return 'already'
     if (answer.status === 'succeeded') {
       await succeedPayout(client, payout.id)

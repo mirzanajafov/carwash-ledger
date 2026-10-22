@@ -48,11 +48,6 @@ export async function findAnomaly(db: Queryable, id: number): Promise<AnomalyRow
   return rows[0]
 }
 
-export async function lockOpenAnomaly(db: Queryable, id: number): Promise<boolean> {
-  const locked = await db.query('SELECT 1 FROM anomalies WHERE id = $1 AND resolved_at IS NULL FOR UPDATE', [id])
-  return locked.rowCount === 1
-}
-
 export async function resolveAnomaly(db: Queryable, id: number, resolution: 'accepted' | 'disputed', clientId: string): Promise<boolean> {
   const resolved = await db.query(`UPDATE anomalies SET resolution = $3, resolved_at = now(), resolved_by = $2 WHERE id = $1 AND resolved_at IS NULL`, [
     id,

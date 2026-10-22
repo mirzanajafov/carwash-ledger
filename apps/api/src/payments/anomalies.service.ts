@@ -5,13 +5,13 @@ import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { ApiError } from '../http/api-error.ts'
 import { Chart } from '../ledger/chart.service.ts'
-import { adjustPayout, loadPayout } from '../payouts/payouts.repository.ts'
+import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
 import { checkAnswer } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
-import { findAnomaly, listAnomalies, lockOpenAnomaly, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
+import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
 import { loadAttempt, setAttemptAmount } from './attempts.repository.ts'
 import { AttemptsService, pspUnavailable } from './attempts.service.ts'
-import { setRefundAmount } from './payments.repository.ts'
+import { correctRefundAmount } from './payments.repository.ts'
 
 const ACCEPTABLE = new Set(['capture', 'refund', 'payout'])
 
@@ -64,13 +64,12 @@ export class AnomaliesService {
     if (!check.ok) throw refuse(`the bank's answer differs in more than the amount: ${check.problems.join('. ')}`)
     if (check.answer.status !== 'succeeded') throw refuse('the bank declined this operation, so there is no amount to accept')
     await this.#db.transaction(async (client) => {
-      if (!(await lockOpenAnomaly(client, id))) throw refuse('this anomaly is already resolved')
+      if (!(await resolveAnomaly(client, id, 'accepted', clientId))) throw refuse('this anomaly is already resolved')
       if (!(await setAttemptAmount(client, attempt.id, amount))) throw refuse('the attempt is no longer pending')
-      if (attempt.kind === 'refund') await setRefundAmount(client, attempt.refund_id!, amount)
+      if (attempt.kind === 'refund') await correctRefundAmount(client, attempt.refund_id!, amount)
       if (attempt.kind === 'payout') await this.#adjustPayout(client, attempt.payout_id!, amount)
       const applied = await this.#attempts.apply(client, attempt.id, check.answer)
       if (applied !== 'applied') throw refuse(`the answer could not be applied (${applied})`)
-      await resolveAnomaly(client, id, 'accepted', clientId)
     })
     return this.#find(id)
   }
@@ -82,7 +81,7 @@ export class AnomaliesService {
   }
 
   async #adjustPayout(client: pg.ClientBase, payoutId: string, amount: bigint): Promise<void> {
-    const payout = (await loadPayout(client, payoutId, true))!
+    const payout = (await lockPayout(client, payoutId))!
     if (payout.status !== 'pending') throw refuse('the payout is no longer pending')
     const difference = BigInt(payout.amount) - amount
     if (difference <= 0n) return
@@ -94,7 +93,7 @@ export class AnomaliesService {
         { accountId: bank.id, amount: difference },
       ],
     })
-    await adjustPayout(client, payout.id, amount, journalId)
+    await recordPayoutAdjustment(client, payout.id, amount, journalId)
     await journalEvents(client, journalId)
   }
 

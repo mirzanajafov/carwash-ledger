@@ -1,4 +1,4 @@
-import { seconds } from '../payments/payment.views.ts'
+import { unixSeconds } from '../http/unix-time.ts'
 import type { PayoutRecord } from './payouts.repository.ts'
 
 export function payoutView(o: PayoutRecord) {
@@ -10,6 +10,6 @@ export function payoutView(o: PayoutRecord) {
     currency: o.currency,
     status: o.status,
     failure_reason: o.failure_reason,
-    created: seconds(o.created_at),
+    created: unixSeconds(o.created_at),
   }
 }

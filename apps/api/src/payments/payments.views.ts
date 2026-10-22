@@ -1,8 +1,5 @@
+import { unixSeconds } from '../http/unix-time.ts'
 import type { PaymentRecord, RefundRecord } from './payments.repository.ts'
-
-export function seconds(date: Date): number {
-  return Math.floor(date.getTime() / 1000)
-}
 
 export function paymentView(p: PaymentRecord) {
   return {
@@ -17,7 +14,7 @@ export function paymentView(p: PaymentRecord) {
     refunded_amount: Number(p.refunded_amount),
     fee: Number(p.fee),
     failure_reason: p.failure_reason,
-    created: seconds(p.created_at),
+    created: unixSeconds(p.created_at),
   }
 }
 
@@ -30,6 +27,6 @@ export function refundView(r: RefundRecord) {
     status: r.status,
     fee_refund: Number(r.fee_refund),
     failure_reason: r.failure_reason,
-    created: seconds(r.created_at),
+    created: unixSeconds(r.created_at),
   }
 }

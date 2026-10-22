@@ -10,8 +10,8 @@ import { insertAttempt, pendingAttempt } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { platformFee } from './fees.ts'
 import type { PaymentStatus } from './payment-state.ts'
-import { paymentView, refundView } from './payment.views.ts'
-import { insertPayment, insertRefund, loadPayment, loadRefund, pendingRefundTotal, type PaymentRecord } from './payments.repository.ts'
+import { insertPayment, insertRefund, loadPayment, loadRefund, lockPayment, pendingRefundTotal, type PaymentRecord } from './payments.repository.ts'
+import { paymentView, refundView } from './payments.views.ts'
 
 export interface CreatePaymentInput {
   amount: number
@@ -67,12 +67,12 @@ export class PaymentsService {
         const paymentId = await insertPayment(client, {
           clientId: owned.clientId,
           merchantId: merchant.id,
-          amount: input.amount,
+          amount: BigInt(input.amount),
           currency: input.currency,
           capture,
           token: input.token,
         })
-        await insertAttempt(client, { kind: 'authorize', paymentId, amount: input.amount, currency: input.currency })
+        await insertAttempt(client, { kind: 'authorize', paymentId, amount: BigInt(input.amount), currency: input.currency })
         await this.#idempotency.recordPoint(client, owned, 'payment_created', { paymentId })
       })
     }
@@ -102,14 +102,14 @@ export class PaymentsService {
   async refund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<Final> {
     if (owned.refundId === null) {
       await this.#db.transaction(async (client) => {
-        const payment = this.#visible(await loadPayment(client, paymentId, true), caller, paymentId)
+        const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
         if (payment.status !== 'captured') throw new ApiError(409, 'payment_not_refundable', `payment ${payment.id} is ${payment.status}`)
         const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - (await pendingRefundTotal(client, payment.id))
         if (BigInt(amount) > available) {
           throw new ApiError(409, 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
         }
-        const refundId = await insertRefund(client, payment.id, amount)
-        await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount, currency: payment.currency })
+        const refundId = await insertRefund(client, payment.id, BigInt(amount))
+        await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount: BigInt(amount), currency: payment.currency })
         await this.#idempotency.recordPoint(client, owned, 'refund_created', { paymentId: payment.id, refundId })
       })
     }
@@ -139,7 +139,7 @@ export class PaymentsService {
   ): Promise<void> {
     try {
       await this.#db.transaction(async (client) => {
-        const payment = this.#visible(await loadPayment(client, paymentId, true), caller, paymentId)
+        const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
         if (payment.status !== 'authorized') throw notCapturable(payment)
         const amount = amountFor(payment)
         await insertAttempt(client, { kind, paymentId: payment.id, amount, currency: payment.currency })

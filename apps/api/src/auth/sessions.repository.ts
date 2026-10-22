@@ -1,10 +1,23 @@
 import { firstRow, type Queryable } from '@carwash/pg'
+import type { ApiClientIdentity } from './api-keys.ts'
 
 export interface SessionRow {
   id: string
   name: string
   created_at: Date
   expires_at: Date
+}
+
+export async function findSessionClient(db: Queryable, tokenHash: Buffer): Promise<ApiClientIdentity | undefined> {
+  const { rows } = await db.query<ApiClientIdentity>(
+    `SELECT c.id::text, c.scope::text, s.id::text AS session
+       FROM dashboard_sessions s
+       JOIN api_clients c ON c.id = s.client_id
+      WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+        AND c.revoked_at IS NULL AND c.scope = 'admin'`,
+    [tokenHash],
+  )
+  return rows[0]
 }
 
 export async function openSession(db: Queryable, clientId: string, tokenHash: Buffer, hours: number): Promise<SessionRow> {

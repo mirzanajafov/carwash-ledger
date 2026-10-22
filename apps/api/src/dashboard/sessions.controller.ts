@@ -1,10 +1,10 @@
 import { Controller, Delete, Get, HttpCode, Inject, Post, Req } from '@nestjs/common'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { generateSessionToken, hashApiKey } from '../auth/api-keys.ts'
+import { findSession, openSession, revokeSession, type SessionRow } from '../auth/sessions.repository.ts'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
-import { findSession, openSession, revokeSession, type SessionRow } from './sessions.repository.ts'
 
 function view(row: SessionRow) {
   return { object: 'session', id: row.id, client: row.name, created_at: row.created_at.toISOString(), expires_at: row.expires_at.toISOString() }

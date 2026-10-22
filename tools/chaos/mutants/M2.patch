@@ -1,8 +1,8 @@
 --- a/apps/api/src/payments/attempts.repository.ts
 +++ b/apps/api/src/payments/attempts.repository.ts
-@@ -69,7 +69,7 @@
- export async function resolveAttempt(db: Queryable, id: string, outcome: AttemptOutcome): Promise<boolean> {
-   const updated = await db.query(
+@@ -67,7 +67,7 @@
+ export async function resolveAttempt(client: pg.ClientBase, id: string, outcome: AttemptOutcome): Promise<boolean> {
+   const updated = await client.query(
      `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
 -     WHERE id = $1 AND status = 'pending'`,
 +     WHERE id = $1`,
@@ -11,13 +11,13 @@
    return updated.rowCount === 1
 --- a/apps/api/src/payments/payments.repository.ts
 +++ b/apps/api/src/payments/payments.repository.ts
-@@ -64,7 +64,7 @@
-   const assignments = columns.map((column, index) => `, ${column} = $${index + 4}`).join('')
-   const moved = await db.query(
+@@ -79,7 +79,7 @@
+   const assignments = set.map(([column], index) => `, ${column} = $${index + 4}`).join('')
+   const moved = await client.query(
      `UPDATE payments SET status = $3::payment_status, updated_at = now()${assignments}
 -     WHERE id = $1 AND status = $2::payment_status`,
 +     WHERE id = $1 AND $2::payment_status IS NOT NULL`,
-     [id, from, to, ...columns.map((column) => set[column])],
+     [id, from, to, ...set.map(([, value]) => value)],
    )
    return moved.rowCount === 1
 --- a/apps/api/src/payments/payment-state.ts

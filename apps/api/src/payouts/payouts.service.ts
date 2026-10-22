@@ -8,8 +8,8 @@ import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
 import { insertAttempt, pendingAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
-import { payoutView } from './payout.views.ts'
-import { insertPayout, loadPayout, lockBalances, setPayoutJournal } from './payouts.repository.ts'
+import { insertPayout, loadPayout, lockPayoutBalances, setPayoutJournal } from './payouts.repository.ts'
+import { payoutView } from './payouts.views.ts'
 
 export interface PayoutInput {
   merchant: string
@@ -42,7 +42,7 @@ export class PayoutsService {
           throw new ApiError(400, 'currency_mismatch', `merchant ${input.merchant} is paid in ${merchant.currency}`)
         }
         const bank = this.#chart.accounts(input.currency).bank
-        const balance = (await lockBalances(client, [merchant.account_id, bank.id.toString()])).get(merchant.account_id)
+        const balance = await lockPayoutBalances(client, merchant.account_id, bank.id.toString())
         if (balance === undefined) throw new Error(`merchant ${input.merchant} has no balance row`)
         const payable = -balance
         if (input.amount === undefined && payable <= 0n) {

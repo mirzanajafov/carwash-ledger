@@ -12,18 +12,6 @@ export async function findClientByKey(db: Queryable, keyHash: Buffer): Promise<A
   return rows[0]
 }
 
-export async function findClientBySession(db: Queryable, tokenHash: Buffer): Promise<ApiClientIdentity | undefined> {
-  const { rows } = await db.query<ApiClientIdentity>(
-    `SELECT c.id::text, c.scope::text, s.id::text AS session
-       FROM dashboard_sessions s
-       JOIN api_clients c ON c.id = s.client_id
-      WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
-        AND c.revoked_at IS NULL AND c.scope = 'admin'`,
-    [tokenHash],
-  )
-  return rows[0]
-}
-
 export async function insertClient(db: Queryable, client: NewClient): Promise<string> {
   return firstRow(
     await db.query<{ id: string }>('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text', [

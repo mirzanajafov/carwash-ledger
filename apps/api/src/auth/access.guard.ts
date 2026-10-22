@@ -5,7 +5,8 @@ import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
 import { hashApiKey, SESSION_PREFIX, type ApiClientIdentity } from './api-keys.ts'
-import { findClientByKey, findClientBySession } from './clients.repository.ts'
+import { findClientByKey } from './clients.repository.ts'
+import { findSessionClient } from './sessions.repository.ts'
 import { TokenBuckets } from './token-buckets.ts'
 
 const PUBLIC = 'carwash:public'
@@ -44,7 +45,7 @@ export class AccessGuard implements CanActivate {
     if (!header.startsWith('Bearer ')) throw new ApiError(401, 'unauthorized', 'an API key is required')
     const token = header.slice(7)
     const hash = hashApiKey(token)
-    const client = token.startsWith(SESSION_PREFIX) ? await findClientBySession(this.#db.pool, hash) : await findClientByKey(this.#db.pool, hash)
+    const client = token.startsWith(SESSION_PREFIX) ? await findSessionClient(this.#db.pool, hash) : await findClientByKey(this.#db.pool, hash)
     if (!client) {
       throw new ApiError(401, 'unauthorized', token.startsWith(SESSION_PREFIX) ? 'the session has ended' : 'the API key is unknown or revoked')
     }

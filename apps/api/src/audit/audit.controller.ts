@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ORIGIN, toHex } from '@carwash/audit'
 import { Database } from '../db/database.ts'
 import { badRequest, notFound } from '../http/api-error.ts'
-import { findJournal, latestCheckpoint, leafAt, leafOf, recentCheckpoints } from './audit.repository.ts'
+import { findJournal, latestCheckpoint, leafByJournal, leafBySeq, recentCheckpoints } from './audit.repository.ts'
 import { runView, VerificationRuns } from './verification-runs.ts'
 import { head, proveConsistency, proveInclusion, rootAt, treeSize } from '@carwash/audit-pg'
 
@@ -54,14 +54,14 @@ export class AuditController {
 
   @Get('audit/checkpoints')
   async checkpoints() {
-    const rows = await recentCheckpoints(this.#db.pool, 20)
+    const rows = await recentCheckpoints(this.#db.pool)
     return { object: 'list', data: rows.map((r) => ({ tree_size: Number(r.size), root: toHex(new Uint8Array(r.root)), signed_at: r.signed_at.toISOString() })) }
   }
 
   @Get('audit/leaves/:seq')
   async leaf(@Param('seq') seq: string) {
     const at = size(seq, 'seq')
-    const found = await leafAt(this.#db.pool, at)
+    const found = await leafBySeq(this.#db.pool, at)
     if (!found) throw notFound(`seq ${at} in the audit log`)
     return { object: 'leaf', seq: at, journal_id: found.journal_id, leaf: toHex(new Uint8Array(found.leaf)) }
   }
@@ -85,7 +85,7 @@ export class AuditController {
   @Get('journals/:id/proof')
   async inclusion(@Param('id') id: string, @Query('tree_size') requested?: string) {
     if (!/^\d{1,18}$/.test(id)) throw badRequest('the journal id must be a number')
-    const sequenced = await leafOf(this.#db.pool, id)
+    const sequenced = await leafByJournal(this.#db.pool, id)
     if (!sequenced) throw notFound(`a sequenced journal ${id}`)
     const seq = Number(sequenced.seq)
     const current = await treeSize(this.#db.pool)

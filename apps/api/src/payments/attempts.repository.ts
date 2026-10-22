@@ -1,4 +1,5 @@
 import { firstRow, type Queryable } from '@carwash/pg'
+import type pg from 'pg'
 import type { AttemptKind } from '../psp/answers.ts'
 
 export interface AttemptRecord {
@@ -14,14 +15,11 @@ export interface AttemptRecord {
   decline_reason: string | null
 }
 
-export interface NewAttempt {
-  kind: AttemptKind
-  paymentId?: string
-  refundId?: string
-  payoutId?: string
-  amount: number | bigint | string
-  currency: string
-}
+export type NewAttempt = { amount: bigint; currency: string } & (
+  | { kind: 'authorize' | 'capture' | 'cancel'; paymentId: string }
+  | { kind: 'refund'; paymentId: string; refundId: string }
+  | { kind: 'payout'; payoutId: string }
+)
 
 export interface AttemptOutcome {
   status: 'succeeded' | 'declined'
@@ -55,19 +53,19 @@ export async function attemptsToRecover(db: Queryable, olderThanSeconds: number,
   return rows
 }
 
-export async function insertAttempt(db: Queryable, attempt: NewAttempt): Promise<void> {
-  await db.query(`INSERT INTO attempts (kind, payment_id, refund_id, payout_id, amount, currency) VALUES ($1::attempt_kind, $2, $3, $4, $5, $6)`, [
+export async function insertAttempt(client: pg.ClientBase, attempt: NewAttempt): Promise<void> {
+  await client.query(`INSERT INTO attempts (kind, payment_id, refund_id, payout_id, amount, currency) VALUES ($1::attempt_kind, $2, $3, $4, $5, $6)`, [
     attempt.kind,
-    attempt.paymentId ?? null,
-    attempt.refundId ?? null,
-    attempt.payoutId ?? null,
+    'paymentId' in attempt ? attempt.paymentId : null,
+    'refundId' in attempt ? attempt.refundId : null,
+    'payoutId' in attempt ? attempt.payoutId : null,
     attempt.amount,
     attempt.currency,
   ])
 }
 
-export async function resolveAttempt(db: Queryable, id: string, outcome: AttemptOutcome): Promise<boolean> {
-  const updated = await db.query(
+export async function resolveAttempt(client: pg.ClientBase, id: string, outcome: AttemptOutcome): Promise<boolean> {
+  const updated = await client.query(
     `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
      WHERE id = $1 AND status = 'pending'`,
     [id, outcome.status, outcome.operationId, outcome.reason],
@@ -81,7 +79,7 @@ export async function attemptOutcome(db: Queryable, id: string): Promise<{ statu
   )
 }
 
-export async function setAttemptAmount(db: Queryable, id: string, amount: bigint): Promise<boolean> {
-  const moved = await db.query(`UPDATE attempts SET amount = $2 WHERE id = $1 AND status = 'pending'`, [id, amount])
+export async function setAttemptAmount(client: pg.ClientBase, id: string, amount: bigint): Promise<boolean> {
+  const moved = await client.query(`UPDATE attempts SET amount = $2 WHERE id = $1 AND status = 'pending'`, [id, amount])
   return moved.rowCount === 1
 }

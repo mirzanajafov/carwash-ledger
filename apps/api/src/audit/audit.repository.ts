@@ -11,7 +11,7 @@ export interface SignedCheckpointRow extends CheckpointRow {
   witness_key: string
 }
 
-export interface JournalRow {
+export interface JournalWithEntries {
   id: string
   external_ref: string
   micros: string
@@ -27,23 +27,23 @@ export async function latestCheckpoint(db: Queryable): Promise<SignedCheckpointR
   return rows[0]
 }
 
-export async function recentCheckpoints(db: Queryable, limit: number): Promise<CheckpointRow[]> {
-  const { rows } = await db.query<CheckpointRow>('SELECT size::text, root, signed_at FROM audit_checkpoints c ORDER BY c.size DESC LIMIT $1', [limit])
+export async function recentCheckpoints(db: Queryable): Promise<CheckpointRow[]> {
+  const { rows } = await db.query<CheckpointRow>('SELECT size::text, root, signed_at FROM audit_checkpoints c ORDER BY c.size DESC LIMIT 20')
   return rows
 }
 
-export async function leafAt(db: Queryable, seq: number): Promise<{ journal_id: string; leaf: Buffer } | undefined> {
+export async function leafBySeq(db: Queryable, seq: number): Promise<{ journal_id: string; leaf: Buffer } | undefined> {
   const { rows } = await db.query<{ journal_id: string; leaf: Buffer }>('SELECT journal_id::text, leaf FROM audit_log WHERE seq = $1', [seq])
   return rows[0]
 }
 
-export async function leafOf(db: Queryable, journalId: string): Promise<{ seq: string; leaf: Buffer } | undefined> {
+export async function leafByJournal(db: Queryable, journalId: string): Promise<{ seq: string; leaf: Buffer } | undefined> {
   const { rows } = await db.query<{ seq: string; leaf: Buffer }>('SELECT seq::text, leaf FROM audit_log WHERE journal_id = $1', [journalId])
   return rows[0]
 }
 
-export async function findJournal(db: Queryable, id: string): Promise<JournalRow | undefined> {
-  const { rows } = await db.query<JournalRow>(
+export async function findJournal(db: Queryable, id: string): Promise<JournalWithEntries | undefined> {
+  const { rows } = await db.query<JournalWithEntries>(
     `SELECT j.id::text, j.external_ref, (extract(epoch FROM j.created_at) * 1000000)::bigint::text AS micros, j.created_at,
             (SELECT a.seq::text FROM audit_log a WHERE a.journal_id = j.id) AS seq,
             json_agg(json_build_object('id', e.id::text, 'account_id', e.account_id::text, 'account', acc.code, 'amount', e.amount::text) ORDER BY e.id) AS entries
