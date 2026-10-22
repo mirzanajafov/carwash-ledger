@@ -1,6 +1,7 @@
 import { TOPICS, writeEvent, writeJournalEvents } from '@carwash/outbox'
 import type pg from 'pg'
-import { loadPayment, loadRefund, paymentView, refundView } from '../payments/records.ts'
+import { paymentView, refundView } from '../payments/payment.views.ts'
+import { loadPayment, loadRefund } from '../payments/payments.repository.ts'
 
 export async function paymentEvent(client: pg.ClientBase, paymentId: string, type: string): Promise<void> {
   const payment = (await loadPayment(client, paymentId))!

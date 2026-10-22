@@ -1,5 +1,6 @@
-import pg from 'pg'
+import { createPool } from '@carwash/pg'
 import { hashApiKey } from '../auth/api-keys.ts'
+import { registerClient } from '../auth/clients.repository.ts'
 
 const [name, scope] = process.argv.slice(2)
 const key = process.env.CLIENT_KEY
@@ -13,14 +14,10 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const client = new pg.Client({ connectionString })
-await client.connect()
+const pool = createPool({ connectionString, max: 1 })
 try {
-  const { rowCount } = await client.query(
-    'INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) ON CONFLICT (key_hash) DO NOTHING',
-    [name, hashApiKey(key), scope],
-  )
-  process.stdout.write(`${name} (${scope}): ${rowCount === 1 ? 'registered' : 'already registered'}\n`)
+  const registered = await registerClient(pool, { name, keyHash: hashApiKey(key), scope })
+  process.stdout.write(`${name} (${scope}): ${registered ? 'registered' : 'already registered'}\n`)
 } finally {
-  await client.end()
+  await pool.end()
 }

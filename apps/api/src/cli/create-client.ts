@@ -1,6 +1,6 @@
-import { firstRow } from '@carwash/pg'
-import pg from 'pg'
+import { createPool } from '@carwash/pg'
 import { generateApiKey, hashApiKey } from '../auth/api-keys.ts'
+import { insertClient } from '../auth/clients.repository.ts'
 
 const [name, scope] = process.argv.slice(2)
 if (!name || (scope !== 'client' && scope !== 'admin')) {
@@ -14,17 +14,10 @@ if (!connectionString) {
 }
 
 const key = generateApiKey(scope)
-const client = new pg.Client({ connectionString })
-await client.connect()
+const pool = createPool({ connectionString, max: 1 })
 try {
-  const { id } = firstRow(
-    await client.query<{ id: string }>('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) RETURNING id::text', [
-      name,
-      hashApiKey(key),
-      scope,
-    ]),
-  )
+  const id = await insertClient(pool, { name, keyHash: hashApiKey(key), scope })
   process.stdout.write(`client ${id} (${scope}): ${key}\n`)
 } finally {
-  await client.end()
+  await pool.end()
 }
