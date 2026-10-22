@@ -1,5 +1,5 @@
 import { TOPICS, type ConsumerSpec } from '@carwash/outbox'
-import { merchantAccountCode } from '../ledger/chart.service.ts'
+import { merchantAccountCode } from '../ledger/account-codes.ts'
 
 interface PostedEntry {
   account_id: string

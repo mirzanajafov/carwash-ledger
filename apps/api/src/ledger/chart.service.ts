@@ -27,10 +27,6 @@ const CHART: Record<keyof CurrencyAccounts, Spec> = {
   suspense: { name: 'suspense', type: 'liability', hot: false },
 }
 
-export function merchantAccountCode(merchant: string): string {
-  return `merchant_payable:${merchant}`
-}
-
 @Injectable()
 export class Chart implements OnModuleInit {
   readonly registry: AccountRegistry

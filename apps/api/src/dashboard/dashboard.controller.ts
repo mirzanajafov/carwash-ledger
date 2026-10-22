@@ -1,7 +1,6 @@
 import { Body, Controller, HttpCode, Inject, Logger, Post, Req } from '@nestjs/common'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
 import { checkAudit, checkLedger, checkPaymentsIncrementally, checkSequenced, readWitness, type WitnessView } from '@carwash/invariants'
-import { IsIn } from 'class-validator'
 import type pg from 'pg'
 import { runView, VerificationRuns } from '../audit/verification-runs.ts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
@@ -9,15 +8,9 @@ import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { AuditDatabase } from '../db/audit-database.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
+import { PlugBody } from '../http/dto.ts'
 import { INSTANCE } from '../http/instance.ts'
 import { takeTurn } from './limits.ts'
-
-export const PLUGS = ['post.after_lock', 'attempt.after_psp', 'transaction.before_commit', 'transaction.after_commit', 'request.before_finish'] as const
-
-export class PlugBody {
-  @IsIn(PLUGS)
-  failpoint!: (typeof PLUGS)[number]
-}
 
 function limited(waitMs: number): ApiError {
   const seconds = Math.ceil(waitMs / 1000)

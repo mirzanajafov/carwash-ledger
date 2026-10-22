@@ -65,3 +65,10 @@ export class MerchantBody {
   @Matches(CURRENCY, { message: 'currency must be a three-letter currency code' })
   currency!: string
 }
+
+export const PLUGS = ['post.after_lock', 'attempt.after_psp', 'transaction.before_commit', 'transaction.after_commit', 'request.before_finish'] as const
+
+export class PlugBody {
+  @IsIn(PLUGS)
+  failpoint!: (typeof PLUGS)[number]
+}
