@@ -4,11 +4,11 @@ import { takeSnapshots } from '@carwash/ledger'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { ApiError } from '../http/api-error.ts'
 import { IdempotencyService } from '../idempotency/idempotency.service.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { attemptsToRecover, type AttemptRecord } from '../payments/attempts.repository.ts'
 import { PspClient } from '../psp/psp.client.ts'
+import { PspAnswerRejectedError, PspUnavailableError } from '../psp/psp.errors.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
 import { EventConsumers } from '../consumers/event-consumers.service.ts'
 import { Settlements } from '../settlement/settlements.service.ts'
@@ -91,8 +91,8 @@ export class Recovery implements OnApplicationBootstrap, OnModuleDestroy {
       failpoint('recovery.after_pull')
       return await this.#attempts.receive(await this.#attempts.callFor(attempt), reply.body)
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'psp_unavailable') return 'unknown'
-      if (error instanceof ApiError && error.code === 'psp_answer_rejected') return 'anomaly'
+      if (error instanceof PspUnavailableError) return 'unknown'
+      if (error instanceof PspAnswerRejectedError) return 'anomaly'
       this.#logger.error(`attempt ${attempt.id}: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)
       return 'error'
     }

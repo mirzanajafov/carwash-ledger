@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { AdminOnly } from '../auth/access.guard.ts'
-import { badRequest } from '../http/api-error.ts'
+import { invalidInput } from '../domain-errors.ts'
 import { currencyCode, dayNumber } from './params.ts'
 import { Settlements } from './settlements.service.ts'
 
@@ -16,7 +16,7 @@ export class ReconciliationController {
   @Get('days')
   async days(@Query('currency') currency?: string, @Query('limit') limit?: string) {
     const count = limit === undefined ? 7 : Number(limit)
-    if (!Number.isInteger(count) || count < 1 || count > 60) throw badRequest('limit must be between 1 and 60')
+    if (!Number.isInteger(count) || count < 1 || count > 60) throw invalidInput('limit must be between 1 and 60')
     return { object: 'list', ...(await this.#settlements.days(currencyCode(currency), count)) }
   }
 

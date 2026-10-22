@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ORIGIN, toHex } from '@carwash/audit'
 import { Database } from '../db/database.ts'
-import { badRequest, notFound } from '../http/api-error.ts'
+import { invalidInput, notFound } from '../domain-errors.ts'
 import { findJournal, latestCheckpoint, leafByJournal, leafBySeq, recentCheckpoints } from './audit.repository.ts'
 import { runView, VerificationRuns } from './verification-runs.ts'
 import { head, proveConsistency, proveInclusion, rootAt, treeSize } from '@carwash/audit-pg'
@@ -10,7 +10,7 @@ function size(value: string, name: string): number
 function size(value: string | undefined, name: string): number | undefined
 function size(value: string | undefined, name: string): number | undefined {
   if (value === undefined) return undefined
-  if (!/^\d{1,15}$/.test(value)) throw badRequest(`${name} must be a tree size`)
+  if (!/^\d{1,15}$/.test(value)) throw invalidInput(`${name} must be a tree size`)
   return Number(value)
 }
 
@@ -68,7 +68,7 @@ export class AuditController {
 
   @Get('journals/:id')
   async journal(@Param('id') id: string) {
-    if (!/^\d{1,18}$/.test(id)) throw badRequest('the journal id must be a number')
+    if (!/^\d{1,18}$/.test(id)) throw invalidInput('the journal id must be a number')
     const journal = await findJournal(this.#db.pool, id)
     if (!journal) throw notFound(`journal ${id}`)
     return {
@@ -84,13 +84,13 @@ export class AuditController {
 
   @Get('journals/:id/proof')
   async inclusion(@Param('id') id: string, @Query('tree_size') requested?: string) {
-    if (!/^\d{1,18}$/.test(id)) throw badRequest('the journal id must be a number')
+    if (!/^\d{1,18}$/.test(id)) throw invalidInput('the journal id must be a number')
     const sequenced = await leafByJournal(this.#db.pool, id)
     if (!sequenced) throw notFound(`a sequenced journal ${id}`)
     const seq = Number(sequenced.seq)
     const current = await treeSize(this.#db.pool)
     const at = size(requested, 'tree_size') ?? current
-    if (at <= seq || at > current) throw badRequest(`tree_size must be between ${seq + 1} and ${current}`)
+    if (at <= seq || at > current) throw invalidInput(`tree_size must be between ${seq + 1} and ${current}`)
     const proof = await proveInclusion(this.#db.pool, seq, at)
     return {
       object: 'inclusion_proof',
@@ -108,7 +108,7 @@ export class AuditController {
     const current = await treeSize(this.#db.pool)
     const from = size(first, 'first')
     const to = size(second, 'second') ?? current
-    if (from === undefined || from < 1 || from > to || to > current) throw badRequest(`first and second must satisfy 1 <= first <= second <= ${current}`)
+    if (from === undefined || from < 1 || from > to || to > current) throw invalidInput(`first and second must satisfy 1 <= first <= second <= ${current}`)
     return {
       object: 'consistency_proof',
       first: from,

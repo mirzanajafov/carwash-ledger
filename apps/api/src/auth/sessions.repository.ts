@@ -43,13 +43,6 @@ export async function findSession(db: Queryable, id: string): Promise<SessionRow
   )
 }
 
-export async function revokeSession(db: Queryable, id: string): Promise<SessionRow> {
-  return firstRow(
-    await db.query<SessionRow>(
-      `UPDATE dashboard_sessions s SET revoked_at = now() FROM api_clients c
-        WHERE s.id = $1 AND c.id = s.client_id AND s.revoked_at IS NULL
-        RETURNING s.id::text, c.name, s.created_at, s.expires_at`,
-      [id],
-    ),
-  )
+export async function revokeSession(db: Queryable, id: string): Promise<void> {
+  await db.query('UPDATE dashboard_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [id])
 }

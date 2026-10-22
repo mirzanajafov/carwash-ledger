@@ -4,11 +4,11 @@ import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
 import type pg from 'pg'
 import { Database } from '../db/database.ts'
 import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
-import { ApiError } from '../http/api-error.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { failPayout, loadPayout, lockPayout, succeedPayout } from '../payouts/payouts.repository.ts'
 import { checkAnswer, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
 import { PspClient, type PspCall } from '../psp/psp.client.ts'
+import { PspAnswerRejectedError, pspUnavailable } from '../psp/psp.errors.ts'
 import { recordAnomaly } from './anomalies.repository.ts'
 import { attemptOutcome, insertAttempt, loadAttempt, resolveAttempt, type AttemptRecord } from './attempts.repository.ts'
 import { feeRefund, platformFee } from './fees.ts'
@@ -26,12 +26,6 @@ import {
 } from './payments.repository.ts'
 
 export type Applied = 'applied' | 'already' | 'anomaly'
-
-export function pspUnavailable(reason: string): ApiError {
-  return new ApiError(503, 'psp_unavailable', `the PSP did not give an answer (${reason}), so retry with the same idempotency key`, {
-    'retry-after': '1',
-  })
-}
 
 function nonZero(entries: EntryInput[]): EntryInput[] {
   return entries.filter((entry) => entry.amount !== 0n)
@@ -68,7 +62,7 @@ export class AttemptsService {
     const check = checkAnswer(expected, body)
     if (!check.ok) {
       await recordAnomaly(this.#db.pool, call.attemptId, 'answer_mismatch', { problems: check.problems, answer: body })
-      throw new ApiError(502, 'psp_answer_rejected', 'the PSP answered something that does not match the request, and the answer is recorded as an anomaly')
+      throw new PspAnswerRejectedError()
     }
     return this.#db.transaction((client) => this.apply(client, call.attemptId, check.answer))
   }

@@ -385,6 +385,15 @@ describe('admin sessions', () => {
     expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: 'cw_session_made-up' })).status).toBe(401)
   })
 
+  it('answers a double-clicked logout without an error', async () => {
+    for (let i = 0; i < 10; i++) {
+      const session = await login()
+      const logouts = await Promise.all([1, 2].map(() => stack.call('DELETE', '/v1/admin/sessions/current', { bearer: session.token })))
+      expect(logouts.map((logout) => logout.status)).toContain(200)
+      for (const logout of logouts) expect([200, 401]).toContain(logout.status)
+    }
+  })
+
   it('lets a session skip the global turns that the dashboard key waits for', async () => {
     const session = await login()
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)

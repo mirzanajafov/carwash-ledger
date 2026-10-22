@@ -5,9 +5,9 @@ import { BREAK_CLASSES, reconcile, window, type BreakClass, type LedgerItem } fr
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
-import { ApiError } from '../http/api-error.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
+import { PspUnavailableError } from '../psp/psp.errors.ts'
 import { parseSettlementFile } from './settlement-file.ts'
 
 export type IngestOutcome = 'ingested' | 'already' | 'not_ready'
@@ -59,7 +59,7 @@ export class Settlements {
     const accounts = this.#chart.accounts(currency)
     const reply = await this.#psp.settlementFile(day, currency)
     if (reply.kind === 'not_ready') return 'not_ready'
-    if (reply.kind === 'unknown') throw new ApiError(503, 'psp_unavailable', `the PSP did not hand over day ${day} (${reply.reason})`, { 'Retry-After': '5' })
+    if (reply.kind === 'unknown') throw new PspUnavailableError(`the PSP did not hand over day ${day} (${reply.reason})`, 5)
     const file = parseSettlementFile(reply.csv)
     if (file.day !== day || file.currency !== currency) throw new Error(`asked for ${currency} day ${day}, got ${file.currency} day ${file.day}`)
     return this.#db.transaction(async (client) => {
@@ -106,8 +106,7 @@ export class Settlements {
 
   async reconcile(currency: string): Promise<ReconcileSummary | undefined> {
     const calendar = await this.#psp.calendar()
-    if (calendar.kind === 'unknown')
-      throw new ApiError(503, 'psp_unavailable', `the PSP's calendar is not available (${calendar.reason})`, { 'Retry-After': '5' })
+    if (calendar.kind === 'unknown') throw new PspUnavailableError(`the PSP's calendar is not available (${calendar.reason})`, 5)
     const through = firstRow(
       await this.#db.pool.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [currency]),
     ).day

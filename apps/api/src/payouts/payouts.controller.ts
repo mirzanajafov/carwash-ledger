@@ -1,8 +1,9 @@
-import { Body, Controller, Post, Req, Res } from '@nestjs/common'
-import type { Response } from 'express'
-import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
+import { Body, Controller, Post, UseInterceptors } from '@nestjs/common'
+import { AdminOnly } from '../auth/access.guard.ts'
 import { PayoutBody } from '../http/dto.ts'
-import { IdempotencyService } from '../idempotency/idempotency.service.ts'
+import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
+import { Keyed } from '../idempotency/keyed.decorator.ts'
+import { ReplyInterceptor } from '../idempotency/reply.interceptor.ts'
 import { PayoutsService } from './payouts.service.ts'
 
 @AdminOnly()
@@ -17,7 +18,8 @@ export class PayoutsController {
   }
 
   @Post()
-  create(@Req() request: AuthedRequest, @Res() response: Response, @Body() body: PayoutBody): Promise<void> {
-    return this.#idempotency.run(request, response, (owned) => this.#payouts.create(owned, body))
+  @UseInterceptors(ReplyInterceptor)
+  create(@Keyed() keyed: KeyedRequest, @Body() body: PayoutBody): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#payouts.create(owned, body))
   }
 }

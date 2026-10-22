@@ -18,7 +18,7 @@ export const AdminOnly = () => SetMetadata(ADMIN_ONLY, true)
 export type AuthedRequest = Request & { client: ApiClientIdentity }
 
 function tooMany(): ApiError {
-  return new ApiError(429, 'rate_limited', 'too many requests', { 'retry-after': '1' })
+  return new ApiError(429, 'rate_limited', 'too many requests', 1)
 }
 
 @Injectable()

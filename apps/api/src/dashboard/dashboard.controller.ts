@@ -14,7 +14,7 @@ import { takeTurn } from './limits.ts'
 
 function limited(waitMs: number): ApiError {
   const seconds = Math.ceil(waitMs / 1000)
-  return new ApiError(429, 'rate_limited', `this can run again in ${seconds} s`, { 'retry-after': String(seconds) })
+  return new ApiError(429, 'rate_limited', `this can run again in ${seconds} s`, seconds)
 }
 
 @AdminOnly()
@@ -90,7 +90,7 @@ export class DashboardController {
       return await readWitness(this.#config.witnessUrl)
     } catch (error) {
       this.#logger.warn(`the witness could not be read: ${error instanceof Error ? error.message : String(error)}`)
-      throw new ApiError(503, 'witness_unavailable', 'the witness could not be read, so try again in a minute', { 'retry-after': '60' })
+      throw new ApiError(503, 'witness_unavailable', 'the witness could not be read, so try again in a minute', 60)
     }
   }
 

@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common'
-import type { Response } from 'express'
-import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
+import { Body, Controller, Get, Param, Post, UseInterceptors } from '@nestjs/common'
+import { AdminOnly } from '../auth/access.guard.ts'
 import { MerchantBody } from '../http/dto.ts'
-import { IdempotencyService } from '../idempotency/idempotency.service.ts'
+import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
+import { Keyed } from '../idempotency/keyed.decorator.ts'
+import { ReplyInterceptor } from '../idempotency/reply.interceptor.ts'
 import { MerchantsService } from './merchants.service.ts'
 
 @AdminOnly()
@@ -17,8 +18,9 @@ export class MerchantsController {
   }
 
   @Post()
-  create(@Req() request: AuthedRequest, @Res() response: Response, @Body() body: MerchantBody): Promise<void> {
-    return this.#idempotency.run(request, response, (owned) => this.#merchants.create(owned, body))
+  @UseInterceptors(ReplyInterceptor)
+  create(@Keyed() keyed: KeyedRequest, @Body() body: MerchantBody): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#merchants.create(owned, body))
   }
 
   @Get(':code')
