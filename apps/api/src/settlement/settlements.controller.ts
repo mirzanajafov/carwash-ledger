@@ -15,8 +15,9 @@ export class SettlementsController {
   @Post(':day/ingest')
   async ingest(@Param('day') day: string, @Query('currency') currency?: string) {
     const code = currencyCode(currency)
-    const outcome = await this.#settlements.ingest(dayNumber(day, 'day'), code)
+    const number = dayNumber(day, 'day')
+    const outcome = await this.#settlements.ingest(number, code)
     const reconciliation = outcome === 'not_ready' ? undefined : await this.#settlements.reconcile(code)
-    return { object: 'settlement', day: Number(day), currency: code, outcome, reconciliation }
+    return { object: 'settlement', day: number, currency: code, outcome, reconciliation }
   }
 }

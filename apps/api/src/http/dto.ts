@@ -66,7 +66,7 @@ export class MerchantBody {
   currency!: string
 }
 
-export const PLUGS = ['post.after_lock', 'attempt.after_psp', 'transaction.before_commit', 'transaction.after_commit', 'request.before_finish'] as const
+const PLUGS = ['post.after_lock', 'attempt.after_psp', 'transaction.before_commit', 'transaction.after_commit', 'request.before_finish'] as const
 
 export class PlugBody {
   @IsIn(PLUGS)

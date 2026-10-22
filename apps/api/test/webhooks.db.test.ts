@@ -6,8 +6,9 @@ import { firstRow } from '@carwash/pg'
 import { NO_FAULTS } from '@carwash/psp'
 import type { INestApplication, INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
-import { afterAll, assert, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadAttempt } from '../src/payments/records.ts'
+import { Database } from '../src/db/database.ts'
 import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
 import { Recovery } from '../src/worker/recovery.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
@@ -179,20 +180,39 @@ describe('the recovery job', () => {
     expect(await paymentStatus(paymentId)).toBe('captured')
   })
 
-  it('runs on its own in the worker process, which answers health', async () => {
+  it('runs on its own in the worker process, which answers health and nothing else', async () => {
     const live: INestApplication = await NestFactory.create(WorkerModule.register({ ...stack.config, recoveryEveryMs: 200, recoveryAfterSeconds: 0 }), {
       logger: false,
     })
     await live.listen(0, '127.0.0.1')
     try {
-      const health = await fetch(`http://127.0.0.1:${(live.getHttpServer().address() as AddressInfo).port}/health`)
-      expect(await health.json()).toMatchObject({ ok: true, pid: process.pid })
+      const base = `http://127.0.0.1:${(live.getHttpServer().address() as AddressInfo).port}`
+      expect(await (await fetch(`${base}/health`)).json()).toMatchObject({ ok: true, pid: process.pid })
+      for (const path of ['/v1/admin/anomalies', `/v1/payments/${randomUUID()}`, '/v1/reconciliation/days', '/v1/audit/head']) {
+        expect((await fetch(`${base}${path}`)).status).toBe(404)
+      }
       const key = randomUUID()
       expect((await call('POST', '/v1/payments', { key, body: pay('tok_fail_once_capture') })).status).toBe(503)
       const paymentId = await paymentIdForKey(key)
       await waitFor(async () => ((await paymentStatus(paymentId)) === 'captured' ? true : undefined))
     } finally {
       await live.close()
+    }
+  })
+
+  it('stops its loops before the database pools close when the worker shuts down', async () => {
+    const stopping = vi.spyOn(Recovery.prototype, 'onModuleDestroy')
+    const closing = vi.spyOn(Database.prototype, 'onModuleDestroy')
+    try {
+      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 10 }), { logger: false })
+      await worker.close()
+      const [stopped] = stopping.mock.invocationCallOrder
+      const [closed] = closing.mock.invocationCallOrder
+      assert(stopped !== undefined && closed !== undefined)
+      expect(stopped).toBeLessThan(closed)
+    } finally {
+      stopping.mockRestore()
+      closing.mockRestore()
     }
   })
 
