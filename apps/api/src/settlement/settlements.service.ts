@@ -5,9 +5,9 @@ import { BREAK_CLASSES, reconcile, window, type BreakClass, type LedgerItem } fr
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
-import { PspUnavailableError } from '../domain-errors.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
+import { PspUnavailableError } from '../psp/psp.errors.ts'
 import { parseSettlementFile } from './settlement-file.ts'
 
 export type IngestOutcome = 'ingested' | 'already' | 'not_ready'

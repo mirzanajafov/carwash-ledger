@@ -1,23 +1,25 @@
 import { Body, Controller, Get, Param, Post, UseInterceptors } from '@nestjs/common'
 import { AdminOnly } from '../auth/access.guard.ts'
 import { MerchantBody } from '../http/dto.ts'
-import { IdempotencyInterceptor, Owned } from '../idempotency/idempotency.interceptor.ts'
-import type { Final, OwnedKey } from '../idempotency/idempotency.service.ts'
+import { Keyed, ReplyInterceptor } from '../idempotency/idempotency.interceptor.ts'
+import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
 import { MerchantsService } from './merchants.service.ts'
 
 @AdminOnly()
 @Controller('v1/merchants')
 export class MerchantsController {
   readonly #merchants: MerchantsService
+  readonly #idempotency: IdempotencyService
 
-  constructor(merchants: MerchantsService) {
+  constructor(merchants: MerchantsService, idempotency: IdempotencyService) {
     this.#merchants = merchants
+    this.#idempotency = idempotency
   }
 
   @Post()
-  @UseInterceptors(IdempotencyInterceptor)
-  create(@Owned() owned: OwnedKey, @Body() body: MerchantBody): Promise<Final> {
-    return this.#merchants.create(owned, body)
+  @UseInterceptors(ReplyInterceptor)
+  create(@Keyed() keyed: KeyedRequest, @Body() body: MerchantBody): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#merchants.create(owned, body))
   }
 
   @Get(':code')

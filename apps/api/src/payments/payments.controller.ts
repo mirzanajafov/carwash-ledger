@@ -1,40 +1,42 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseInterceptors } from '@nestjs/common'
 import type { AuthedRequest } from '../auth/access.guard.ts'
 import { CaptureBody, CreatePaymentBody, RefundBody } from '../http/dto.ts'
-import { IdempotencyInterceptor, Owned } from '../idempotency/idempotency.interceptor.ts'
-import type { Final, OwnedKey } from '../idempotency/idempotency.service.ts'
+import { Keyed, ReplyInterceptor } from '../idempotency/idempotency.interceptor.ts'
+import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
 import { PaymentsService } from './payments.service.ts'
 
 @Controller('v1/payments')
 export class PaymentsController {
   readonly #payments: PaymentsService
+  readonly #idempotency: IdempotencyService
 
-  constructor(payments: PaymentsService) {
+  constructor(payments: PaymentsService, idempotency: IdempotencyService) {
     this.#payments = payments
+    this.#idempotency = idempotency
   }
 
   @Post()
-  @UseInterceptors(IdempotencyInterceptor)
-  create(@Owned() owned: OwnedKey, @Body() body: CreatePaymentBody): Promise<Final> {
-    return this.#payments.create(owned, body)
+  @UseInterceptors(ReplyInterceptor)
+  create(@Keyed() keyed: KeyedRequest, @Body() body: CreatePaymentBody): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#payments.create(owned, body))
   }
 
   @Post(':id/capture')
-  @UseInterceptors(IdempotencyInterceptor)
-  capture(@Req() request: AuthedRequest, @Owned() owned: OwnedKey, @Param('id', ParseUUIDPipe) id: string, @Body() body: CaptureBody): Promise<Final> {
-    return this.#payments.capture(owned, request.client, id, body.amount)
+  @UseInterceptors(ReplyInterceptor)
+  capture(@Req() request: AuthedRequest, @Keyed() keyed: KeyedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: CaptureBody): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#payments.capture(owned, request.client, id, body.amount))
   }
 
   @Post(':id/cancel')
-  @UseInterceptors(IdempotencyInterceptor)
-  cancel(@Req() request: AuthedRequest, @Owned() owned: OwnedKey, @Param('id', ParseUUIDPipe) id: string): Promise<Final> {
-    return this.#payments.cancel(owned, request.client, id)
+  @UseInterceptors(ReplyInterceptor)
+  cancel(@Req() request: AuthedRequest, @Keyed() keyed: KeyedRequest, @Param('id', ParseUUIDPipe) id: string): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#payments.cancel(owned, request.client, id))
   }
 
   @Post(':id/refunds')
-  @UseInterceptors(IdempotencyInterceptor)
-  refund(@Req() request: AuthedRequest, @Owned() owned: OwnedKey, @Param('id', ParseUUIDPipe) id: string, @Body() body: RefundBody): Promise<Final> {
-    return this.#payments.refund(owned, request.client, id, body.amount)
+  @UseInterceptors(ReplyInterceptor)
+  refund(@Req() request: AuthedRequest, @Keyed() keyed: KeyedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: RefundBody): Promise<Reply> {
+    return this.#idempotency.run(keyed, (owned) => this.#payments.refund(owned, request.client, id, body.amount))
   }
 
   @Get(':id')

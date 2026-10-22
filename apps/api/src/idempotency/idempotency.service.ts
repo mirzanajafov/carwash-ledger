@@ -4,7 +4,8 @@ import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { DomainError } from '../domain-errors.ts'
+import { DomainError, invalidInput } from '../domain-errors.ts'
+import { ApiError } from '../http/api-error.ts'
 import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
@@ -19,6 +20,18 @@ export interface OwnedKey {
 
 export interface Final {
   status: number
+  body: unknown
+}
+
+export interface Reply extends Final {
+  replayed: boolean
+}
+
+export interface KeyedRequest {
+  clientId: string
+  key: unknown
+  method: string
+  path: string
   body: unknown
 }
 
@@ -52,6 +65,10 @@ function leaseLost(): DomainError {
 
 const OWNED = 'client_id = $1 AND key = $2 AND lease_id = $3'
 
+function refused(error: unknown): boolean {
+  return error instanceof DomainError ? error.refusal : error instanceof ApiError && error.status < 500
+}
+
 @Injectable()
 export class IdempotencyService {
   readonly #db: Database
@@ -60,6 +77,22 @@ export class IdempotencyService {
   constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
     this.#db = db
     this.#config = config
+  }
+
+  async run(request: KeyedRequest, work: (owned: OwnedKey) => Promise<Final>): Promise<Reply> {
+    const { key } = request
+    if (typeof key !== 'string' || key.length === 0 || key.length > 255) {
+      throw invalidInput('every POST needs an Idempotency-Key header of 1 to 255 characters')
+    }
+    const begun = await this.begin(request.clientId, key, request.method, request.path, request.body)
+    if (begun.kind === 'replay') return { status: begun.status, body: begun.body, replayed: true }
+    try {
+      return { ...(await work(begun.owned)), replayed: false }
+    } catch (error) {
+      if (refused(error)) await this.abandon(begun.owned)
+      else await this.release(begun.owned).catch(() => undefined)
+      throw error
+    }
   }
 
   async begin(clientId: string, key: string, method: string, path: string, body: unknown): Promise<Begun> {

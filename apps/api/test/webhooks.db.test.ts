@@ -222,8 +222,22 @@ describe('the recovery job', () => {
     const capture = await attemptOf(await paymentIdForKey(key), 'capture')
     const outcomes = await recovery.recoverPending(0)
     expect(outcomes.get('anomaly')).toBeUndefined()
-    expect(await loadAttempt(stack.admin, capture)).toMatchObject({ status: 'pending' })
+    const attempt = await loadAttempt(stack.admin, capture)
+    assert(attempt)
+    expect(attempt).toMatchObject({ status: 'pending' })
+    expect(await recovery.recover(attempt)).toBe('anomaly')
     expect(await count(stack.admin, `SELECT count(*)::int AS n FROM anomalies WHERE attempt_id = $1 AND kind = 'answer_mismatch'`, [capture])).toBe(1)
+  })
+
+  it('counts an attempt as unknown while the PSP keeps failing before it does anything', async () => {
+    stack.psp.faults.plan = { ...NO_FAULTS, fail: 1 }
+    const key = randomUUID()
+    expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok') })).body.error.code).toBe('psp_unavailable')
+    const attempt = await loadAttempt(stack.admin, await attemptOf(await paymentIdForKey(key), 'authorize'))
+    assert(attempt)
+    expect(await recovery.recover(attempt)).toBe('unknown')
+    stack.psp.faults.plan = NO_FAULTS
+    expect(await recovery.recover(attempt)).toBe('applied')
   })
 
   it('leaves the books balanced and agreeing with the PSP', async () => {
