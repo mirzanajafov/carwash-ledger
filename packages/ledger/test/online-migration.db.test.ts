@@ -74,6 +74,7 @@ describe('the entries currency change', () => {
     expect(rows).toHaveLength(18)
     expect(rows.every((r) => r.currency === r.account)).toBe(true)
     expect(await sqlState(owner.query(`UPDATE entries SET currency = 'GBP' WHERE id = (SELECT min(id) FROM entries)`))).toBe('LG001')
+    let inserted = false
     const mixed = withTransaction(app, async (client) => {
       const journal = firstRow(await client.query<{ id: string }>(`INSERT INTO journals (external_ref) VALUES ('short') RETURNING id::text`))
       const [eur, usd] = (
@@ -81,8 +82,10 @@ describe('the entries currency change', () => {
       ).rows
       assert(eur && usd)
       await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, 100), ($1, $3, -100)', [journal.id, eur.id, usd.id])
+      inserted = true
     })
     expect(await sqlState(mixed)).toBe('LG002')
+    expect(inserted).toBe(true)
     expect(violations(await checkLedger(db.pool('ledger_audit', 1)))).toEqual([])
   })
 

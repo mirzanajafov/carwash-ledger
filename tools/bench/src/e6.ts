@@ -347,8 +347,10 @@ async function trials(dir: string) {
         const { withWitness, without, ms } = await inRollback(lab.admin, async (client) => {
           await tamper(client, tamperClass, seq)
           const started = performance.now()
-          const report = await verifyLog(client, { witness: witnessed })
-          return { withWitness: report, ms: performance.now() - started, without: await verifyLog(client, {}) }
+          const withWitness = await verifyLog(client, { witness: witnessed })
+          const ms = performance.now() - started
+          const without = await verifyLog(client, {})
+          return { withWitness, ms, without }
         })
         const trial = {
           tamperClass,

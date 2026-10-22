@@ -108,12 +108,12 @@ describe('a transaction run by withTransaction or inRollback', () => {
   })
 
   it('drops a connection whose ROLLBACK failed although it is still open', async () => {
-    const impatient = createPool({ connectionString: ledger.db.url('admin'), max: 1, query_timeout: 200 })
+    const impatient = createPool({ connectionString: ledger.db.url('admin'), max: 1, query_timeout: 1000 })
     cleanup.defer(() => impatient.end())
     let first = 0
     const stuck = withTransaction(impatient, async (client) => {
       first = await backendPid(client)
-      void client.query('SELECT pg_sleep(1)').catch(() => undefined)
+      void client.query('SELECT pg_sleep(5)').catch(() => undefined)
       throw new Error('the work gave up')
     })
     await expect(stuck).rejects.toThrow('the work gave up')

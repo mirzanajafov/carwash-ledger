@@ -69,8 +69,8 @@ describe('the outbox', () => {
     const receivable: Account = await createAccount(app, { code: 'ob:receivable', type: 'asset', currency: 'EUR', balanceMode: 'locked' })
     const payable: Account = await createAccount(app, { code: 'ob:payable', type: 'liability', currency: 'EUR', balanceMode: 'locked' })
     const registry = new AccountRegistry(pgAccountLoader(app))
-    const post = (ref: string, commit: boolean) =>
-      (commit ? withTransaction : inRollback)(app, async (client) => {
+    const post = (ref: string, end: typeof inRollback) =>
+      end(app, async (client) => {
         const journalId = await postInTransaction(client, registry, {
           externalRef: ref,
           entries: [
@@ -81,9 +81,9 @@ describe('the outbox', () => {
         expect(await writeJournalEvents(client, journalId)).toBe(2)
         return journalId
       })
-    await post('ob:rolled-back', false)
+    await post('ob:rolled-back', inRollback)
     expect(await unpublished()).toBe(0)
-    const journalId = await post('ob:kept', true)
+    const journalId = await post('ob:kept', withTransaction)
     const { rows } = await app.query<{ topic: string; key: string; type: string; payload: Record<string, string> }>(
       'SELECT topic, key, type, payload FROM outbox ORDER BY id',
     )

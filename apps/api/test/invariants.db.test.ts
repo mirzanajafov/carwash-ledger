@@ -15,7 +15,8 @@ import {
   type InvariantResult,
   type PaymentBase,
 } from '@carwash/invariants'
-import { firstRow, inRollback, inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot } from '@carwash/pg'
+import { inRollbackWithTriggersOff } from '@carwash/testkit'
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
@@ -53,8 +54,7 @@ function corrupted(
   corrupt: (client: pg.ClientBase) => Promise<unknown>,
   check: (client: pg.ClientBase) => Promise<InvariantResult[]>,
 ): Promise<Partial<Record<InvariantId, number>>> {
-  return inRollback(pool, async (client) => {
-    await client.query('SET LOCAL session_replication_role = replica')
+  return inRollbackWithTriggersOff(pool, async (client) => {
     await corrupt(client)
     return counts(await check(client))
   })
@@ -75,8 +75,7 @@ function inSettlement(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
 }
 
 function settlementExamples(corrupt: (client: pg.ClientBase) => Promise<unknown>): Promise<string[]> {
-  return inRollback(stack.admin, async (client) => {
-    await client.query('SET LOCAL session_replication_role = replica')
+  return inRollbackWithTriggersOff(stack.admin, async (client) => {
     await corrupt(client)
     return (await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay })).examples
   })

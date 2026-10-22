@@ -249,13 +249,16 @@ describe('verification runs', () => {
   it('finds a tamper committed before the run, and nothing once it is restored', async () => {
     await sequenceAll()
     const tampered = await withTransaction(stack.admin, (client) => tamper(client, 1, 1))
-    await request()
-    await withWorker((job) => job.runNext())
-    expect((await latest()).body).toMatchObject({
-      status: 'done',
-      report: { firstSeq: 1, examples: [{ kind: 'leaf', seq: 1, journalId: tampered.journalId }] },
-    })
-    await withTransaction(stack.admin, (client) => restore(client, tampered))
+    try {
+      await request()
+      await withWorker((job) => job.runNext())
+      expect((await latest()).body).toMatchObject({
+        status: 'done',
+        report: { firstSeq: 1, examples: [{ kind: 'leaf', seq: 1, journalId: tampered.journalId }] },
+      })
+    } finally {
+      await withTransaction(stack.admin, (client) => restore(client, tampered))
+    }
     await request()
     await withWorker((job) => job.runNext())
     expect((await latest()).body).toMatchObject({ status: 'done', report: { findings: 0 } })

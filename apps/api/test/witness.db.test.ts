@@ -8,7 +8,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, readWitness, readWitnessHistory, violations, type WitnessView } from '@carwash/invariants'
-import { firstRow, inRollback, withTransaction } from '@carwash/pg'
+import { firstRow, inRollback } from '@carwash/pg'
+import { inRollbackWithTriggersOff, withTriggersOff } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -44,7 +45,6 @@ function pay(amount: number) {
 }
 
 async function rewriteHistory(client: pg.ClientBase): Promise<void> {
-  await client.query('SET LOCAL session_replication_role = replica')
   const { journal_id: journal } = firstRow(
     await client.query<{ journal_id: string }>(
       `SELECT a.journal_id::text FROM audit_log a JOIN journals j ON j.id = a.journal_id WHERE j.external_ref LIKE 'capture:%' ORDER BY a.seq LIMIT 1`,
@@ -226,7 +226,7 @@ describe('checkpoints and the witness', () => {
       `the copy in audit_checkpoints at size ${newest.size} names the witness key k, the witness publishes ${witness.publicKey}`,
     ])
 
-    const rewritten = await inRollback(stack.admin, async (client) => {
+    const rewritten = await inRollbackWithTriggersOff(stack.admin, async (client) => {
       await rewriteHistory(client)
       return checkAuditIn(client, stale)
     })
@@ -240,7 +240,7 @@ describe('checkpoints and the witness', () => {
     const latest = witness.latest
     if (!latest) throw new Error('the witness has signed nothing')
     const signed = latest.size
-    const [alone, witnessed] = await inRollback(stack.admin, async (client) => {
+    const [alone, witnessed] = await inRollbackWithTriggersOff(stack.admin, async (client) => {
       await rewriteHistory(client)
       return [await checkAuditIn(client), await checkAuditIn(client, witness)]
     })
@@ -251,7 +251,7 @@ describe('checkpoints and the witness', () => {
     const forged: WitnessView = { ...witness, latest: { ...latest, root: latest.root.replace(/^./, (d) => (d === '0' ? '1' : '0')) } }
     expect((await checkAudit(stack.admin, forged)).examples).toEqual([`the checkpoint at size ${signed} does not carry the witness's signature`])
 
-    await withTransaction(stack.admin, rewriteHistory)
+    await withTriggersOff(stack.admin, rewriteHistory)
     const incremental = await runVerify(['--state', stateFile])
     expect(incremental.code).toBe(1)
     expect(incremental.report.examples).toContainEqual({ kind: 'history', size: signed, what: 'chain' })

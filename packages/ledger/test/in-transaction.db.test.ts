@@ -57,18 +57,13 @@ describe('postInTransaction', () => {
   it("looks unknown accounts up on the transaction's own connection, so a full pool cannot stall it", async () => {
     const single = ledger.db.pool('ledger_app', 1)
     const cold = new AccountRegistry(pgAccountLoader(single))
-    const lease = await checkout(single)
-    try {
-      await lease.client.query('BEGIN')
-      const posted = postInTransaction(lease.client, cold, { externalRef: 'tx:full-pool', entries: capture(locked, 1, 500n, 15n) })
+    await withTransaction(single, async (client) => {
+      const posted = postInTransaction(client, cold, { externalRef: 'tx:full-pool', entries: capture(locked, 1, 500n, 15n) })
       const stalled = sleep(5000, undefined, { ref: false }).then(() => {
         throw new Error('the posting waited for a second connection from its own full pool')
       })
       expect(await Promise.race([posted, stalled])).toBeGreaterThan(0n)
-      await lease.client.query('COMMIT')
-    } finally {
-      lease.release()
-    }
+    })
     expect(await journalCount('tx:full-pool')).toBe(1)
   })
 

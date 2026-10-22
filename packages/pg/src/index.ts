@@ -82,8 +82,8 @@ export function withTransaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) 
   return transaction(pool, work, options, 'COMMIT')
 }
 
-export function inRollback<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
-  return transaction(pool, work, options, 'ROLLBACK')
+export function inRollback<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+  return transaction(pool, work, {}, 'ROLLBACK')
 }
 
 export function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {
