@@ -4,6 +4,7 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
 import { createTestDatabase, signCopies, type SignedCopies, type TestDatabase } from '@carwash/testkit'
@@ -306,22 +307,18 @@ describe('sharing the process', () => {
   let client: pg.PoolClient
   let stand: SignedCopies
 
-  async function longestStall(work: () => Promise<unknown>): Promise<{ longest: number; total: number }> {
-    let last = performance.now()
-    let longest = 0
-    const ticker = setInterval(() => {
-      const now = performance.now()
-      longest = Math.max(longest, now - last)
-      last = now
-    }, 1)
+  async function measured(work: () => Promise<unknown>): Promise<{ longest: number; total: number; cpu: number }> {
+    const loop = monitorEventLoopDelay({ resolution: 1 })
     const started = performance.now()
+    const cpu = process.cpuUsage()
+    loop.enable()
     try {
       await work()
     } finally {
-      clearInterval(ticker)
+      loop.disable()
     }
-    longest = Math.max(longest, performance.now() - last)
-    return { longest, total: performance.now() - started }
+    const used = process.cpuUsage(cpu)
+    return { longest: loop.max / 1e6, total: performance.now() - started, cpu: (used.user + used.system) / 1000 }
   }
 
   beforeAll(async () => {
@@ -337,6 +334,7 @@ describe('sharing the process', () => {
     do {
       sequenced = await sequenceBatch(client, 1000)
     } while (sequenced > 0)
+    await client.query('DELETE FROM audit_checkpoints')
     stand = await signCopies(client, posted + BULK, 1)
   })
 
@@ -346,41 +344,37 @@ describe('sharing the process', () => {
   })
 
   it('lets other work run between journals instead of hashing the whole log in one go', async () => {
-    const { longest, total } = await longestStall(async () => {
+    const run = await measured(async () => {
       expect(await verifyLog(client, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
     })
-    expect(longest).toBeLessThan(total / 3)
+    expect(run.longest).toBeLessThan(run.total / 3)
   })
 
-  it('lets other work run between signatures too', async () => {
-    const { longest, total } = await longestStall(async () => {
+  it('lets other work run between signatures, and stops at the next turn when asked', async () => {
+    const whole = await measured(async () => {
       expect(await verifyLog(client, { witness: stand, batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: stand.count, findings: 0 })
     })
-    expect(longest).toBeLessThan(total / 3)
-  })
+    expect(whole.longest).toBeLessThan(whole.total / 3)
 
-  it('stops at its next turn when asked, long before the batch would end', async () => {
-    const started = performance.now()
-    await verifyLog(client, { witness: stand, batch: 50_000 })
-    const whole = performance.now() - started
     const stop = new AbortController()
     const progress: number[] = []
-    const asked = performance.now()
     setTimeout(() => {
       stop.abort()
-    }, 0)
-    await expect(
-      verifyLog(client, {
-        witness: stand,
-        batch: 50_000,
-        signal: stop.signal,
-        onProgress: async (done) => {
-          progress.push(done)
-        },
-      }),
-    ).rejects.toMatchObject({ name: 'AbortError' })
+    }, 50)
+    const stopped = await measured(async () => {
+      await expect(
+        verifyLog(client, {
+          witness: stand,
+          batch: 50_000,
+          signal: stop.signal,
+          onProgress: async (done) => {
+            progress.push(done)
+          },
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' })
+    })
     expect(progress).toEqual([])
-    expect(performance.now() - asked).toBeLessThan(whole / 4)
+    expect(stopped.cpu).toBeLessThan(whole.cpu / 4)
   })
 
   it('refuses a batch that would never move', async () => {

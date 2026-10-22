@@ -20,7 +20,10 @@ export async function signCopies(db: pg.Pool | pg.ClientBase, size: number, leav
   let count = 0
   let latest: SignedCopies['latest'] | undefined
   for (let from = 0; from < size; from += 50_000) {
-    const { rows } = await db.query<{ leaf: Buffer }>('SELECT a.leaf FROM audit_log a WHERE a.seq >= $1 AND a.seq < $2 ORDER BY a.seq', [from, from + 50_000])
+    const { rows } = await db.query<{ leaf: Buffer }>('SELECT a.leaf FROM audit_log a WHERE a.seq >= $1 AND a.seq < $2 ORDER BY a.seq', [
+      from,
+      Math.min(from + 50_000, size),
+    ])
     const copies: { size: number; root: Buffer; signature: Buffer }[] = []
     for (const row of rows) {
       frontier.push(new Uint8Array(row.leaf))
@@ -31,13 +34,12 @@ export async function signCopies(db: pg.Pool | pg.ClientBase, size: number, leav
       copies.push({ size: frontier.size, root: Buffer.from(root, 'hex'), signature })
       latest = { size: frontier.size, root, signature: signature.toString('base64') }
     }
-    const inserted = await db.query(
+    await db.query(
       `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
-       SELECT size, root, signature, $4, now() FROM unnest($1::bigint[], $2::bytea[], $3::bytea[]) AS c(size, root, signature)
-       ON CONFLICT (size) DO NOTHING`,
+       SELECT size, root, signature, $4, now() FROM unnest($1::bigint[], $2::bytea[], $3::bytea[]) AS c(size, root, signature)`,
       [copies.map((c) => c.size), copies.map((c) => c.root), copies.map((c) => c.signature), x],
     )
-    count += inserted.rowCount ?? 0
+    count += copies.length
   }
   if (!latest) throw new Error('the audit log is empty')
   return { origin: ORIGIN, publicKey: x, key: publicKey, latest, count }

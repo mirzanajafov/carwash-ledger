@@ -13,7 +13,7 @@ export interface VerificationReport {
   findings: number
   firstSeq: number | null
   examples: VerificationFinding[]
-  ms: { read: number; compute: number; yielded: number; total: number }
+  ms: { read: number; compute: number; yielded?: number; total: number }
 }
 
 export interface VerificationRun {

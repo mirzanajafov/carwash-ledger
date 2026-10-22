@@ -166,6 +166,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
   let journals = 0
   let position = start
   for (let from = start; from < size; from += batch) {
+    options.signal?.throwIfAborted()
     const to = Math.min(from + batch, size)
     const { rows } = await timed(() => db.query<Row>(ROWS, [from, to]))
     const roots = await signedRoots(from, to)
@@ -199,9 +200,9 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
         else report({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }
-    options.signal?.throwIfAborted()
     await handBack(async () => options.onProgress?.(to, size))
   }
+  options.signal?.throwIfAborted()
   if (position < size) {
     report({ kind: 'gap', seq: position, missing: size - position })
     broken = true
