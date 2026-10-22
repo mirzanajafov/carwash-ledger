@@ -6,6 +6,8 @@ import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
 
 type Queryable = pg.ClientBase | pg.Pool
 
+const YIELD_EVERY = 100
+
 export interface SignedRoot {
   size: number
   root: string
@@ -79,8 +81,6 @@ const UNSEQUENCED = `
   WHERE NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.journal_id = j.id)
     AND NOT EXISTS (SELECT 1 FROM audit_queue q WHERE q.journal_id = j.id)
   ORDER BY j.id`
-
-const YIELD_EVERY = 100
 
 const COPIES = `
   SELECT c.size::text, c.root, c.signature FROM audit_checkpoints c
