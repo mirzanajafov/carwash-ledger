@@ -1,16 +1,21 @@
 import type { Queryable } from '@carwash/pg'
+import type { AttemptId } from '../ids.ts'
+import type { AttemptKind } from '../psp/answers.ts'
+import type { AttemptStatus } from './attempt.ts'
+
+export type AnomalyKind = 'answer_mismatch' | 'unexpected_answer' | 'answer_changed' | 'refund_declined' | 'unmatched_webhook'
 
 export interface AnomalyRow {
   id: string
-  kind: string
+  kind: AnomalyKind
   created_at: Date
   details: { problems?: string[]; answer?: { amount?: unknown } } | null
   resolution: string | null
   resolved_at: Date | null
   resolver: string | null
   attempt_id: string | null
-  attempt_kind: string | null
-  attempt_status: string | null
+  attempt_kind: AttemptKind | null
+  attempt_status: AttemptStatus | null
   amount: string | null
   currency: string | null
   payment_id: string | null
@@ -30,7 +35,7 @@ const SELECT = `
   LEFT JOIN merchants m ON m.id = coalesce(p.merchant_id, po.merchant_id)
   LEFT JOIN api_clients rc ON rc.id = an.resolved_by`
 
-export async function recordAnomaly(db: Queryable, attemptId: string | null, kind: string, details: unknown): Promise<void> {
+export async function recordAnomaly(db: Queryable, attemptId: AttemptId | null, kind: AnomalyKind, details: unknown): Promise<void> {
   await db.query('INSERT INTO anomalies (attempt_id, kind, details) VALUES ($1, $2, $3) ON CONFLICT (attempt_id, kind) DO NOTHING', [
     attemptId,
     kind,

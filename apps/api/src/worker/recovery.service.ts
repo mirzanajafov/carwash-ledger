@@ -6,7 +6,8 @@ import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { IdempotencyService } from '../idempotency/idempotency.service.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
-import { attemptsToRecover, type AttemptRecord } from '../payments/attempts.repository.ts'
+import type { Attempt } from '../payments/attempt.ts'
+import { attemptsToRecover } from '../payments/attempts.repository.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { PspAnswerRejectedError, PspUnavailableError } from '../psp/psp.errors.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
@@ -83,7 +84,7 @@ export class Recovery implements OnApplicationBootstrap, OnModuleDestroy {
     return counts
   }
 
-  async recover(attempt: AttemptRecord): Promise<RecoveryOutcome> {
+  async recover(attempt: Attempt): Promise<RecoveryOutcome> {
     try {
       const reply = await this.#psp.pull(attempt.id)
       if (reply.kind === 'unknown') return 'unknown'

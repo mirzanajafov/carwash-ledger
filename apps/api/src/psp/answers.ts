@@ -1,4 +1,5 @@
 export type AttemptKind = 'authorize' | 'capture' | 'cancel' | 'refund' | 'payout'
+export type AnswerStatus = 'succeeded' | 'declined'
 
 export interface ExpectedAnswer {
   attemptId: string
@@ -10,7 +11,7 @@ export interface ExpectedAnswer {
 
 export interface PspAnswer {
   operationId: string
-  status: 'succeeded' | 'declined'
+  status: AnswerStatus
   reason: string | null
   chargeId: string | null
 }

@@ -2,7 +2,7 @@ import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { invalidInput } from '../domain-errors.ts'
 import type { AnomalyRow } from './anomalies.repository.ts'
-import { AnomaliesService, acceptable } from './anomalies.service.ts'
+import { AnomaliesService, acceptableAttempt } from './anomalies.service.ts'
 
 function bankAmount(row: AnomalyRow): string | null {
   const amount = row.details?.answer?.amount
@@ -22,7 +22,7 @@ function view(row: AnomalyRow) {
     refund_id: row.refund_id,
     payout_id: row.payout_id,
     merchant: row.merchant,
-    acceptable: acceptable(row),
+    acceptable: acceptableAttempt(row) !== undefined,
     resolution: row.resolution,
     resolved_at: row.resolved_at?.toISOString() ?? null,
     resolved_by: row.resolver,

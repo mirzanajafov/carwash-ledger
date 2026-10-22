@@ -4,13 +4,13 @@ import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError } from '../domain-errors.ts'
 import { recordAnomaly } from '../payments/anomalies.repository.ts'
-import { loadAttempt } from '../payments/attempts.repository.ts'
+import { findAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { PspAnswerRejectedError, pspUnavailable } from '../psp/psp.errors.ts'
-import { markWebhookChecked, recordWebhook, unmatchedWebhooks, webhookOutcome } from './webhooks.repository.ts'
+import { markWebhookChecked, recordWebhook, unmatchedWebhooks, webhookOutcome, type WebhookOutcome } from './webhooks.repository.ts'
 
-export type CheckOutcome = 'applied' | 'already' | 'anomaly' | 'not_at_psp' | 'unmatched'
+export type CheckOutcome = Exclude<WebhookOutcome, 'reported'>
 
 export interface PspEvent {
   id: string
@@ -47,7 +47,7 @@ export class WebhooksService {
     this.#config = config
   }
 
-  async handle(event: PspEvent): Promise<{ received: true; outcome: string; duplicate?: true }> {
+  async handle(event: PspEvent): Promise<{ received: true; outcome: WebhookOutcome; duplicate?: true }> {
     const seen = await webhookOutcome(this.#db.pool, event.id)
     if (seen !== undefined) return { received: true, outcome: seen, duplicate: true }
     const outcome = await this.check(event.attemptKey)
@@ -62,7 +62,7 @@ export class WebhooksService {
   }
 
   async check(attemptKey: string): Promise<CheckOutcome> {
-    const attempt = UUID.test(attemptKey) ? await loadAttempt(this.#db.pool, attemptKey) : undefined
+    const attempt = UUID.test(attemptKey) ? await findAttempt(this.#db.pool, attemptKey) : undefined
     if (!attempt) return 'unmatched'
     if (attempt.status !== 'pending') return 'already'
     const reply = await this.#psp.pull(attempt.id)
@@ -80,7 +80,7 @@ export class WebhooksService {
   async recheckUnmatched(reportAfterSeconds = 3600, batch = 50): Promise<number> {
     const rows = await unmatchedWebhooks(this.#db.pool, reportAfterSeconds, batch)
     for (const row of rows) {
-      let outcome: string = await this.check(row.key).catch(() => 'unmatched')
+      let outcome: WebhookOutcome = await this.check(row.key).catch(() => 'unmatched')
       if (outcome === 'unmatched' && row.overdue) {
         await recordAnomaly(this.#db.pool, null, 'unmatched_webhook', { event: row.id, key: row.key })
         outcome = 'reported'

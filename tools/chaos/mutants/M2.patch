@@ -1,17 +1,17 @@
 --- a/apps/api/src/payments/attempts.repository.ts
 +++ b/apps/api/src/payments/attempts.repository.ts
-@@ -66,7 +66,7 @@
- export async function resolveAttempt(client: Transaction, id: string, outcome: AttemptOutcome): Promise<boolean> {
+@@ -94,7 +94,7 @@
+ export async function resolveAttempt(client: Transaction, id: AttemptId, answer: PspAnswer): Promise<boolean> {
    const updated = await client.query(
      `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
 -     WHERE id = $1 AND status = 'pending'`,
 +     WHERE id = $1`,
-     [id, outcome.status, outcome.operationId, outcome.reason],
+     [id, answer.status, answer.operationId, answer.reason],
    )
    return updated.rowCount === 1
 --- a/apps/api/src/payments/payments.repository.ts
 +++ b/apps/api/src/payments/payments.repository.ts
-@@ -78,7 +78,7 @@
+@@ -121,7 +121,7 @@
    const assignments = set.map(([column], index) => `, ${column} = $${index + 4}`).join('')
    const moved = await client.query(
      `UPDATE payments SET status = $3::payment_status, updated_at = now()${assignments}
@@ -22,7 +22,7 @@
    return moved.rowCount === 1
 --- a/apps/api/src/payments/payment-state.ts
 +++ b/apps/api/src/payments/payment-state.ts
-@@ -29,7 +29,6 @@
+@@ -12,7 +12,6 @@
  
  export function resolveCardAttempt(current: PaymentStatus, kind: CardAttemptKind, status: AnswerStatus, reason: string | null): Resolution {
    const from = EXPECTED_FROM[kind]

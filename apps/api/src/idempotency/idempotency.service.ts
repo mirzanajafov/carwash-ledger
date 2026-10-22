@@ -4,6 +4,7 @@ import { firstRow, type Transaction } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
+import { paymentId, payoutId, refundId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
 import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
@@ -11,9 +12,9 @@ export interface OwnedKey {
   key: string
   leaseId: string
   recoveryPoint: string
-  paymentId: string | null
-  refundId: string | null
-  payoutId: string | null
+  paymentId: PaymentId | null
+  refundId: RefundId | null
+  payoutId: PayoutId | null
 }
 
 export interface Final {
@@ -36,9 +37,9 @@ export interface KeyedRequest {
 export type Begun = { kind: 'owned'; owned: OwnedKey } | { kind: 'replay'; status: number; body: unknown }
 
 export interface ResourceRefs {
-  paymentId?: string
-  refundId?: string
-  payoutId?: string
+  paymentId?: PaymentId
+  refundId?: RefundId
+  payoutId?: PayoutId
 }
 
 interface KeyRow {
@@ -125,7 +126,10 @@ export class IdempotencyService {
       if (!row.request_hash.equals(hash)) {
         throw new DomainError('unprocessable', 'idempotency_key_reused', 'this idempotency key was already used with a different request')
       }
-      if (row.state === 'finished') return { kind: 'replay', status: row.response_status!, body: row.response_body }
+      if (row.state === 'finished') {
+        if (row.response_status === null) throw new Error(`idempotency key ${key} is finished without a stored answer`)
+        return { kind: 'replay', status: row.response_status, body: row.response_body }
+      }
       if (row.leased) throw inProgress()
       const taken = await client.query<{ lease_id: string }>(
         `UPDATE idempotency_keys SET locked_until = now() + make_interval(secs => $3), lease_id = gen_random_uuid()
@@ -139,9 +143,9 @@ export class IdempotencyService {
           key,
           leaseId: firstRow(taken).lease_id,
           recoveryPoint: row.recovery_point,
-          paymentId: row.payment_id,
-          refundId: row.refund_id,
-          payoutId: row.payout_id,
+          paymentId: row.payment_id === null ? null : paymentId(row.payment_id),
+          refundId: row.refund_id === null ? null : refundId(row.refund_id),
+          payoutId: row.payout_id === null ? null : payoutId(row.payout_id),
         },
       }
     })

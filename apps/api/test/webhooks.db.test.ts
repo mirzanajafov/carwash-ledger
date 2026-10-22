@@ -8,7 +8,7 @@ import type { INestApplication, INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Database } from '../src/db/database.ts'
-import { loadAttempt } from '../src/payments/attempts.repository.ts'
+import { findAttempt } from '../src/payments/attempts.repository.ts'
 import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
 import { Recovery } from '../src/worker/recovery.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
@@ -160,7 +160,7 @@ describe('the recovery job', () => {
     const key = randomUUID()
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_fail_once_capture') })).status).toBe(503)
     const paymentId = await paymentIdForKey(key)
-    const attempt = await loadAttempt(stack.admin, await attemptOf(paymentId, 'capture'))
+    const attempt = await findAttempt(stack.admin, await attemptOf(paymentId, 'capture'))
     assert(attempt)
     expect(attempt.status).toBe('pending')
     expect(await recovery.recover(attempt)).toBe('applied')
@@ -222,7 +222,7 @@ describe('the recovery job', () => {
     const capture = await attemptOf(await paymentIdForKey(key), 'capture')
     const outcomes = await recovery.recoverPending(0)
     expect(outcomes.get('anomaly')).toBeUndefined()
-    const attempt = await loadAttempt(stack.admin, capture)
+    const attempt = await findAttempt(stack.admin, capture)
     assert(attempt)
     expect(attempt).toMatchObject({ status: 'pending' })
     expect(await recovery.recover(attempt)).toBe('anomaly')
@@ -233,7 +233,7 @@ describe('the recovery job', () => {
     stack.psp.faults.plan = { ...NO_FAULTS, fail: 1 }
     const key = randomUUID()
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok') })).body.error.code).toBe('psp_unavailable')
-    const attempt = await loadAttempt(stack.admin, await attemptOf(await paymentIdForKey(key), 'authorize'))
+    const attempt = await findAttempt(stack.admin, await attemptOf(await paymentIdForKey(key), 'authorize'))
     assert(attempt)
     expect(await recovery.recover(attempt)).toBe('unknown')
     stack.psp.faults.plan = NO_FAULTS

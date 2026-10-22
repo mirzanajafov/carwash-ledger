@@ -1,7 +1,7 @@
 --- a/apps/api/src/webhooks/webhooks.service.ts
 +++ b/apps/api/src/webhooks/webhooks.service.ts
-@@ -49,7 +49,7 @@
-   async handle(event: PspEvent): Promise<{ received: true; outcome: string; duplicate?: true }> {
+@@ -50,7 +50,7 @@
+   async handle(event: PspEvent): Promise<{ received: true; outcome: WebhookOutcome; duplicate?: true }> {
      const seen = await webhookOutcome(this.#db.pool, event.id)
      if (seen !== undefined) return { received: true, outcome: seen, duplicate: true }
 -    const outcome = await this.check(event.attemptKey)
@@ -9,13 +9,13 @@
      await recordWebhook(this.#db.pool, {
        id: event.id,
        type: event.type,
-@@ -60,11 +60,12 @@
+@@ -61,11 +61,12 @@
      return { received: true, outcome }
    }
  
 -  async check(attemptKey: string): Promise<CheckOutcome> {
 +  async check(attemptKey: string, payload?: unknown): Promise<CheckOutcome> {
-     const attempt = UUID.test(attemptKey) ? await loadAttempt(this.#db.pool, attemptKey) : undefined
+     const attempt = UUID.test(attemptKey) ? await findAttempt(this.#db.pool, attemptKey) : undefined
      if (!attempt) return 'unmatched'
      if (attempt.status !== 'pending') return 'already'
 -    const reply = await this.#psp.pull(attempt.id)

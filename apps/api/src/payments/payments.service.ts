@@ -4,13 +4,15 @@ import type { ApiClientIdentity } from '../auth/api-keys.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
+import type { PaymentId, RefundId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
+import type { CardAttemptKind } from './attempt.ts'
 import { insertAttempt, pendingAttempt } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { platformFee } from './fees.ts'
-import type { PaymentStatus } from './payment-state.ts'
-import { insertPayment, insertRefund, loadPayment, loadRefund, lockPayment, pendingRefundTotal, type PaymentRecord } from './payments.repository.ts'
+import type { CaptureMode, Payment, PaymentStatus } from './payment.ts'
+import { findPayment, findPaymentForUpdate, insertPayment, insertRefund, loadPayment, loadRefund, pendingRefundTotal } from './payments.repository.ts'
 import { paymentView, refundView } from './payments.views.ts'
 
 export interface CreatePaymentInput {
@@ -18,15 +20,15 @@ export interface CreatePaymentInput {
   currency: string
   merchant: string
   token: string
-  capture?: 'auto' | 'manual'
+  capture?: CaptureMode
 }
 
-const CARD_KINDS = ['authorize', 'capture', 'cancel'] as const
+const CARD_KINDS: readonly CardAttemptKind[] = ['authorize', 'capture', 'cancel']
 const MAX_ROUNDS = 5
 
-function paymentFinal(payment: PaymentRecord, expected: readonly PaymentStatus[]): Final {
+function paymentFinal(payment: Payment, expected: readonly PaymentStatus[]): Final {
   if (payment.status === 'failed' && expected.includes('failed')) {
-    const code = payment.failure_reason ?? 'payment_failed'
+    const code = payment.failureReason ?? 'payment_failed'
     return { status: 402, body: { error: { code, message: `the payment failed: ${code}` }, payment: paymentView(payment) } }
   }
   if (!expected.includes(payment.status)) {
@@ -35,7 +37,7 @@ function paymentFinal(payment: PaymentRecord, expected: readonly PaymentStatus[]
   return { status: 200, body: paymentView(payment) }
 }
 
-function notCapturable(payment: PaymentRecord): DomainError {
+function notCapturable(payment: Payment): DomainError {
   return new DomainError('conflict', 'payment_not_capturable', `payment ${payment.id} is ${payment.status}`)
 }
 
@@ -61,43 +63,40 @@ export class PaymentsService {
   }
 
   async capture(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number | undefined): Promise<Final> {
-    if (owned.recoveryPoint === 'started') {
-      await this.#startSettlement(owned, caller, paymentId, 'capture', (payment) => {
-        const value = amount === undefined ? BigInt(payment.amount) : BigInt(amount)
-        if (value > BigInt(payment.amount)) throw new DomainError('invalid', 'amount_too_large', 'a capture cannot exceed the authorized amount')
+    const settled =
+      owned.paymentId ??
+      (await this.#startSettlement(owned, caller, paymentId, 'capture', (payment) => {
+        const value = amount === undefined ? payment.amount : BigInt(amount)
+        if (value > payment.amount) throw new DomainError('invalid', 'amount_too_large', 'a capture cannot exceed the authorized amount')
         this.#checkAmount(value)
         return value
-      })
-    }
-    return this.#drive(owned, paymentId, ['captured', 'failed'])
+      }))
+    return this.#drive(owned, settled, ['captured', 'failed'])
   }
 
   async cancel(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string): Promise<Final> {
-    if (owned.recoveryPoint === 'started') {
-      await this.#startSettlement(owned, caller, paymentId, 'cancel', (payment) => BigInt(payment.amount))
-    }
-    return this.#drive(owned, paymentId, ['canceled'])
+    const settled = owned.paymentId ?? (await this.#startSettlement(owned, caller, paymentId, 'cancel', (payment) => payment.amount))
+    return this.#drive(owned, settled, ['canceled'])
   }
 
   async refund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<Final> {
-    const refundId = owned.refundId ?? (await this.#startRefund(owned, caller, paymentId, amount))
+    const refundId = owned.refundId ?? (await this.#startRefund(owned, caller, paymentId, BigInt(amount)))
     for (let round = 0; ; round++) {
-      const attempt = await pendingAttempt(this.#db.pool, 'refund_id', refundId, ['refund'])
+      const attempt = await pendingAttempt(this.#db.pool, { refundId }, ['refund'])
       if (!attempt) break
       if (round >= MAX_ROUNDS) throw new Error(`refund ${refundId} is still pending after ${round} rounds`)
       await this.#attempts.settle(attempt)
     }
-    return this.#db.transaction(async (client) => {
-      const refund = (await loadRefund(client, refundId))!
-      return this.#idempotency.finish(client, owned, { status: 200, body: refundView(refund) })
-    })
+    return this.#db.transaction(async (client) =>
+      this.#idempotency.finish(client, owned, { status: 200, body: refundView(await loadRefund(client, refundId)) }),
+    )
   }
 
   async get(caller: ApiClientIdentity, paymentId: string) {
-    return paymentView(this.#visible(await loadPayment(this.#db.pool, paymentId), caller, paymentId))
+    return paymentView(this.#visible(await findPayment(this.#db.pool, paymentId), caller, paymentId))
   }
 
-  #startPayment(owned: OwnedKey, input: CreatePaymentInput, capture: 'auto' | 'manual'): Promise<string> {
+  #startPayment(owned: OwnedKey, input: CreatePaymentInput, capture: CaptureMode): Promise<PaymentId> {
     return this.#db.transaction(async (client) => {
       const merchant = await findMerchant(client, input.merchant)
       if (!merchant) throw notFound(`merchant ${input.merchant}`)
@@ -105,31 +104,32 @@ export class PaymentsService {
         throw new DomainError('invalid', 'currency_mismatch', `merchant ${input.merchant} takes ${merchant.currency}, not ${input.currency}`)
       }
       this.#chart.accounts(input.currency)
-      this.#checkAmount(BigInt(input.amount))
+      const amount = BigInt(input.amount)
+      this.#checkAmount(amount)
       const paymentId = await insertPayment(client, {
         clientId: owned.clientId,
         merchantId: merchant.id,
-        amount: BigInt(input.amount),
+        amount,
         currency: input.currency,
         capture,
         token: input.token,
       })
-      await insertAttempt(client, { kind: 'authorize', paymentId, amount: BigInt(input.amount), currency: input.currency })
+      await insertAttempt(client, { kind: 'authorize', paymentId, amount, currency: input.currency })
       await this.#idempotency.recordPoint(client, owned, 'payment_created', { paymentId })
       return paymentId
     })
   }
 
-  #startRefund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<string> {
+  #startRefund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: bigint): Promise<RefundId> {
     return this.#db.transaction(async (client) => {
-      const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
+      const payment = this.#visible(await findPaymentForUpdate(client, paymentId), caller, paymentId)
       if (payment.status !== 'captured') throw new DomainError('conflict', 'payment_not_refundable', `payment ${payment.id} is ${payment.status}`)
-      const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - (await pendingRefundTotal(client, payment.id))
-      if (BigInt(amount) > available) {
+      const available = payment.capturedAmount - payment.refundedAmount - (await pendingRefundTotal(client, payment.id))
+      if (amount > available) {
         throw new DomainError('conflict', 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
       }
-      const refundId = await insertRefund(client, payment.id, BigInt(amount))
-      await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount: BigInt(amount), currency: payment.currency })
+      const refundId = await insertRefund(client, payment.id, amount)
+      await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount, currency: payment.currency })
       await this.#idempotency.recordPoint(client, owned, 'refund_created', { paymentId: payment.id, refundId })
       return refundId
     })
@@ -140,15 +140,16 @@ export class PaymentsService {
     caller: ApiClientIdentity,
     paymentId: string,
     kind: 'capture' | 'cancel',
-    amountFor: (payment: PaymentRecord) => bigint,
-  ): Promise<void> {
+    amountFor: (payment: Payment) => bigint,
+  ): Promise<PaymentId> {
     try {
-      await this.#db.transaction(async (client) => {
-        const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
+      return await this.#db.transaction(async (client) => {
+        const payment = this.#visible(await findPaymentForUpdate(client, paymentId), caller, paymentId)
         if (payment.status !== 'authorized') throw notCapturable(payment)
         const amount = amountFor(payment)
         await insertAttempt(client, { kind, paymentId: payment.id, amount, currency: payment.currency })
         await this.#idempotency.recordPoint(client, owned, `${kind}_created`, { paymentId: payment.id })
+        return payment.id
       })
     } catch (error) {
       if (sqlStateOf(error) === '23505') {
@@ -158,17 +159,14 @@ export class PaymentsService {
     }
   }
 
-  async #drive(owned: OwnedKey, paymentId: string, expected: PaymentStatus[]): Promise<Final> {
+  async #drive(owned: OwnedKey, paymentId: PaymentId, expected: PaymentStatus[]): Promise<Final> {
     for (let round = 0; ; round++) {
-      const attempt = await pendingAttempt(this.#db.pool, 'payment_id', paymentId, CARD_KINDS)
+      const attempt = await pendingAttempt(this.#db.pool, { paymentId }, CARD_KINDS)
       if (!attempt) break
       if (round >= MAX_ROUNDS) throw new Error(`payment ${paymentId} still has a pending attempt after ${round} rounds`)
       await this.#attempts.settle(attempt)
     }
-    return this.#db.transaction(async (client) => {
-      const payment = (await loadPayment(client, paymentId))!
-      return this.#idempotency.finish(client, owned, paymentFinal(payment, expected))
-    })
+    return this.#db.transaction(async (client) => this.#idempotency.finish(client, owned, paymentFinal(await loadPayment(client, paymentId), expected)))
   }
 
   #checkAmount(amount: bigint): void {
@@ -177,8 +175,8 @@ export class PaymentsService {
     }
   }
 
-  #visible(payment: PaymentRecord | undefined, caller: ApiClientIdentity, paymentId: string): PaymentRecord {
-    if (!payment || (caller.scope !== 'admin' && payment.client_id !== caller.id)) throw notFound(`payment ${paymentId}`)
+  #visible(payment: Payment | undefined, caller: ApiClientIdentity, paymentId: string): Payment {
+    if (!payment || (caller.scope !== 'admin' && payment.clientId !== caller.id)) throw notFound(`payment ${paymentId}`)
     return payment
   }
 }
