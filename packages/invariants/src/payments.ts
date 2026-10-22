@@ -198,7 +198,6 @@ export interface PaymentBase {
 }
 
 export interface PaymentChecks {
-  keyWindowSeconds?: number | undefined
   since?: PaymentBase | undefined
 }
 
@@ -242,7 +241,7 @@ const DAY = 24 * 3600
 const MARGIN = 300
 
 export async function checkPaymentsIn(client: Transaction, options: PaymentChecks = {}): Promise<PaymentChecksRun> {
-  const window = Math.max(0, Math.floor(options.keyWindowSeconds ?? DAY) - MARGIN)
+  const window = Math.max(0, DAY - MARGIN)
   const now = firstRow(
     await client.query<{ snapshot: string; taken_at: Date; resumable: boolean }>(
       `SELECT pg_current_snapshot()::text AS snapshot, now() AS taken_at,
@@ -273,8 +272,8 @@ export async function checkPaymentsIn(client: Transaction, options: PaymentCheck
   }
 }
 
-export async function checkPayments(pool: pg.Pool, options: Omit<PaymentChecks, 'since'> = {}): Promise<InvariantResult[]> {
-  return (await inSnapshot(pool, (client) => checkPaymentsIn(client, options))).results
+export async function checkPayments(pool: pg.Pool): Promise<InvariantResult[]> {
+  return (await inSnapshot(pool, (client) => checkPaymentsIn(client))).results
 }
 
 const CURSOR = 'payments'
@@ -306,9 +305,9 @@ async function readBase(pool: pg.Pool): Promise<PaymentBase | undefined> {
   return { snapshot: row.snapshot, takenAt: row.taken_at, merchants: row.merchants }
 }
 
-export async function checkPaymentsIncrementally(pool: pg.Pool, options: Omit<PaymentChecks, 'since'> = {}): Promise<PaymentChecksRun> {
+export async function checkPaymentsIncrementally(pool: pg.Pool): Promise<PaymentChecksRun> {
   const since = await readBase(pool)
-  const run = await inSnapshot(pool, (client) => checkPaymentsIn(client, { ...options, since }))
+  const run = await inSnapshot(pool, (client) => checkPaymentsIn(client, { since }))
   if (run.base) {
     await pool.query(
       `INSERT INTO invariant_cursors AS c (name, snapshot, taken_at, merchants) VALUES ($1, $2, $3, $4)

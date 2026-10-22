@@ -35,12 +35,12 @@ afterAll(() => cleanup.disposeAsync())
 
 describe('postInTransaction', () => {
   it('commits and rolls back with the transaction it was given', async () => {
-    await inRollback(ledger.app, (tx) => postInTransaction(tx, registry, { externalRef: 'tx:rolled-back', entries: capture(sharded, 0, 1000n, 30n) }))
+    await inRollback(ledger.app, (client) => postInTransaction(client, registry, { externalRef: 'tx:rolled-back', entries: capture(sharded, 0, 1000n, 30n) }))
     expect(await journalCount('tx:rolled-back')).toBe(0)
     expect(await storedBalance(sharded.receivable.id)).toBe(0n)
 
-    const id = await withTransaction(ledger.app, (tx) =>
-      postInTransaction(tx, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) }),
+    const id = await withTransaction(ledger.app, (client) =>
+      postInTransaction(client, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) }),
     )
     expect(id).toBeGreaterThan(0n)
     expect(await storedBalance(sharded.receivable.id)).toBe(1000n)

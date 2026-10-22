@@ -301,9 +301,9 @@ describe('sharing the process', () => {
     return { longest: loop.max / 1e6, total: performance.now() - started, cpu: (used.user + used.system) / 1000 }
   }
 
-  function withBulk<T>(work: (tx: Transaction, stand: SignedCopies) => Promise<T>): Promise<T> {
-    return inRollback(admin, async (tx) => {
-      await tx.query(
+  function withBulk<T>(work: (client: Transaction, stand: SignedCopies) => Promise<T>): Promise<T> {
+    return inRollback(admin, async (client) => {
+      await client.query(
         `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
          INSERT INTO entries (journal_id, account_id, amount)
          SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
@@ -311,17 +311,17 @@ describe('sharing the process', () => {
       )
       let sequenced: number
       do {
-        sequenced = await sequenceBatch(tx, 1000)
+        sequenced = await sequenceBatch(client, 1000)
       } while (sequenced > 0)
-      await tx.query('DELETE FROM audit_checkpoints')
-      return work(tx, await signCopies(tx, posted + BULK, 1))
+      await client.query('DELETE FROM audit_checkpoints')
+      return work(client, await signCopies(client, posted + BULK, 1))
     })
   }
 
   it('lets other work run between journals instead of hashing the whole log in one go', async () => {
-    const run = await withBulk((tx) =>
+    const run = await withBulk((client) =>
       measured(async () => {
-        expect(await verifyLog(tx, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
+        expect(await verifyLog(client, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
       }),
     )
     expect(run.longest).toBeLessThan(run.total / 3)

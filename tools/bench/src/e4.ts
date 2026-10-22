@@ -178,8 +178,8 @@ function writes(lab: Lab, rate: number, warmupMs: number, durationMs: number, se
     seed,
     maxInFlight: 256,
     task: async (index) => {
-      await withTransaction(lab.writer, (tx) =>
-        writeEvent(tx, {
+      await withTransaction(lab.writer, (client) =>
+        writeEvent(client, {
           topic: 'payments',
           key: pick(random, keys),
           type: 'payment.captured',

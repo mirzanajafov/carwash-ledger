@@ -357,18 +357,13 @@ describe('the payment invariants, continued from the last clean run', () => {
 
   it('see a payment changed by a transaction that was still open when the clean run took its snapshot', async () => {
     const audit = stack.ledgerDb.pool('ledger_audit', 2)
-    const open = await stack.admin.connect()
-    try {
-      await open.query('BEGIN')
+    const clean = await withTransaction(stack.admin, async (open) => {
       await open.query('UPDATE payments SET captured_amount = captured_amount - 1 WHERE id = $1', [payments.auto])
-      const clean = await inSnapshot(audit, (client) => checkPaymentsIn(client))
-      expect(clean.base).toBeDefined()
-      await open.query('COMMIT')
-      const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
-      expect(counts(resumed.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
-    } finally {
-      open.release()
-    }
+      return inSnapshot(audit, (client) => checkPaymentsIn(client))
+    })
+    expect(clean.base).toBeDefined()
+    const resumed = await inSnapshot(audit, (client) => checkPaymentsIn(client, { since: clean.base }))
+    expect(counts(resumed.results)).toEqual({ S3: 1, S5: 0, S6: 0 })
     await stack.admin.query('UPDATE payments SET captured_amount = captured_amount + 1 WHERE id = $1', [payments.auto])
   })
 
