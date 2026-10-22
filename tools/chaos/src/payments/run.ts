@@ -7,7 +7,7 @@ import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { verifyLog } from '@carwash/audit-pg'
 import { FAILPOINTS } from '@carwash/failpoints'
-import { createPool, inSnapshot } from '@carwash/pg'
+import { createPool, firstRow, inSnapshot } from '@carwash/pg'
 import {
   checkAgainstPsp,
   checkAudit,
@@ -26,7 +26,7 @@ import { createScratchDatabase, createTestDatabase } from '@carwash/testkit'
 import pg from 'pg'
 import type { Lab } from '../ledger-run.ts'
 import { crashKafka, crashPostgres, holdToxic } from '../outages.ts'
-import { TOXIC_KINDS } from '../plan.ts'
+import type { ToxicKind } from '../plan.ts'
 import { mulberry32 } from '../random.ts'
 import { Service, type ExitKind, type ServiceEvents } from '../service.ts'
 import { addCounts, byInvariant, median, Violations, type Violation } from '../violations.ts'
@@ -34,7 +34,7 @@ import { checkKeys, compareBeliefs, readState, unanswered } from './checks.ts'
 import { Clients } from './client.ts'
 import { Forger } from './forger.ts'
 import { Journeys } from './journeys.ts'
-import { planPayments, PROXIES, SERVICES, type PaymentFault, type ProxyName } from './plan.ts'
+import { planPayments, PROXIES, type PaymentFault, type ProxyName, type ServiceName } from './plan.ts'
 
 export interface PspFaults {
   decline: number
@@ -88,7 +88,7 @@ export interface PaymentsReport {
   answers: Record<string, number>
   surprises: { count: number; examples: string[] }
   forged: Record<string, number>
-  kills: { random: Record<string, number>; failpoints: Record<string, number> }
+  kills: { random: Record<ServiceName, number>; failpoints: Record<string, number> }
   exits: Record<ExitKind, number>
   crashes: string[]
   starts: Record<string, number>
@@ -97,8 +97,8 @@ export interface PaymentsReport {
   events: Record<string, number>
   settlement: { days: number[]; outcomes: string[]; breaks: Record<string, number> }
   anomalies: { open: number; accepted: number; failed: string[] }
-  toxics: Record<string, number>
-  toxicsByProxy: Record<string, number>
+  toxics: Record<ToxicKind, number>
+  toxicsByProxy: Record<ProxyName, number>
   ledger: { anomalies: Record<string, number>; webhooks: Record<string, number> }
   pspOperations: Record<string, number>
   checks: { periodic: number; resumed: number; skipped: number }
@@ -120,7 +120,7 @@ const WITNESS_MAIN = fileURLToPath(new URL('apps/witness/src/main.ts', ROOT))
 
 const POSTGRES_PORT = 5432
 const PSP_PORT = 3142
-const API_PORTS = [3140, 3141]
+const API_PORTS = [3140, 3141] as const
 const WORKER_PORT = 3144
 const WITNESS_PORT = 3145
 const WITNESS_URL = `http://127.0.0.1:${WITNESS_PORT}`
@@ -139,7 +139,7 @@ const PROXY_UPSTREAMS: Record<ProxyName, number> = {
   'api-1-db': POSTGRES_PORT,
   'worker-db': POSTGRES_PORT,
   psp: PSP_PORT,
-  webhooks: API_PORTS[0]!,
+  webhooks: API_PORTS[0],
   'worker-kafka': KAFKA_PROXY_UPSTREAM,
   witness: WITNESS_PORT,
 }
@@ -209,7 +209,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     answers: {},
     surprises: { count: 0, examples: [] },
     forged: {},
-    kills: { random: Object.fromEntries(SERVICES.map((s) => [s, 0])), failpoints: {} },
+    kills: { random: { 'api-0': 0, 'api-1': 0, worker: 0, witness: 0 }, failpoints: {} },
     exits: { killed: 0, failpoint: 0, boot: 0, crash: 0, stopped: 0 },
     crashes: [],
     starts: {},
@@ -218,8 +218,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     events: {},
     settlement: { days: [], outcomes: [], breaks: {} },
     anomalies: { open: 0, accepted: 0, failed: [] },
-    toxics: Object.fromEntries(TOXIC_KINDS.map((k) => [k, 0])),
-    toxicsByProxy: Object.fromEntries(PROXIES.map((p) => [p, 0])),
+    toxics: { latency: 0, timeout: 0, reset_peer: 0, limit_data: 0, down: 0 },
+    toxicsByProxy: { 'api-0-db': 0, 'api-1-db': 0, 'worker-db': 0, psp: 0, webhooks: 0, 'worker-kafka': 0, witness: 0 },
     ledger: { anomalies: {}, webhooks: {} },
     pspOperations: {},
     checks: { periodic: 0, resumed: 0, skipped: 0 },
@@ -357,7 +357,11 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         events,
       ),
     )
-    const service = (name: string) => services.get(name)!
+    const service = (name: string) => {
+      const found = services.get(name)
+      if (found === undefined) throw new Error(`there is no service ${name}`)
+      return found
+    }
     for (const name of ['psp', 'witness', 'api-0']) {
       service(name).start()
       await until(() => service(name).ready, 60_000, name)
@@ -383,41 +387,40 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     )
     const forger = new Forger(audit, endpoints, WEBHOOK_SECRET, mulberry32(seed ^ 0x77656268))
 
-    let postgresBusy = false
-    let kafkaBusy = false
+    const busy = { postgres: false, kafka: false }
     let toxicCount = 0
     const applyFault = async (fault: PaymentFault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
           if (service(fault.target).kill()) {
-            report.kills.random[fault.target]!++
+            report.kills.random[fault.target]++
             log(`killed ${fault.target}`)
           }
         } else if (fault.kind === 'postgres') {
-          if (postgresBusy) return
-          postgresBusy = true
+          if (busy.postgres) return
+          busy.postgres = true
           try {
             report.postgres.kills++
             log(`postgres crash, down for ${fault.downMs} ms`)
             report.postgres.recoveryMs.push(await crashPostgres(postgres, fault.downMs))
             log(`postgres back after ${report.postgres.recoveryMs.at(-1)} ms`)
           } finally {
-            postgresBusy = false
+            busy.postgres = false
           }
         } else if (fault.kind === 'kafka') {
-          if (kafkaBusy) return
-          kafkaBusy = true
+          if (busy.kafka) return
+          busy.kafka = true
           try {
             report.kafka.kills++
             log(`kafka crash, down for ${fault.downMs} ms`)
             report.kafka.recoveryMs.push(await crashKafka(kafka, fault.downMs))
             log(`kafka back after ${report.kafka.recoveryMs.at(-1)} ms`)
           } finally {
-            kafkaBusy = false
+            busy.kafka = false
           }
         } else {
-          report.toxics[fault.toxic]!++
-          report.toxicsByProxy[fault.proxy]!++
+          report.toxics[fault.toxic]++
+          report.toxicsByProxy[fault.proxy]++
           log(`toxic ${fault.toxic} on ${fault.proxy} for ${fault.lastsMs} ms`)
           await holdToxic(toxiproxy, fault.proxy, fault.toxic, fault.lastsMs, `${fault.toxic}-${toxicCount++}`, mulberry32(seed * 7919 + index))
         }
@@ -449,7 +452,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     }
 
     const tasks: Promise<unknown>[] = []
-    const track = (task: Promise<unknown>) => tasks.push(task.catch((error: Error) => report.harnessErrors.push(`task: ${error.stack ?? String(error)}`)))
+    const track = (task: Promise<unknown>) =>
+      tasks.push(task.catch((error: unknown) => report.harnessErrors.push(`task: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)))
     const faultTasks: Promise<void>[] = []
     const started = performance.now()
     const now = () => performance.now() - started
@@ -460,20 +464,15 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     let lastCheck = 0
     let lastSettleCheck = 0
     let settleStarted: number | undefined
-    let settling = false
     for (;;) {
       const t = now()
       if (settleStarted === undefined) {
-        while (nextJourney < plan.journeys.length && plan.journeys[nextJourney]!.at <= t) track(journeys.payment(plan.journeys[nextJourney++]!))
-        while (nextPayout < plan.payouts.length && plan.payouts[nextPayout]!.at <= t) track(journeys.payout(plan.payouts[nextPayout++]!))
-        while (nextForgery < plan.forgeries.length && plan.forgeries[nextForgery]! <= t) {
-          nextForgery++
-          track(forger.forge())
-        }
-        while (nextFault < plan.faults.length && plan.faults[nextFault]!.at <= t) {
-          faultTasks.push(applyFault(plan.faults[nextFault]!, nextFault))
-          nextFault++
-        }
+        for (let journey = plan.journeys[nextJourney]; journey !== undefined && journey.at <= t; journey = plan.journeys[++nextJourney])
+          track(journeys.payment(journey))
+        for (let payout = plan.payouts[nextPayout]; payout !== undefined && payout.at <= t; payout = plan.payouts[++nextPayout]) track(journeys.payout(payout))
+        for (let at = plan.forgeries[nextForgery]; at !== undefined && at <= t; at = plan.forgeries[++nextForgery]) track(forger.forge())
+        for (let fault = plan.faults[nextFault]; fault !== undefined && fault.at <= t; fault = plan.faults[++nextFault])
+          faultTasks.push(applyFault(fault, nextFault))
         if (t >= options.durationMs) {
           await Promise.all(faultTasks)
           await toxiproxy.reset()
@@ -494,16 +493,14 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           settleStarted = now()
         }
       }
-      if (!checking && postgres.running && !postgresBusy && t - lastCheck >= options.checkEveryMs) {
+      if (!checking && postgres.running && !busy.postgres && t - lastCheck >= options.checkEveryMs) {
         lastCheck = t
         checking = true
         void periodicCheck()
       }
-      if (settleStarted !== undefined && !settling && t - lastSettleCheck >= 500) {
+      if (settleStarted !== undefined && t - lastSettleCheck >= 500) {
         lastSettleCheck = t
-        settling = true
         const done = await settled(tasks, journeys.probes, audit)
-        settling = false
         if (Math.floor((t - settleStarted) / 5000) !== Math.floor((t - settleStarted - 500) / 5000)) {
           log(`settling: ${clients.unanswered()} requests open, ${await pendingAttempts(audit)} attempts pending`)
           log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, ledgerDb.name)}`)
@@ -516,7 +513,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       }
       await sleep(5)
     }
-    report.settleMs = Math.round(now() - settleStarted!)
+    report.settleMs = Math.round(now() - settleStarted)
     try {
       report.anomalies = await acceptAnomalies(ADMIN_KEY, journeys)
       log(
@@ -533,7 +530,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         report.settlement.days.push(day)
         report.settlement.outcomes.push(settled.outcome)
         for (const [name, n] of Object.entries(settled.reconciliation?.breaks ?? {})) {
-          report.settlement.breaks[name] = (report.settlement.breaks[name] ?? 0) + (n as number)
+          report.settlement.breaks[name] = (report.settlement.breaks[name] ?? 0) + n
         }
       } catch (error) {
         report.harnessErrors.push(`settling day ${day}: ${String(error)}`)
@@ -543,7 +540,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const drainedBy = performance.now() + 60_000
     while (performance.now() < drainedBy) {
       const delivered = await Promise.all([checkEvents(audit), checkSequenced(audit)])
-        .then(([events, sequenced]) => events.find((r) => r.id === 'L2')!.count === 0 && sequenced.count === 0)
+        .then(([events, sequenced]) => events.some((r) => r.id === 'L2' && r.count === 0) && sequenced.count === 0)
         .catch(() => false)
       if (delivered) break
       await sleep(250)
@@ -643,7 +640,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       events: {
         ...(await countBy(audit, `SELECT 'outbox ' || topic AS name, count(*)::int AS n FROM outbox GROUP BY topic`)),
         ...(await countBy(audit, `SELECT 'inbox ' || consumer AS name, count(*)::int AS n FROM inbox GROUP BY consumer`)),
-        receipts: (await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM receipts')).rows[0]!.n,
+        receipts: firstRow(await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM receipts')).n,
         ...(await publishedMessages(kafka.directBroker)),
       },
     })
@@ -653,9 +650,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     await Promise.all([...services.values()].map((s) => s.stop())).catch(() => undefined)
     await kafka.stop().catch(() => undefined)
     await psp.end().catch(() => undefined)
-    await keepLogs(logs, join(lab.dir, 'logs'), seed).catch((error) => log(`could not keep the service logs: ${String(error)}`))
-    await pspDb.drop().catch((error) => log(`psp drop failed: ${String(error)}`))
-    await ledgerDb.drop().catch((error) => log(`drop failed: ${String(error)}`))
+    await keepLogs(logs, join(lab.dir, 'logs'), seed).catch((error: unknown) => log(`could not keep the service logs: ${String(error)}`))
+    await pspDb.drop().catch((error: unknown) => log(`psp drop failed: ${String(error)}`))
+    await ledgerDb.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
   }
 
   async function acceptAnomalies(adminKey: string, journeys: Journeys): Promise<PaymentsReport['anomalies']> {
@@ -800,8 +797,8 @@ async function keepLogs(from: string, to: string, seed: number): Promise<void> {
 
 async function pendingAttempts(audit: pg.Pool): Promise<string> {
   try {
-    const { rows } = await audit.query<{ n: number }>(`SELECT count(*)::int AS n FROM attempts WHERE status = 'pending'`)
-    return String(rows[0]!.n)
+    const { n } = firstRow(await audit.query<{ n: number }>(`SELECT count(*)::int AS n FROM attempts WHERE status = 'pending'`))
+    return String(n)
   } catch {
     return 'unknown'
   }
@@ -814,7 +811,7 @@ async function settled(tasks: readonly Promise<unknown>[], probes: readonly Prom
   try {
     if ((await checkSettled(audit)).count > 0) return false
     if ((await checkSequenced(audit)).count > 0) return false
-    return (await checkEvents(audit)).find((result) => result.id === 'L2')!.count === 0
+    return (await checkEvents(audit)).some((result) => result.id === 'L2' && result.count === 0)
   } catch {
     return false
   }

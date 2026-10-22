@@ -31,8 +31,10 @@ export function LineChart({ title, series, xLabel, yLabel, yLog = false, format 
   const [hover, setHover] = useState<number | null>(null)
   const xs = [...new Set(series.flatMap((s) => s.points.map((p) => p.x)))].sort((a, b) => a - b)
   const ys = series.flatMap((s) => s.points.map((p) => p.y)).filter((y) => y > 0)
-  if (xs.length === 0 || ys.length === 0) return null
-  const [x0, x1] = [Math.log(xs[0]!), Math.log(xs.at(-1)!)]
+  const [first] = xs
+  const last = xs.at(-1)
+  if (first === undefined || last === undefined || ys.length === 0) return null
+  const [x0, x1] = [Math.log(first), Math.log(last)]
   const yMin = yLog ? 10 ** Math.floor(Math.log10(Math.min(...ys))) : 0
   const yMax = yLog ? 10 ** Math.ceil(Math.log10(Math.max(...ys))) : niceMax(Math.max(...ys))
   const snap = (v: number) => Math.round(v * 10) / 10
@@ -45,22 +47,31 @@ export function LineChart({ title, series, xLabel, yLabel, yLog = false, format 
     ? Array.from({ length: Math.round(Math.log10(yMax / yMin)) + 1 }, (_, i) => yMin * 10 ** i)
     : Array.from({ length: 5 }, (_, i) => (yMax / 4) * i)
   const ends = series
-    .filter((s) => s.points.length > 0)
-    .map((s) => ({ key: s.key, label: s.label, x: px(s.points.at(-1)!.x) + 7, y: py(s.points.at(-1)!.y) }))
+    .flatMap((s) => {
+      const end = s.points.at(-1)
+      return end ? [{ key: s.key, label: s.label, x: px(end.x) + 7, y: py(end.y) }] : []
+    })
     .sort((a, b) => a.y - b.y)
-  for (let i = 1; i < ends.length; i++) {
-    for (let j = 0; j < i; j++) {
-      const near = Math.abs(ends[i]!.x - ends[j]!.x) < 96 && Math.abs(ends[i]!.y - ends[j]!.y) < 13
-      if (near) ends[i]!.y = ends[j]!.y + 13
+  for (const [i, end] of ends.entries()) {
+    for (const other of ends.slice(0, i)) {
+      const near = Math.abs(end.x - other.x) < 96 && Math.abs(end.y - other.y) < 13
+      if (near) end.y = other.y + 13
     }
   }
-  const at = hover === null ? null : xs[hover]!
+  const at = hover === null ? null : (xs[hover] ?? null)
 
   function move(event: React.PointerEvent<SVGSVGElement>) {
     const box = event.currentTarget.getBoundingClientRect()
     const x = ((event.clientX - box.left) / box.width) * W
     let best = 0
-    for (let i = 1; i < xs.length; i++) if (Math.abs(px(xs[i]!) - x) < Math.abs(px(xs[best]!) - x)) best = i
+    let nearest = Infinity
+    for (const [i, value] of xs.entries()) {
+      const distance = Math.abs(px(value) - x)
+      if (distance < nearest) {
+        best = i
+        nearest = distance
+      }
+    }
     setHover(best)
   }
 

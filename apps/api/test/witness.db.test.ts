@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, readWitness, readWitnessHistory, violations, type WitnessView } from '@carwash/invariants'
+import { firstRow } from '@carwash/pg'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -17,8 +18,6 @@ import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
 
 let stack: Stack
-let dir: string
-let server: Server
 let witnessUrl: string
 let sequencer: Sequencer
 let stateFile: string
@@ -46,10 +45,11 @@ function pay(amount: number) {
 
 async function rewriteHistory(client: pg.ClientBase): Promise<void> {
   await client.query('SET LOCAL session_replication_role = replica')
-  const { rows } = await client.query<{ journal_id: string }>(
-    `SELECT a.journal_id::text FROM audit_log a JOIN journals j ON j.id = a.journal_id WHERE j.external_ref LIKE 'capture:%' ORDER BY a.seq LIMIT 1`,
+  const { journal_id: journal } = firstRow(
+    await client.query<{ journal_id: string }>(
+      `SELECT a.journal_id::text FROM audit_log a JOIN journals j ON j.id = a.journal_id WHERE j.external_ref LIKE 'capture:%' ORDER BY a.seq LIMIT 1`,
+    ),
   )
-  const journal = rows[0]!.journal_id
   await client.query(
     `UPDATE entries SET amount = amount + CASE WHEN amount > 0 THEN 100 ELSE -100 END
      WHERE id IN ((SELECT id FROM entries WHERE journal_id = $1 AND amount > 0 ORDER BY id LIMIT 1)
@@ -88,20 +88,25 @@ async function inRollback<T>(work: (client: pg.PoolClient) => Promise<T>): Promi
   }
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
-  dir = mkdtempSync(join(tmpdir(), 'witness-'))
-  server = createWitnessServer(new Witness(dir, 'carwash-ledger'), 'witness-token')
+  cleanup.defer(() => stack.close())
+  const dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  cleanup.defer(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+  const server = createWitnessServer(new Witness(dir, 'carwash-ledger'), 'witness-token')
   witnessUrl = await listen(server)
+  cleanup.defer(() => {
+    server.close()
+  })
   stateFile = join(dir, 'verifier.json')
   sequencer = new Sequencer(stack.app.get(Database), { ...stack.config, witnessUrl, witnessToken: 'witness-token' })
 })
 
-afterAll(async () => {
-  await stack?.close()
-  server?.close()
-  if (dir) rmSync(dir, { recursive: true, force: true })
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('checkpoints and the witness', () => {
   it('reads a witness that has signed nothing as no checkpoint, and refuses a 404 from anywhere else', async () => {
@@ -181,8 +186,8 @@ describe('checkpoints and the witness', () => {
     const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: checkpoint.witness_key }, format: 'jwk' })
     const body = checkpointBody({ size: checkpoint.tree_size, root: checkpoint.root }, checkpoint.origin)
     expect(verify(null, Buffer.from(body), key, Buffer.from(checkpoint.signature, 'base64'))).toBe(true)
-    const { rows: journals } = await stack.admin.query<{ id: string }>('SELECT journal_id::text AS id FROM audit_log ORDER BY seq LIMIT 1')
-    const proof = (await stack.call('GET', `/v1/journals/${journals[0]!.id}/proof?tree_size=${checkpoint.tree_size}`)).body
+    const journal = firstRow(await stack.admin.query<{ id: string }>('SELECT journal_id::text AS id FROM audit_log ORDER BY seq LIMIT 1'))
+    const proof = (await stack.call('GET', `/v1/journals/${journal.id}/proof?tree_size=${checkpoint.tree_size}`)).body
     expect(proof.root).toBe(checkpoint.root)
     expect(verifyInclusion(fromHex(proof.leaf), proof.seq, proof.tree_size, proof.proof.map(fromHex), fromHex(checkpoint.root))).toBe(true)
 

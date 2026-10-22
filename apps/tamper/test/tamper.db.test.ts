@@ -7,17 +7,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessAnchor } from '@carwash/audit-pg'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
+import { createTestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createTamperServer, TamperService } from '../src/index.ts'
 
-let db: TestDatabase
 let app: pg.Pool
 let admin: pg.Pool
-let dirs: string[] = []
-let servers: Server[] = []
+const cleanup = new AsyncDisposableStack()
 let witness: Witness
 let stateDir: string
 
@@ -26,7 +24,9 @@ function anchor(): WitnessAnchor {
 }
 
 async function serve(server: Server): Promise<string> {
-  servers.push(server)
+  cleanup.defer(() => {
+    server.close()
+  })
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -39,12 +39,13 @@ function client(base: string, token = 'tamper-token') {
       headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
     })
-    return { status: response.status, body: (await response.json()) as any }
+    return { status: response.status, body: await response.json() }
   }
 }
 
 beforeAll(async () => {
-  db = await createTestDatabase()
+  const db = await createTestDatabase()
+  cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 4)
   admin = db.pool('admin', 2)
   const spec = { currency: 'EUR', balanceMode: 'derived' as const, shards: 1 }
@@ -70,22 +71,21 @@ beforeAll(async () => {
   }
   const witnessDir = mkdtempSync(join(tmpdir(), 'witness-'))
   stateDir = mkdtempSync(join(tmpdir(), 'tamper-'))
-  dirs = [witnessDir, stateDir]
+  cleanup.defer(() => {
+    for (const dir of [witnessDir, stateDir]) rmSync(dir, { recursive: true, force: true })
+  })
   witness = new Witness(witnessDir, 'carwash-ledger')
   const witnessUrl = await serve(createWitnessServer(witness, 'w'))
   expect(await new Checkpointer(app, new WitnessClient(witnessUrl, 'w', 2000)).run()).toMatchObject({ kind: 'signed', size: 30 })
 })
 
-afterAll(async () => {
-  for (const server of servers) server.close()
-  await db?.drop()
-  for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the tamper service', () => {
   it('tampers with one witnessed journal at a time, survives a restart, and restores it so that verification is clean again', async () => {
-    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.5 }), 'tamper-token')))
-    expect((await client(`http://127.0.0.1:${(servers.at(-1)!.address() as AddressInfo).port}`, 'nope')('GET', '/v1/tamper')).status).toBe(401)
+    const base = await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.5 }), 'tamper-token'))
+    const call = client(base)
+    expect((await client(base, 'nope')('GET', '/v1/tamper')).status).toBe(401)
     expect(await call('GET', '/v1/tamper')).toEqual({ status: 200, body: { tamper: null } })
     expect((await call('POST', '/v1/tamper', { class: 4 })).status).toBe(400)
 

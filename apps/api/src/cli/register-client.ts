@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { hashApiKey, type ClientScope } from '../auth/api-keys.ts'
+import { hashApiKey } from '../auth/api-keys.ts'
 
 const [name, scope] = process.argv.slice(2)
 const key = process.env.CLIENT_KEY
@@ -18,7 +18,7 @@ await client.connect()
 try {
   const { rowCount } = await client.query(
     'INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope) ON CONFLICT (key_hash) DO NOTHING',
-    [name, hashApiKey(key), scope as ClientScope],
+    [name, hashApiKey(key), scope],
   )
   process.stdout.write(`${name} (${scope}): ${rowCount === 1 ? 'registered' : 'already registered'}\n`)
 } finally {

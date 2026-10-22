@@ -48,9 +48,10 @@ export class Worker {
     })
     this.#child = child
     child.on('error', (error) => this.#events.log(`${this.kind}-${this.index}: ${error.message}`))
-    createInterface({ input: child.stderr! }).on('line', (line) => {
-      const hit = /^failpoint (\S+)$/.exec(line)
-      if (hit) this.#events.failpoint(hit[1]!)
+    if (child.stderr === null) throw new Error(`${this.kind}-${this.index} has no stderr pipe`)
+    createInterface({ input: child.stderr }).on('line', (line) => {
+      const [, name] = /^failpoint (\S+)$/.exec(line) ?? []
+      if (name !== undefined) this.#events.failpoint(name)
       else this.#events.log(`${this.kind}-${this.index}: ${line}`)
     })
     child.on('message', (message: FromWorker) => {
@@ -100,7 +101,7 @@ export class Worker {
 
   #send(message: ToWorker): boolean {
     const child = this.#child
-    if (child === undefined || !child.connected) return false
+    if (!child?.connected) return false
     try {
       child.send(message)
       return true

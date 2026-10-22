@@ -99,7 +99,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
     } catch (error) {
       if (error instanceof ApiError && error.code === 'psp_unavailable') return 'unknown'
       if (error instanceof ApiError && error.code === 'psp_answer_rejected') return 'anomaly'
-      this.#logger.error(`attempt ${attempt.id}: ${(error as Error).stack ?? String(error)}`)
+      this.#logger.error(`attempt ${attempt.id}: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)
       return 'error'
     }
   }
@@ -112,7 +112,7 @@ export class Recovery implements OnApplicationBootstrap, OnApplicationShutdown {
           try {
             await task()
           } catch (error) {
-            this.#logger.error(`${name}: ${(error as Error).message}`)
+            this.#logger.error(`${name}: ${error instanceof Error ? error.message : String(error)}`)
           }
           await sleep(intervalMs, undefined, { signal }).catch(() => undefined)
         }

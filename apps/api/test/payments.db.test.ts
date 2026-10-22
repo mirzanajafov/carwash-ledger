@@ -3,7 +3,8 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { checkAgainstPsp, checkLedger, checkPayments, checkSettled, violations } from '@carwash/invariants'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { firstRow } from '@carwash/pg'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { Database } from '../src/db/database.ts'
 import { IdempotencyService, type Begun, type OwnedKey } from '../src/idempotency/idempotency.service.ts'
 import { requestHash } from '../src/idempotency/request-hash.ts'
@@ -30,13 +31,14 @@ async function balance(code: string): Promise<number> {
   return reply.body.balance
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
 })
 
-afterAll(async () => {
-  await stack?.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('payments API', () => {
   it('authorizes and captures a payment, and posts one balanced capture journal', async () => {
@@ -74,10 +76,12 @@ describe('payments API', () => {
     const done = replies.filter((r) => r.status === 200)
     expect(done.length).toBeGreaterThanOrEqual(1)
     expect(new Set(done.map((r) => r.body.id)).size).toBe(1)
+    const [paid] = done
+    assert(paid)
     const settled = await call('POST', '/v1/payments', { key, body })
-    expect(settled).toMatchObject({ status: 200, replayed: true, body: { id: done[0]!.body.id } })
+    expect(settled).toMatchObject({ status: 200, replayed: true, body: { id: paid.body.id } })
     expect(await count(stack.admin, `SELECT count(*)::int AS n FROM idempotency_keys WHERE key = $1`, [key])).toBe(1)
-    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref = $1`, [`capture:${done[0]!.body.id}`])).toBe(1)
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref = $1`, [`capture:${paid.body.id}`])).toBe(1)
   })
 
   it('stores a decline as a 402 and replays it', async () => {
@@ -97,8 +101,9 @@ describe('payments API', () => {
     const second = await call('POST', '/v1/payments', { key, body })
     expect(second).toMatchObject({ status: 200, replayed: false, body: { status: 'captured' } })
     expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, replayed: true })
-    const { rows } = await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [second.body.id])
-    const chargeId = rows[0]!.psp_charge_id
+    const { psp_charge_id: chargeId } = firstRow(
+      await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [second.body.id]),
+    )
     expect(await count(stack.pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND charge_id = $1`, [chargeId])).toBe(1)
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${second.body.id}`])).toBe(1)
   })
@@ -141,7 +146,9 @@ describe('payments API', () => {
     await idempotency.abandon(slow)
     const { rows } = await stack.admin.query<{ id: string }>(`SELECT p.id FROM payments p JOIN idempotency_keys k ON k.key = $1 WHERE p.amount = 813`, [key])
     expect(rows).toHaveLength(1)
-    expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, replayed: true, body: { id: rows[0]!.id } })
+    const [payment] = rows
+    assert(payment)
+    expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, replayed: true, body: { id: payment.id } })
   })
 
   it('authorizes, captures part of a manual payment, and refuses a second capture without storing it', async () => {

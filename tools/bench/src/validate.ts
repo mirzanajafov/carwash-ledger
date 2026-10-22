@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util'
 import { AccountRegistry, PgCtePoster, pgAccountLoader, type BalanceMode } from '@carwash/ledger'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { describeEnvironment, median, percentile, writeResults } from './env.ts'
-import { mulberry32, runOpenLoop } from './loadgen.ts'
+import { mulberry32, pick, runOpenLoop } from './loadgen.ts'
 import { runPgbench } from './pgbench.ts'
 import { seedCaptureAccounts, type CaptureAccounts } from './seed.ts'
 import { pgbenchScript } from './validate-script.ts'
@@ -83,7 +83,7 @@ async function runLoadgen(db: TestDatabase, accounts: CaptureAccounts, connectio
     seed: repeat * 7 + rate,
     maxInFlight: 10_000,
     task: async (index) => {
-      const merchant = accounts.merchants[Math.floor(random() * accounts.merchants.length)]!
+      const merchant = pick(random, accounts.merchants)
       const gross = 500n + BigInt(Math.floor(random() * 3000))
       const fee = gross / 50n + 10n
       await poster.post({
@@ -125,12 +125,12 @@ async function main(): Promise<void> {
               const accounts = await seedCaptureAccounts(db.pool('ledger_app', 1), mode, 1, merchantCount)
               const result: ToolResult =
                 tool === 'pgbench' ? await pgbench(db, accounts, mode, connections, rate) : await runLoadgen(db, accounts, connections, rate, repeat)
-              samples.push({ repeat, tool, mode, connections, rate, ...result } as Sample)
+              samples.push({ repeat, tool, mode, connections, rate, ...result })
               console.log(
                 `${repeat} ${mode.padEnd(8)} c=${connections} rate ${rate} ${tool.padEnd(8)} ` +
                   `got ${result.achievedPerSecond.toFixed(0)} p50 ${result.p50Ms.toFixed(2)} p99 ${result.p99Ms.toFixed(2)} ms ` +
                   `failures ${result.failures}` +
-                  (result.lagP99Ms === undefined ? '' : ` lag99 ${result.lagP99Ms.toFixed(2)} cpu ${result.cpu!.toFixed(0)}%`),
+                  (result.lagP99Ms === undefined || result.cpu === undefined ? '' : ` lag99 ${result.lagP99Ms.toFixed(2)} cpu ${result.cpu.toFixed(0)}%`),
               )
             } finally {
               await db.drop()

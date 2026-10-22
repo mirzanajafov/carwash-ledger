@@ -106,7 +106,8 @@ export class Clients {
         continue
       }
       const first = Math.floor(this.#random() * live.length)
-      const targets = duplicate && record.sends === 0 && live.length >= 2 ? [live[first]!, live[(first + 1) % live.length]!] : [live[first]!]
+      const rotated = [...live.slice(first), ...live.slice(0, first)]
+      const targets = rotated.slice(0, duplicate && record.sends === 0 ? 2 : 1)
       if (targets.length === 2) this.stats.duplicates++
       const answers = await Promise.all(targets.map((url) => this.#once(record, url)))
       const final = answers.find((a) => a.verdict === 'stored') ?? answers.find((a) => a.verdict !== 'retry')
@@ -149,13 +150,13 @@ export class Clients {
       const retryAfter = Number(response.headers.get('retry-after') ?? 0)
       return { status: response.status, body: verdict === 'retry' ? { ...body, retryAfter } : body, verdict }
     } catch (error) {
-      const label = (error as Error).name === 'TimeoutError' ? 'timeout' : 'network error'
+      const label = error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'network error'
       this.#count(label)
-      record.lastError = `${label}: ${(error as Error).message}`
+      record.lastError = `${label}: ${error instanceof Error ? error.message : String(error)}`
       if (this.#logged++ % 50 === 0) this.#log(`client ${label} on ${base}${record.path} (${record.lastError})`)
       return { status: 0, body: null, verdict: 'retry' }
     } finally {
-      this.inFlight.set(base, this.inFlight.get(base)! - 1)
+      this.inFlight.set(base, (this.inFlight.get(base) ?? 0) - 1)
     }
   }
 

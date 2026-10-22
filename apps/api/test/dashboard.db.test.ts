@@ -3,7 +3,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { NestFactory } from '@nestjs/core'
 import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
 import { PgCtePoster } from '@carwash/ledger'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { firstRow } from '@carwash/pg'
+import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
 import { VerificationJob } from '../src/audit/verification-job.ts'
 import { VerificationRuns } from '../src/audit/verification-runs.ts'
 import type { ApiConfig } from '../src/config.ts'
@@ -27,11 +28,12 @@ function pay(amount: number) {
 async function watch(url: string) {
   const controller = new AbortController()
   const response = await fetch(url, { signal: controller.signal })
+  assert(response.body)
+  const reader = response.body.getReader()
   const events: Event[] = []
   const decoder = new TextDecoder()
   let buffer = ''
   const reading = (async () => {
-    const reader = response.body!.getReader()
     for (;;) {
       const { value, done } = await reader.read()
       if (done) return
@@ -69,13 +71,14 @@ async function sequenceAll(): Promise<void> {
   while ((await db.transaction((client) => sequenceBatch(client, 1000))) > 0);
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
 })
 
-afterAll(async () => {
-  await stack?.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the live feed', () => {
   it('streams balances, every new journal with its entries, and payments as they move, to anyone', async () => {
@@ -91,10 +94,13 @@ describe('the live feed', () => {
           events.some((e) => e.type === 'journal' && e.data.external_ref.startsWith('capture:')) &&
           events.some((e) => e.type === 'payment' && e.data.id === created.body.id && e.data.status === 'captured'),
       )
-      const journal = live.events.find((e) => e.type === 'journal' && e.data.external_ref.startsWith('capture:'))!
+      const journal = live.events.find((e) => e.type === 'journal' && e.data.external_ref.startsWith('capture:'))
+      assert(journal)
       expect(journal.data.entries.reduce((sum: bigint, e: { amount: string }) => sum + BigInt(e.amount), 0n)).toBe(0n)
       await live.until((events) => events.filter((e) => e.type === 'balances').length >= 2)
-      const balances = live.events.filter((e) => e.type === 'balances').at(-1)!.data as { code: string; amount: string }[]
+      const newest = live.events.filter((e) => e.type === 'balances').at(-1)
+      assert(newest)
+      const balances = newest.data as { code: string; amount: string }[]
       expect(balances.reduce((sum, b) => sum + BigInt(b.amount), 0n)).toBe(0n)
       expect(balances.some((b) => b.amount !== '0')).toBe(true)
 
@@ -117,7 +123,7 @@ describe('the live feed', () => {
 
   it('finds the last minute of payments through the primary key, not by scanning them all', async () => {
     const client = await stack.admin.connect()
-    let plan = ''
+    let plan: string
     try {
       await client.query('BEGIN')
       await client.query('SET LOCAL enable_seqscan = off')
@@ -136,7 +142,7 @@ describe('the live feed', () => {
     const chart = stack.app.get(Chart)
     const accounts = chart.accounts('EUR')
     const poster = new PgCtePoster(pool, chart.registry)
-    const before = BigInt((await pool.query<{ id: string }>('SELECT coalesce(max(id), 0)::text AS id FROM journals')).rows[0]!.id)
+    const before = BigInt(firstRow(await pool.query<{ id: string }>('SELECT coalesce(max(id), 0)::text AS id FROM journals')).id)
     for (let i = 0; i < 700; i++) {
       await poster.post({
         externalRef: `live-backlog:${i}`,
@@ -379,12 +385,14 @@ describe('admin sessions', () => {
     await stack.admin.query(`UPDATE dashboard_sessions SET expires_at = now() - interval '1 second' WHERE id = $1`, [expired.id])
     expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: expired.token })).status).toBe(401)
 
-    const { rows } = await stack.admin.query<{ id: string }>(
-      `INSERT INTO api_clients (name, key_hash, scope) VALUES ('short-lived', sha256('cw_admin_short'::bytea), 'admin') RETURNING id::text`,
+    const { id } = firstRow(
+      await stack.admin.query<{ id: string }>(
+        `INSERT INTO api_clients (name, key_hash, scope) VALUES ('short-lived', sha256('cw_admin_short'::bytea), 'admin') RETURNING id::text`,
+      ),
     )
     const opened = await stack.call('POST', '/v1/admin/sessions', { bearer: 'cw_admin_short', key: null })
     expect(opened.status).toBe(201)
-    await stack.admin.query('UPDATE api_clients SET revoked_at = now() WHERE id = $1', [rows[0]!.id])
+    await stack.admin.query('UPDATE api_clients SET revoked_at = now() WHERE id = $1', [id])
     expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: opened.body.token })).status).toBe(401)
     expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: 'cw_session_made-up' })).status).toBe(401)
   })

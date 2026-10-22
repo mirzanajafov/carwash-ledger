@@ -56,7 +56,7 @@ async function untilLed(admin: KafkaJS.Admin, specs: readonly TopicSpec[], timeo
     const metadata = await admin.fetchTopicMetadata({ topics: specs.map((spec) => spec.topic) }).catch(() => [])
     const led = specs.every((spec) => {
       const topic = metadata.find((m) => m.name === spec.topic)
-      return topic !== undefined && topic.partitions.length === spec.partitions && topic.partitions.every((p) => p.leader >= 0)
+      return topic?.partitions.length === spec.partitions && topic.partitions.every((p) => p.leader >= 0)
     })
     if (led) return
     if (Date.now() > deadline) throw new Error(`topics ${specs.map((spec) => spec.topic).join(', ')} have no leaders yet`)

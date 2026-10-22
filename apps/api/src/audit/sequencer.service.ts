@@ -63,7 +63,7 @@ export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
         failures = 0
       } catch (error) {
         failures++
-        if (failures === 1 || failures % 50 === 0) this.#logger.warn(`sequencing failed: ${(error as Error).message}`)
+        if (failures === 1 || failures % 50 === 0) this.#logger.warn(`sequencing failed: ${error instanceof Error ? error.message : String(error)}`)
       }
       if (this.#checkpointer && (sinceCheckpoint >= this.#config.checkpointEveryLeaves || Date.now() - checkpointedAt >= this.#config.checkpointEveryMs)) {
         checkpointedAt = Date.now()
@@ -72,7 +72,7 @@ export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
           unreachable = 0
         } catch (error) {
           unreachable++
-          if (unreachable === 1 || unreachable % 50 === 0) this.#logger.warn(`checkpointing failed: ${(error as Error).message}`)
+          if (unreachable === 1 || unreachable % 50 === 0) this.#logger.warn(`checkpointing failed: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
       await sleep(this.#config.auditEveryMs, undefined, { signal: this.#stop.signal }).catch(() => undefined)

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { assert, describe, expect, it } from 'vitest'
 import { Buckets, clientIp, ruleFor, RULES, sameOrigin, Streams } from './limits'
 
 describe('the web limits', () => {
@@ -46,8 +46,9 @@ describe('the web limits', () => {
 
   it('caps open live streams per visitor and frees a slot exactly once', () => {
     const streams = new Streams(2)
-    const first = streams.open('ip')!
-    const second = streams.open('ip')!
+    const first = streams.open('ip')
+    const second = streams.open('ip')
+    assert(first && second)
     expect(streams.open('ip')).toBeNull()
     first()
     first()

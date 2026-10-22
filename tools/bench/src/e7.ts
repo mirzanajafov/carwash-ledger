@@ -3,11 +3,12 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, backfillEntryCurrency, createPool, PgCtePoster, pgAccountLoader, type BackfillResult } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import { createTestDatabase, migrationNames, migrationSql, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import pg from 'pg'
 import { createResultsDir, describeEnvironment, percentile, writeJson } from './env.ts'
 import { mulberry32 } from './loadgen.ts'
-import { createSeedAccounts, MERCHANTS, seedJournals, type SeedAccounts } from './ledger-seed.ts'
+import { createSeedAccounts, grossOf, MERCHANTS, seedJournals, type SeedAccounts } from './ledger-seed.ts'
 
 const { values } = parseArgs({
   options: {
@@ -26,7 +27,8 @@ const { values } = parseArgs({
 })
 
 const STEPS = migrationNames().filter((name) => name.includes('_entries_currency_'))
-const BEFORE = migrationNames()[migrationNames().indexOf(STEPS[0]!) - 1]!
+const BEFORE = migrationNames()[migrationNames().indexOf(migration('expand')) - 1]
+if (BEFORE === undefined) throw new Error('there is no migration before entries_currency_expand')
 const FUNCTIONS = ['ledger_check_balance', 'ledger_entry_currency', 'ledger_protect', 'ledger_stamp_entry']
 
 interface Request {
@@ -54,6 +56,12 @@ function stats(xs: readonly number[]) {
 
 function round(x: number): number {
   return Math.round(x * 10) / 10
+}
+
+function migration(step: 'expand' | 'check' | 'validate' | 'finish'): string {
+  const name = STEPS.find((candidate) => candidate.endsWith(`_entries_currency_${step}`))
+  if (name === undefined) throw new Error(`there is no entries_currency_${step} migration`)
+  return name
 }
 
 class Load {
@@ -106,7 +114,7 @@ class Load {
 
   recentP99(windowMs: number): number {
     const from = this.now() - windowMs
-    while (this.#recent.length > 0 && this.#recent[0]!.end < from) this.#recent.shift()
+    while (this.#recent[0] !== undefined && this.#recent[0].end < from) this.#recent.shift()
     return stats(this.#recent.map((r) => r.ms)).p99
   }
 
@@ -117,20 +125,25 @@ class Load {
     }
     this.#inFlight++
     const n = this.#n++
-    const gross = [900, 1500, 2400, 3500, 4900][n % 5]!
+    const gross = grossOf(n)
     const fee = Math.floor((gross * 2) / 100) + 10
-    this.#poster
+    const merchant = this.#accounts.merchants[n % MERCHANTS]
+    if (merchant === undefined) throw new Error(`there is no merchant ${n % MERCHANTS}`)
+    void this.#poster
       .post({
         externalRef: `${this.#prefix}:${n}`,
         entries: [
           { accountId: BigInt(this.#accounts.receivable), amount: BigInt(gross) },
-          { accountId: BigInt(this.#accounts.merchants[n % MERCHANTS]!), amount: BigInt(-(gross - fee)) },
+          { accountId: BigInt(merchant), amount: BigInt(-(gross - fee)) },
           { accountId: BigInt(this.#accounts.fees), amount: BigInt(-fee) },
         ],
       })
       .then(
         () => null,
-        (error: { code?: string; message?: string }) => error.code ?? error.message ?? 'unknown',
+        (error: unknown) => {
+          if (!(error instanceof Error)) return 'unknown'
+          return 'code' in error && typeof error.code === 'string' ? error.code : error.message
+        },
       )
       .then((error) => {
         this.#inFlight--
@@ -161,17 +174,18 @@ function perCall(from: Record<string, { calls: number; ms: number }>, to: Record
 }
 
 async function sizes(admin: pg.Pool) {
-  const { rows } = await admin.query<{ table: string; indexes: string; dead: string; lsn: string }>(
-    `SELECT pg_table_size('entries')::text AS table, pg_indexes_size('entries')::text AS indexes,
-            coalesce((SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname = 'entries'), 0)::text AS dead,
-            pg_current_wal_lsn()::text AS lsn`,
+  const { table, indexes, dead, lsn } = firstRow(
+    await admin.query<{ table: string; indexes: string; dead: string; lsn: string }>(
+      `SELECT pg_table_size('entries')::text AS table, pg_indexes_size('entries')::text AS indexes,
+              coalesce((SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname = 'entries'), 0)::text AS dead,
+              pg_current_wal_lsn()::text AS lsn`,
+    ),
   )
-  return { tableBytes: Number(rows[0]!.table), indexBytes: Number(rows[0]!.indexes), deadTuples: Number(rows[0]!.dead), lsn: rows[0]!.lsn }
+  return { tableBytes: Number(table), indexBytes: Number(indexes), deadTuples: Number(dead), lsn }
 }
 
 async function walBytes(admin: pg.Pool, from: string, to: string): Promise<number> {
-  const { rows } = await admin.query<{ bytes: string }>('SELECT pg_wal_lsn_diff($2::pg_lsn, $1::pg_lsn)::text AS bytes', [from, to])
-  return Number(rows[0]!.bytes)
+  return Number(firstRow(await admin.query<{ bytes: string }>('SELECT pg_wal_lsn_diff($2::pg_lsn, $1::pg_lsn)::text AS bytes', [from, to])).bytes)
 }
 
 async function runStep(owner: pg.Pool, sql: string, retries: number): Promise<{ ms: number; retries: number }> {
@@ -231,7 +245,8 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
           `SELECT coalesce(max(extract(epoch FROM clock_timestamp() - query_start)) * 1000, 0)::float8 AS longest, count(*)::int AS waiting
            FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
         )
-        .then(({ rows }) => samples.push({ at: Math.round(at), longestMs: Math.round(rows[0]!.longest), waiting: rows[0]!.waiting }))
+        .then(firstRow)
+        .then(({ longest, waiting }) => samples.push({ at: Math.round(at), longestMs: Math.round(longest), waiting }))
         .catch(() => undefined)
         .finally(() => {
           sampling = false
@@ -245,12 +260,14 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
     const changeStarted = load.now()
     mark('change')
     if (name === 'naive') {
-      const sql = ['BEGIN', ...[STEPS[0]!, STEPS[1]!, STEPS[3]!].map((step) => migrationSql(step).replace("SET lock_timeout = '2s';", '')), 'COMMIT'].join(
-        ';\n',
-      )
+      const sql = [
+        'BEGIN',
+        ...[migration('expand'), migration('check'), migration('finish')].map((step) => migrationSql(step).replace("SET lock_timeout = '2s';", '')),
+        'COMMIT',
+      ].join(';\n')
       steps.all = await runStep(owner, sql, 0)
     } else {
-      steps.expand = await runStep(owner, migrationSql(STEPS[0]!), 10)
+      steps.expand = await runStep(owner, migrationSql(migration('expand')), 10)
       mark('expanded')
       const at = performance.now()
       backfill = await backfillEntryCurrency(owner, {
@@ -260,11 +277,11 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
       })
       steps.backfill = { ms: Math.round(performance.now() - at), retries: 0 }
       mark('backfilled')
-      steps.check = await runStep(owner, migrationSql(STEPS[1]!), 10)
+      steps.check = await runStep(owner, migrationSql(migration('check')), 10)
       mark('checked')
-      steps.validate = await runStep(owner, migrationSql(STEPS[2]!), 10)
+      steps.validate = await runStep(owner, migrationSql(migration('validate')), 10)
       mark('validated')
-      steps.finish = await runStep(owner, migrationSql(STEPS[3]!), 10)
+      steps.finish = await runStep(owner, migrationSql(migration('finish')), 10)
     }
     const changeEnded = load.now()
     mark('changed')
@@ -341,7 +358,7 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
 }
 
 await prepareTemplate()
-const dir = createResultsDir(values.out!)
+const dir = createResultsDir(values.out)
 const base = await createTestDatabase({ through: BEFORE })
 const accounts = await createSeedAccounts(base.pool('ledger_app', 2))
 writeJson(join(dir, 'run.json'), {
@@ -352,22 +369,24 @@ writeJson(join(dir, 'run.json'), {
   environment: await describeEnvironment(base.pool('admin', 1)),
 })
 const seedMs = await seedJournals(base.pool('admin', 2), accounts, 0, Number(values.journals), { queueAudit: false })
-const { rows } = await base
-  .pool('admin', 1)
-  .query<{ entries: string; bytes: string }>(`SELECT (SELECT count(*) FROM entries)::text AS entries, pg_database_size(current_database())::text AS bytes`)
-console.log(`seeded ${rows[0]!.entries} entries in ${Math.round(seedMs / 1000)} s, database ${Math.round(Number(rows[0]!.bytes) / 1e6)} MB`)
+const seeded = firstRow(
+  await base
+    .pool('admin', 1)
+    .query<{ entries: string; bytes: string }>(`SELECT (SELECT count(*) FROM entries)::text AS entries, pg_database_size(current_database())::text AS bytes`),
+)
+console.log(`seeded ${seeded.entries} entries in ${Math.round(seedMs / 1000)} s, database ${Math.round(Number(seeded.bytes) / 1e6)} MB`)
 const seedFound = values['check-seed'] ? violations(await checkLedger(base.pool('ledger_audit', 1))) : []
 if (seedFound.length > 0) throw new Error(`the seed breaks the ledger: ${JSON.stringify(seedFound)}`)
 writeJson(join(dir, 'seed.json'), {
   journals: Number(values.journals),
-  entries: Number(rows[0]!.entries),
-  databaseBytes: Number(rows[0]!.bytes),
+  entries: Number(seeded.entries),
+  databaseBytes: Number(seeded.bytes),
   seedMs: Math.round(seedMs),
 })
 await base.close()
 const results = []
 try {
-  for (const name of values.procedures!.split(',')) results.push(await procedure(name, base, accounts, dir))
+  for (const name of values.procedures.split(',')) results.push(await procedure(name, base, accounts, dir))
   writeJson(join(dir, 'summary.json'), results)
 } finally {
   await base.drop()

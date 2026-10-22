@@ -88,6 +88,29 @@ const COPIES = `
   WHERE c.size > $1 AND c.size <= $2 AND c.witness_key = $3
   ORDER BY c.size`
 
+class Findings {
+  count = 0
+  readonly examples: Finding[] = []
+  readonly #limit: number
+  #exact: number | null = null
+  #ranged: number | null = null
+
+  constructor(limit: number) {
+    this.#limit = limit
+  }
+
+  add(finding: Finding): void {
+    this.count++
+    if (this.examples.length < this.#limit) this.examples.push(finding)
+    if ('seq' in finding && (this.#exact === null || finding.seq < this.#exact)) this.#exact = finding.seq
+    if (finding.kind === 'root' && (this.#ranged === null || finding.after < this.#ranged)) this.#ranged = finding.after
+  }
+
+  get firstSeq(): number | null {
+    return this.#exact ?? this.#ranged
+  }
+}
+
 async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number, through: number): Promise<SignedRoot[]> {
   const { latest } = witness
   const { rows } = await db.query<{ size: string; root: Buffer; signature: Buffer }>(COPIES, [above, through, witness.publicKey])
@@ -101,17 +124,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
   const started = performance.now()
   const batch = options.batch ?? 5000
   if (!Number.isSafeInteger(batch) || batch < 1) throw new RangeError(`the batch must be a positive integer, not ${batch}`)
-  const limit = options.examples ?? 20
-  const examples: Finding[] = []
-  let findings = 0
-  let exact: number | null = null
-  let ranged: number | null = null
-  const report = (finding: Finding) => {
-    findings++
-    if (examples.length < limit) examples.push(finding)
-    if ('seq' in finding && (exact === null || finding.seq < exact)) exact = finding.seq
-    if (finding.kind === 'root' && (ranged === null || finding.after < ranged)) ranged = finding.after
-  }
+  const findings = new Findings(options.examples ?? 20)
   let yielded = 0
   let turnAt = performance.now()
   const handBack = async (work: () => Promise<unknown>) => {
@@ -140,10 +153,10 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
 
   if (options.from && start > 0) {
     const { rows } = await timed(() => db.query<{ chain: Buffer }>('SELECT chain FROM audit_log WHERE seq = $1', [start - 1]))
-    if (!rows[0] || !equal(new Uint8Array(rows[0].chain), chain)) report({ kind: 'history', size: start, what: 'chain' })
+    if (!rows[0] || !equal(new Uint8Array(rows[0].chain), chain)) findings.add({ kind: 'history', size: start, what: 'chain' })
     if (rows[0]) storedChain = new Uint8Array(rows[0].chain)
     const stored = start <= size ? await timed(() => rootAt(db, start)).catch(() => undefined) : undefined
-    if (!stored || toHex(stored) !== options.from.root) report({ kind: 'history', size: start, what: 'root' })
+    if (!stored || toHex(stored) !== options.from.root) findings.add({ kind: 'history', size: start, what: 'root' })
   }
 
   const witness = options.witness && {
@@ -156,7 +169,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
       if (performance.now() - turnAt >= TURN_MS) await turn()
       if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
-      else report({ kind: 'signature', size: root.size })
+      else findings.add({ kind: 'signature', size: root.size })
     }
     return good
   }
@@ -175,7 +188,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
       if (performance.now() - turnAt >= TURN_MS) await turn()
       const seq = Number(row.seq)
       if (seq !== position) {
-        report({ kind: 'gap', seq: position, missing: seq - position })
+        findings.add({ kind: 'gap', seq: position, missing: seq - position })
         broken = true
       }
       position = seq + 1
@@ -183,13 +196,13 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
       const stored: Hash = new Uint8Array(row.leaf)
       let leaf = stored
       if (!row.present) {
-        report({ kind: 'missing_journal', seq, journalId: row.journal_id })
+        findings.add({ kind: 'missing_journal', seq, journalId: row.journal_id })
       } else {
         leaf = leafHash(canonicalOf(row))
-        if (!equal(leaf, stored)) report({ kind: 'leaf', seq, journalId: row.journal_id })
+        if (!equal(leaf, stored)) findings.add({ kind: 'leaf', seq, journalId: row.journal_id })
       }
       const storedNext = new Uint8Array(row.chain)
-      if (!equal(storedNext, chainHash(storedChain, stored))) report({ kind: 'chain', seq })
+      if (!equal(storedNext, chainHash(storedChain, stored))) findings.add({ kind: 'chain', seq })
       storedChain = storedNext
       chain = chainHash(chain, leaf)
       if (broken) continue
@@ -197,20 +210,20 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
       for (let root = roots[next]; root?.size === frontier.size; root = roots[++next]) {
         witnessed++
         if (toHex(frontier.root()) === root.root) lastMatched = frontier.size
-        else report({ kind: 'root', size: frontier.size, after: lastMatched })
+        else findings.add({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }
     await handBack(async () => options.onProgress?.(to, size))
   }
   options.signal?.throwIfAborted()
   if (position < size) {
-    report({ kind: 'gap', seq: position, missing: size - position })
+    findings.add({ kind: 'gap', seq: position, missing: size - position })
     broken = true
   }
-  for (const root of await signedRoots(size, Number.MAX_SAFE_INTEGER)) report({ kind: 'beyond', size: root.size, treeSize: size })
+  for (const root of await signedRoots(size, Number.MAX_SAFE_INTEGER)) findings.add({ kind: 'beyond', size: root.size, treeSize: size })
   if (!options.from) {
     const { rows } = await timed(() => db.query<{ id: string }>(UNSEQUENCED))
-    for (const row of rows) report({ kind: 'unsequenced', journalId: row.id })
+    for (const row of rows) findings.add({ kind: 'unsequenced', journalId: row.id })
   }
 
   const total = performance.now() - started
@@ -220,9 +233,9 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     size,
     journals,
     witnessed,
-    findings,
-    examples,
-    firstSeq: exact ?? ranged,
+    findings: findings.count,
+    examples: findings.examples,
+    firstSeq: findings.firstSeq,
     state: broken ? null : { ...frontier.toJSON(), chain: toHex(chain), root: toHex(frontier.root()) },
     ms: { read: Math.round(read), compute: Math.round(total - read - yielded), yielded: Math.round(yielded), total: Math.round(total) },
   }

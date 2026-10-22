@@ -12,7 +12,7 @@ export function useLive() {
   useEffect(() => {
     const source = new EventSource('/api/live')
     const on = (type: LiveAction['type']) => (event: MessageEvent<string>) => {
-      dispatch({ type, data: JSON.parse(event.data), at: Date.now() } as LiveAction)
+      dispatch({ type, data: JSON.parse(event.data), at: Date.now() })
     }
     source.addEventListener('open', () => setConnection('live'))
     source.addEventListener('error', () => setConnection('reconnecting'))

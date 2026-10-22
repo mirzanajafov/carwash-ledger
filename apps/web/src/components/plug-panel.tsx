@@ -10,7 +10,11 @@ function seconds(ms: number): string {
   return `+${(ms / 1000).toFixed(2)} s`
 }
 
-type Line = { step: Step; tries: number; until: number }
+interface Line {
+  step: Step
+  tries: number
+  until: number
+}
 
 function group(steps: readonly Step[]): Line[] {
   const lines: Line[] = []

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { Database } from '../db/database.ts'
 import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
@@ -9,7 +10,7 @@ import { Chart } from '../ledger/chart.service.ts'
 import { checkAnswer, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
 import { PspClient, type PspCall } from '../psp/psp.client.ts'
 import { feeRefund, platformFee } from './fees.ts'
-import { resolveCardAttempt, type CardAttemptKind, type PaymentStatus } from './payment-state.ts'
+import { resolveCardAttempt, type PaymentStatus } from './payment-state.ts'
 import { ATTEMPT_COLUMNS, loadPayment, loadPayout, type AttemptRecord, type PaymentRecord } from './records.ts'
 
 export type Applied = 'applied' | 'already' | 'anomaly'
@@ -78,7 +79,7 @@ export class AttemptsService {
     if (!(await this.#resolve(client, attempt, answer))) return 'already'
     if (attempt.kind === 'refund') return this.#applyRefund(client, attempt, payment, answer)
 
-    const resolution = resolveCardAttempt(payment.status, attempt.kind as CardAttemptKind, answer.status, answer.reason)
+    const resolution = resolveCardAttempt(payment.status, attempt.kind, answer.status, answer.reason)
     if (resolution.kind === 'anomaly') {
       await recordAnomaly(client, attempt.id, 'unexpected_answer', { reason: resolution.reason, answer })
       return 'anomaly'
@@ -122,11 +123,11 @@ export class AttemptsService {
       [attempt.id, answer.status, answer.operationId, answer.reason],
     )
     if (updated.rowCount === 1) return true
-    const { rows } = await client.query<{ status: string; psp_operation_id: string | null }>(
-      'SELECT status::text, psp_operation_id FROM attempts WHERE id = $1',
-      [attempt.id],
+    const current = firstRow(
+      await client.query<{ status: string; psp_operation_id: string | null }>('SELECT status::text, psp_operation_id FROM attempts WHERE id = $1', [
+        attempt.id,
+      ]),
     )
-    const current = rows[0]!
     if (current.status !== answer.status || current.psp_operation_id !== answer.operationId) {
       await recordAnomaly(client, attempt.id, 'answer_changed', { stored: current, answer })
     }

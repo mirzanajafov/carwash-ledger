@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { insertAccount, postInTransaction, readBalance, sqlStateOf } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { ApiError, notFound } from '../http/api-error.ts'
@@ -54,11 +55,11 @@ export class PayoutsService {
           currency: input.currency,
           balanceMode: 'locked',
         })
-        const { rows } = await client.query<MerchantRow>(
+        const inserted = await client.query<MerchantRow>(
           'INSERT INTO merchants (code, name, currency, account_id) VALUES ($1, $2, $3, $4) RETURNING id::text, code, name, currency, account_id::text',
           [input.code, input.name, input.currency, account.id],
         )
-        return this.#idempotency.finish(client, owned, { status: 200, body: this.#merchantView(rows[0]!, 0n) })
+        return this.#idempotency.finish(client, owned, { status: 200, body: this.#merchantView(firstRow(inserted), 0n) })
       })
     } catch (error) {
       if (sqlStateOf(error) === '23505') throw new ApiError(409, 'merchant_exists', `merchant ${input.code} already exists`)
@@ -70,8 +71,8 @@ export class PayoutsService {
     const { rows } = await this.#db.pool.query<MerchantRow>('SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1', [code])
     const merchant = rows[0]
     if (!merchant) throw notFound(`merchant ${code}`)
-    const [account] = (await this.#chart.registry.resolve([BigInt(merchant.account_id)])).values()
-    return this.#merchantView(merchant, -(await readBalance(this.#db.pool, account!)))
+    const account = await this.#chart.registry.account(BigInt(merchant.account_id))
+    return this.#merchantView(merchant, -(await readBalance(this.#db.pool, account)))
   }
 
   async create(owned: OwnedKey, input: PayoutInput): Promise<Final> {
@@ -90,7 +91,9 @@ export class PayoutsService {
           `SELECT b.account_id::text, b.amount::text FROM balances b WHERE b.account_id = ANY($1::bigint[]) ORDER BY b.account_id, b.shard FOR UPDATE`,
           [[merchant.account_id, bank.id.toString()]],
         )
-        const payable = -BigInt(locked.rows.find((row) => row.account_id === merchant.account_id)!.amount)
+        const merchantBalance = locked.rows.find((row) => row.account_id === merchant.account_id)
+        if (!merchantBalance) throw new Error(`merchant ${input.merchant} has no balance row`)
+        const payable = -BigInt(merchantBalance.amount)
         if (input.amount === undefined && payable <= 0n) {
           throw new ApiError(409, 'nothing_to_pay_out', `merchant ${input.merchant} has nothing available for payout`)
         }
@@ -103,7 +106,7 @@ export class PayoutsService {
           amount,
           input.currency,
         ])
-        const payoutId = inserted.rows[0]!.id
+        const payoutId = firstRow(inserted).id
         const journalId = await postInTransaction(client, this.#chart.registry, {
           externalRef: `payout:${payoutId}`,
           entries: [

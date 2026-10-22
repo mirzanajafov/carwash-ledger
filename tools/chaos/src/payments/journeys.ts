@@ -92,11 +92,14 @@ export class Journeys {
   }
 
   async #payment(journey: PaymentJourney): Promise<string> {
-    const caller = this.#callers[journey.client]!
+    const caller = this.#callers[journey.client]
+    if (caller === undefined) throw new Error(`there is no client ${journey.client} for journey ${journey.index}`)
+    const merchant = this.#merchants[journey.merchant]
+    if (merchant === undefined) throw new Error(`there is no merchant ${journey.merchant} for journey ${journey.index}`)
     const body = {
       amount: journey.amount,
       currency: 'EUR',
-      merchant: this.#merchants[journey.merchant]!,
+      merchant,
       token: 'tok_ok',
       capture: journey.capture,
     }
@@ -122,7 +125,9 @@ export class Journeys {
     if (journey.reuse) this.probes.push(this.#probe(created.request, { ...body, amount: journey.amount + 1 }))
 
     if (journey.capture === 'manual') {
-      await sleep(journey.pauses[0]!)
+      const pause = journey.pauses[0]
+      if (pause === undefined) throw new Error(`journey ${journey.index} has no pause before its capture`)
+      await sleep(pause)
       if (journey.settle === 'cancel') {
         const cancel = await this.#send(caller, 'cancel', `/v1/payments/${payment.id}/cancel`, {}, journey.duplicate)
         if (cancel.answer === undefined) return 'stopped'
@@ -134,28 +139,31 @@ export class Journeys {
       const captureBody = journey.captureAmount === journey.amount ? {} : { amount: journey.captureAmount }
       const path = `/v1/payments/${payment.id}/capture`
       const sent = await Promise.all(Array.from({ length: journey.rival ? 2 : 1 }, () => this.#send(caller, 'capture', path, captureBody, journey.duplicate)))
-      if (sent.some((s) => s.answer === undefined)) return 'stopped'
-      const won = sent.filter((s) => s.answer!.status === 200)
-      const lost = sent.filter((s) => s.answer!.status !== 200)
-      if (won.length === 0) {
-        if (lost.some((s) => s.answer!.verdict === 'refused')) return 'refused'
-        return this.#surprise(lost[0]!.request, lost[0]!.answer!)
+      if (!sent.every((s): s is { request: RequestRecord; answer: Answer } => s.answer !== undefined)) return 'stopped'
+      const [won, rival] = sent.filter((s) => s.answer.status === 200)
+      const lost = sent.filter((s) => s.answer.status !== 200)
+      if (won === undefined) {
+        if (lost.some((s) => s.answer.verdict === 'refused')) return 'refused'
+        const [loser] = lost
+        if (loser === undefined) throw new Error(`journey ${journey.index} sent no capture`)
+        return this.#surprise(loser.request, loser.answer)
       }
-      const winner = won[0]!.answer!
+      const winner = won.answer
       if (winner.body.status !== 'captured' || winner.body.captured_amount !== journey.captureAmount) {
-        return this.#surprise(won[0]!.request, winner)
+        return this.#surprise(won.request, winner)
       }
-      if (won.length > 1) this.#surprise(won[1]!.request, won[1]!.answer!)
+      if (rival) this.#surprise(rival.request, rival.answer)
       for (const loser of lost) {
-        if (loser.answer!.body?.error?.code !== 'payment_not_capturable') this.#surprise(loser.request, loser.answer!)
+        if (loser.answer.body?.error?.code !== 'payment_not_capturable') this.#surprise(loser.request, loser.answer)
       }
       belief.status = 'captured'
       belief.captured = winner.body.captured_amount
     }
 
-    for (let i = 0; i < journey.refunds.length; i++) {
-      await sleep(journey.pauses[i + 1]!)
-      const amount = journey.refunds[i]!
+    for (const [i, amount] of journey.refunds.entries()) {
+      const pause = journey.pauses[i + 1]
+      if (pause === undefined) throw new Error(`journey ${journey.index} has no pause before refund ${i}`)
+      await sleep(pause)
       const refund = await this.#send(caller, 'refund', `/v1/payments/${payment.id}/refunds`, { amount }, journey.duplicate)
       if (refund.answer === undefined) return 'stopped'
       if (refund.answer.verdict === 'refused') return 'refused'
@@ -169,7 +177,8 @@ export class Journeys {
   }
 
   async #payout(planned: PlannedPayout): Promise<string> {
-    const merchant = this.#merchants[planned.merchant]!
+    const merchant = this.#merchants[planned.merchant]
+    if (merchant === undefined) throw new Error(`there is no merchant ${planned.merchant} for payout ${planned.index}`)
     const { request, answer } = await this.#send('admin', 'payout', '/v1/payouts', { merchant, currency: 'EUR' }, planned.duplicate)
     if (answer === undefined) return 'stopped'
     if (answer.verdict === 'refused') return 'refused'

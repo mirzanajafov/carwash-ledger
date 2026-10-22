@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { postInTransaction, type EntryInput } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import { BREAK_CLASSES, reconcile, window, type BreakClass, type LedgerItem } from '@carwash/recon'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -107,10 +108,9 @@ export class Settlements {
     const calendar = await this.#psp.calendar()
     if (calendar.kind === 'unknown')
       throw new ApiError(503, 'psp_unavailable', `the PSP's calendar is not available (${calendar.reason})`, { 'Retry-After': '5' })
-    const { rows: latest } = await this.#db.pool.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [
-      currency,
-    ])
-    const through = latest[0]!.day
+    const through = firstRow(
+      await this.#db.pool.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [currency]),
+    ).day
     if (through === null) return undefined
     const span = window(through, this.#config.reconWindowDays)
     const receivable = this.#chart.accounts(currency).receivable.id
@@ -263,13 +263,14 @@ export class Settlements {
   }
 
   async #firstOpenDay(currency: string, daySeconds: number, currentDay: number): Promise<number> {
-    const { rows } = await this.#db.pool.query<{ latest: number | null; first: number | null }>(
-      `SELECT (SELECT max(day)::int FROM settlement_files WHERE currency = $1) AS latest,
-              (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
-               WHERE currency = $1 AND kind IN ('capture', 'refund') AND status = 'succeeded') AS first`,
-      [currency, daySeconds],
+    const { latest, first } = firstRow(
+      await this.#db.pool.query<{ latest: number | null; first: number | null }>(
+        `SELECT (SELECT max(day)::int FROM settlement_files WHERE currency = $1) AS latest,
+                (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
+                 WHERE currency = $1 AND kind IN ('capture', 'refund') AND status = 'succeeded') AS first`,
+        [currency, daySeconds],
+      ),
     )
-    const { latest, first } = rows[0]!
     if (latest !== null) return latest + 1
     return first ?? currentDay
   }

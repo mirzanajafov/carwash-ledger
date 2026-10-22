@@ -24,7 +24,7 @@ function loadState(file: string | undefined): VerifierState | undefined {
   try {
     return JSON.parse(readFileSync(file, 'utf8')) as VerifierState
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined
     throw error
   }
 }

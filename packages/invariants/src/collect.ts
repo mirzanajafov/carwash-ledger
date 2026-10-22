@@ -20,8 +20,9 @@ export async function collect(client: pg.ClientBase, checks: readonly Check[]): 
       `SELECT detail, count(*) OVER () AS total FROM (${check.sql}) AS v LIMIT ${EXAMPLES}`,
       check.params,
     )
-    if (result.rows.length === 0) continue
-    count += Number(result.rows[0]!.total)
+    const [first] = result.rows
+    if (first === undefined) continue
+    count += Number(first.total)
     for (const row of result.rows) if (examples.length < EXAMPLES) examples.push(row.detail)
   }
   return { count, examples }

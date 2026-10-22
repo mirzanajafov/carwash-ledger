@@ -2,10 +2,11 @@ import { createHmac, randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { checkAgainstPsp, checkLedger, checkPayments, violations } from '@carwash/invariants'
+import { firstRow } from '@carwash/pg'
 import { NO_FAULTS } from '@carwash/psp'
 import type { INestApplication, INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { loadAttempt } from '../src/payments/records.ts'
 import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
 import { Recovery } from '../src/worker/recovery.service.ts'
@@ -62,25 +63,24 @@ async function paymentStatus(id: string): Promise<string> {
 }
 
 async function paymentIdForKey(key: string): Promise<string> {
-  const { rows } = await stack.admin.query<{ payment_id: string }>('SELECT payment_id FROM idempotency_keys WHERE key = $1', [key])
-  return rows[0]!.payment_id
+  return firstRow(await stack.admin.query<{ payment_id: string }>('SELECT payment_id FROM idempotency_keys WHERE key = $1', [key])).payment_id
 }
 
 async function attemptOf(paymentId: string, kind: string): Promise<string> {
-  const { rows } = await stack.admin.query<{ id: string }>('SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind', [paymentId, kind])
-  return rows[0]!.id
+  return firstRow(await stack.admin.query<{ id: string }>('SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind', [paymentId, kind])).id
 }
+
+const cleanup = new AsyncDisposableStack()
 
 beforeAll(async () => {
   stack = await startStack({ webhooks: true })
+  cleanup.defer(() => stack.close())
   worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 0 }), { logger: false })
+  cleanup.defer(() => worker.close())
   recovery = worker.get(Recovery)
 })
 
-afterAll(async () => {
-  await worker?.close()
-  await stack?.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 beforeEach(() => {
   stack.psp.faults.plan = NO_FAULTS
@@ -104,13 +104,15 @@ describe('webhooks', () => {
 
   it('are recorded once per event however many times they arrive', async () => {
     const payment = (await call('POST', '/v1/payments', { body: pay('tok_webhook_duplicate') })).body
-    const { rows: charge } = await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [payment.id])
+    const { psp_charge_id: chargeId } = firstRow(
+      await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [payment.id]),
+    )
     const deliveries = await waitFor(async () => {
       const { rows } = await stack.pspSql.query<{ event_id: string; delivered: number }>(
         `SELECT d.event_id, count(*) FILTER (WHERE d.delivered_at IS NOT NULL)::int AS delivered
          FROM deliveries d JOIN events e ON e.id = d.event_id JOIN operations o ON o.id = e.operation_id
          WHERE o.charge_id = $1 GROUP BY d.event_id`,
-        [charge[0]!.psp_charge_id],
+        [chargeId],
       )
       return rows.length === 2 && rows.every((r) => r.delivered === 2) ? rows : undefined
     }, 20_000)
@@ -157,7 +159,8 @@ describe('the recovery job', () => {
     const key = randomUUID()
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_fail_once_capture') })).status).toBe(503)
     const paymentId = await paymentIdForKey(key)
-    const attempt = (await loadAttempt(stack.admin, await attemptOf(paymentId, 'capture')))!
+    const attempt = await loadAttempt(stack.admin, await attemptOf(paymentId, 'capture'))
+    assert(attempt)
     expect(attempt.status).toBe('pending')
     expect(await recovery.recover(attempt)).toBe('applied')
     expect(await paymentStatus(paymentId)).toBe('captured')
@@ -199,7 +202,7 @@ describe('the recovery job', () => {
     const capture = await attemptOf(await paymentIdForKey(key), 'capture')
     const outcomes = await recovery.recoverPending(0)
     expect(outcomes.get('anomaly')).toBeUndefined()
-    expect((await loadAttempt(stack.admin, capture))!.status).toBe('pending')
+    expect(await loadAttempt(stack.admin, capture)).toMatchObject({ status: 'pending' })
     expect(await count(stack.admin, `SELECT count(*)::int AS n FROM anomalies WHERE attempt_id = $1 AND kind = 'answer_mismatch'`, [capture])).toBe(1)
   })
 

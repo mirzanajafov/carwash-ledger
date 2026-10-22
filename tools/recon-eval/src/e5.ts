@@ -32,10 +32,10 @@ interface Cell {
 }
 
 const cells: Cell[] = []
-for (const perDay of values.volumes!.split(',').map(Number)) {
-  for (const seed of values.seeds!.split(',').map(Number)) {
+for (const perDay of values.volumes.split(',').map(Number)) {
+  for (const seed of values.seeds.split(',').map(Number)) {
     const world = generate({ seed, days: Number(values.days), perDay, partialShare: 0.1, refundShare: 0.05, rates, contract, skewMs: Number(values.skew) })
-    for (const fallback of values.policies!.split(',') as Fallback[]) {
+    for (const fallback of values.policies.split(',') as Fallback[]) {
       const started = performance.now()
       const evaluation = evaluate(world, { fallback, windowDays: Number(values.window), contract })
       cells.push({ perDay, fallback, seed, ms: Math.round(performance.now() - started), evaluation })
@@ -43,7 +43,7 @@ for (const perDay of values.volumes!.split(',').map(Number)) {
   }
 }
 
-const groups = new Map<string, Cell[]>()
+const groups = new Map<string, [Cell, ...Cell[]]>()
 for (const cell of cells) groups.set(`${cell.perDay}/${cell.fallback}`, [...(groups.get(`${cell.perDay}/${cell.fallback}`) ?? []), cell])
 const summary = [...groups.values()].map((group) => {
   const total = <T extends string>(pick: (e: Evaluation) => Record<T, number>, field: T) => group.reduce((n, c) => n + pick(c.evaluation)[field], 0)
@@ -61,8 +61,8 @@ const summary = [...groups.values()].map((group) => {
     unplaced: total((e) => e.dropped, 'unplaced'),
   }
   return {
-    perDay: group[0]!.perDay,
-    fallback: group[0]!.fallback,
+    perDay: group[0].perDay,
+    fallback: group[0].fallback,
     seeds: group.length,
     items: group.reduce((n, c) => n + c.evaluation.items, 0),
     lines: group.reduce((n, c) => n + c.evaluation.lines, 0),
@@ -70,7 +70,7 @@ const summary = [...groups.values()].map((group) => {
     falseBreaks: group.reduce((n, c) => n + c.evaluation.falseBreaks, 0),
     transientBreaks: group.reduce((n, c) => n + c.evaluation.transientBreaks, 0),
     transientByClass: group.reduce<Record<string, number>>((into, c) => {
-      for (const [k, v] of Object.entries(c.evaluation.transientByClass)) into[k] = (into[k] ?? 0) + (v ?? 0)
+      for (const [k, v] of Object.entries(c.evaluation.transientByClass)) into[k] = (into[k] ?? 0) + v
       return into
     }, {}),
     faults: perFault,
@@ -80,7 +80,7 @@ const summary = [...groups.values()].map((group) => {
 })
 
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
-const dir = join(fileURLToPath(new URL('..', import.meta.url)), values.out!, stamp)
+const dir = join(fileURLToPath(new URL('..', import.meta.url)), values.out, stamp)
 mkdirSync(dir, { recursive: true })
 writeFileSync(
   join(dir, 'run.json'),
@@ -90,7 +90,9 @@ writeFileSync(join(dir, 'cells.json'), `${JSON.stringify(cells, null, 2)}\n`)
 writeFileSync(join(dir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
 console.log(`writing to ${dir}`)
 for (const row of summary) {
-  const rates = FAULTS.map((f) => `${f} ${row.faults[f]!.detected}/${row.faults[f]!.injected}`).join(', ')
+  const rates = Object.entries(row.faults)
+    .map(([f, score]) => `${f} ${score.detected}/${score.injected}`)
+    .join(', ')
   console.log(
     `${row.perDay}/day ${row.fallback}: ${rates}; dropped ${row.dropped.placedRight} right, ${row.dropped.placedWrong} wrong, ${row.dropped.unplaced} unplaced; ` +
       `false ${row.falseBreaks}, transient ${row.transientBreaks} ${JSON.stringify(row.transientByClass)}, ${row.msPerRun} ms`,

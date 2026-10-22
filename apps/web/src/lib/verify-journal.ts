@@ -43,7 +43,7 @@ async function signed(checkpoint: CheckpointJson, publicKey: string): Promise<bo
     const body = new TextEncoder().encode(checkpointBody({ size: checkpoint.tree_size, root: checkpoint.root }, checkpoint.origin))
     return await crypto.subtle.verify({ name: 'Ed25519' }, key, base64(checkpoint.signature), body)
   } catch (error) {
-    if ((error as Error).name === 'NotSupportedError') return null
+    if (error instanceof Error && error.name === 'NotSupportedError') return null
     return false
   }
 }
@@ -92,11 +92,12 @@ export async function checkJournal(input: {
   verdicts.push({
     name: 'rows',
     ok: computed === proof.leaf,
-    detail: !journal
-      ? `The log has a leaf for journal ${proof.journal_id} at seq ${proof.seq}, but the journal is gone.`
-      : computed === proof.leaf
-        ? `The journal's rows hash to the leaf the log holds at seq ${proof.seq}.`
-        : `The journal's rows hash to ${computed!.slice(0, 16)}…, the log holds ${proof.leaf.slice(0, 16)}…`,
+    detail:
+      computed === null
+        ? `The log has a leaf for journal ${proof.journal_id} at seq ${proof.seq}, but the journal is gone.`
+        : computed === proof.leaf
+          ? `The journal's rows hash to the leaf the log holds at seq ${proof.seq}.`
+          : `The journal's rows hash to ${computed.slice(0, 16)}…, the log holds ${proof.leaf.slice(0, 16)}…`,
   })
   const included = verifyInclusion(fromHex(computed ?? proof.leaf), proof.seq, checkpoint.tree_size, proof.proof.map(fromHex), fromHex(checkpoint.root))
   verdicts.push({

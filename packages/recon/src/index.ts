@@ -100,15 +100,16 @@ export function reconcile(lines: readonly FileLine[], items: readonly LedgerItem
   const withReference = lines.filter((line) => line.reference !== '')
   for (const line of withReference) {
     const item = byAttempt.get(line.reference)
+    const earlier = item && matched.get(item)
     if (item === undefined) {
       breaks.push({ class: 'unknown_line', day: line.day, line, detail: `no ledger item for reference ${line.reference}` })
-    } else if (matched.has(item)) {
+    } else if (earlier) {
       breaks.push({
         class: 'duplicate_line',
         day: item.day,
         line,
         item,
-        detail: `${item.journalRef} is already settled by ${matched.get(item)!.fileId} line ${matched.get(item)!.line}`,
+        detail: `${item.journalRef} is already settled by ${earlier.fileId} line ${earlier.line}`,
       })
     } else {
       check(line, item, 'reference')

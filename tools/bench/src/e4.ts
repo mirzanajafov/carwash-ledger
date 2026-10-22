@@ -6,11 +6,11 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { ensureTopics, kafkaClient, topicSpecs, writeEvent } from '@carwash/outbox'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
-import { mulberry32, runOpenLoop, type LoadResult } from './loadgen.ts'
+import { mulberry32, pick, runOpenLoop, type LoadResult } from './loadgen.ts'
 
 const { values } = parseArgs({
   options: {
@@ -31,7 +31,7 @@ const { values } = parseArgs({
 })
 
 const HERE = fileURLToPath(new URL('.', import.meta.url))
-const BROKERS = values.brokers!.split(',')
+const BROKERS = values.brokers.split(',')
 const KEYS = Number(values.keys)
 const kafka = kafkaClient({ brokers: BROKERS, clientId: 'e4-bench' })
 
@@ -79,7 +79,7 @@ function payload(n: number): Record<string, unknown> {
 function child(file: string, env: NodeJS.ProcessEnv): Child {
   const process_ = spawn(process.execPath, ['--conditions=source', join(HERE, file)], { env, stdio: ['ignore', 'pipe', 'inherit'] })
   const ready = new Promise<void>((resolve, reject) => {
-    const lines = createInterface({ input: process_.stdout! })
+    const lines = createInterface({ input: process_.stdout })
     lines.on('line', (line) => {
       if (line.endsWith(': ready')) resolve()
       else console.log(line)
@@ -93,7 +93,8 @@ async function stop(child_: Child): Promise<void> {
   if (child_.process.exitCode !== null) return
   const exited = new Promise((resolve) => child_.process.once('exit', resolve))
   child_.process.kill('SIGTERM')
-  if ((await Promise.race([exited.then(() => true), sleep(20_000, false)])) === false) child_.process.kill('SIGKILL')
+  const stopped = await Promise.race([exited.then(() => true), sleep(20_000, false)])
+  if (!stopped) child_.process.kill('SIGKILL')
 }
 
 interface Lab {
@@ -129,26 +130,27 @@ async function closeLab(lab: Lab): Promise<void> {
 }
 
 async function dbNow(pool: pg.Pool): Promise<number> {
-  const { rows } = await pool.query<{ ms: number }>('SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS ms')
-  return rows[0]!.ms
+  return firstRow(await pool.query<{ ms: number }>('SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS ms')).ms
 }
 
 async function counters(pool: pg.Pool, database: string): Promise<{ commits: number; walSyncs: number }> {
-  const { rows } = await pool.query<{ commits: string; syncs: string }>(
-    `SELECT (SELECT xact_commit FROM pg_stat_database WHERE datname = $1)::text AS commits,
-            (SELECT coalesce(sum(fsyncs), 0) FROM pg_stat_io WHERE object = 'wal')::text AS syncs`,
-    [database],
+  const { commits, syncs } = firstRow(
+    await pool.query<{ commits: string; syncs: string }>(
+      `SELECT (SELECT xact_commit FROM pg_stat_database WHERE datname = $1)::text AS commits,
+              (SELECT coalesce(sum(fsyncs), 0) FROM pg_stat_io WHERE object = 'wal')::text AS syncs`,
+      [database],
+    ),
   )
-  return { commits: Number(rows[0]!.commits), walSyncs: Number(rows[0]!.syncs) }
+  return { commits: Number(commits), walSyncs: Number(syncs) }
 }
 
 async function untilDrained(pool: pg.Pool, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    const { rows } = await pool.query<{ n: number }>(
-      'SELECT count(*)::int AS n FROM outbox o WHERE NOT EXISTS (SELECT 1 FROM e4_consumed c WHERE c.event_id = o.event_id)',
+    const { n } = firstRow(
+      await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM outbox o WHERE NOT EXISTS (SELECT 1 FROM e4_consumed c WHERE c.event_id = o.event_id)'),
     )
-    if (rows[0]!.n === 0) return true
+    if (n === 0) return true
     if (Date.now() > deadline) return false
     await sleep(250)
   }
@@ -180,7 +182,7 @@ function writes(lab: Lab, rate: number, warmupMs: number, durationMs: number, se
       try {
         await writeEvent(lease.client, {
           topic: 'payments',
-          key: keys[Math.floor(random() * keys.length)]!,
+          key: pick(random, keys),
           type: 'payment.captured',
           payload: payload(index),
         })
@@ -236,9 +238,11 @@ async function steadyCell(rate: number, repeat: number, warmupMs: number, durati
 }
 
 function kafkaAccepts(): Promise<boolean> {
-  const [host, port] = BROKERS[0]!.split(':')
+  const [broker] = BROKERS
+  if (broker === undefined) throw new Error('there is no Kafka broker to check')
+  const [host, port] = broker.split(':')
   return new Promise((resolve) => {
-    const socket = connect({ host: host!, port: Number(port), timeout: 1000 })
+    const socket = connect({ host, port: Number(port), timeout: 1000 })
     const done = (ok: boolean) => {
       socket.destroy()
       resolve(ok)
@@ -252,14 +256,16 @@ function kafkaAccepts(): Promise<boolean> {
 function perSecond(timed: readonly Timed[], totalMs: number) {
   const seconds = Math.ceil(totalMs / 1000) + 1
   const series = Array.from({ length: seconds }, (_, second) => ({ second, created: 0, published: 0, consumed: 0, backlog: 0, ackP99: Number.NaN }))
-  const byCreated: number[][] = series.map(() => [])
+  const byCreated = new Map<number, number[]>()
   for (const t of timed) {
     const c = Math.floor(t.createdMs / 1000)
     const p = Math.floor(t.publishedMs / 1000)
     const k = Math.floor(t.consumedMs / 1000)
     if (series[c]) {
       series[c].created++
-      byCreated[c]!.push(t.publishedMs - t.createdMs)
+      const acks = byCreated.get(c)
+      if (acks) acks.push(t.publishedMs - t.createdMs)
+      else byCreated.set(c, [t.publishedMs - t.createdMs])
     }
     if (series[p]) series[p].published++
     if (series[k]) series[k].consumed++
@@ -270,7 +276,7 @@ function perSecond(timed: readonly Timed[], totalMs: number) {
     created += row.created
     published += row.published
     row.backlog = created - published
-    const sorted = Float64Array.from(byCreated[row.second]!).sort()
+    const sorted = Float64Array.from(byCreated.get(row.second) ?? []).sort()
     row.ackP99 = percentile(sorted, 99)
   }
   return series
@@ -335,7 +341,7 @@ async function outage(rate: number, outageAtMs: number, totalMs: number, seed: n
 
 async function main(): Promise<void> {
   await prepareTemplate()
-  const dir = createResultsDir(values.out!)
+  const dir = createResultsDir(values.out)
   const probe = await createTestDatabase()
   const environment = await describeEnvironment(probe.pool('admin', 1))
   await probe.drop()
@@ -349,10 +355,11 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(rest, null, 2))
     return
   }
-  const rates = values.rates!.split(',').map(Number)
+  const rates = values.rates.split(',').map(Number)
   const cells: Awaited<ReturnType<typeof steadyCell>>[] = []
   for (let repeat = 1; repeat <= Number(values.repeats); repeat++) {
-    const order = rates.map((_, i) => rates[(i + repeat - 1) % rates.length]!)
+    const shift = (repeat - 1) % rates.length
+    const order = [...rates.slice(shift), ...rates.slice(0, shift)]
     for (const rate of order) {
       const cell = await steadyCell(rate, repeat, Number(values.warmup) * 1000, Number(values.duration) * 1000, seed + repeat * 1000 + rate)
       appendJsonLine(join(dir, 'cells.jsonl'), cell)

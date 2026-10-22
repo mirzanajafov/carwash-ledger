@@ -108,9 +108,11 @@ export function AnomaliesPanel({ open, resolved }: { open: Anomaly[]; resolved: 
             {resolved.map((a) => (
               <li key={a.id} className="text-xs">
                 <span className={a.resolution === 'accepted' ? 'text-ok' : 'text-warn'}>{a.resolution}</span> · {describe(a)}{' '}
-                <span className="text-muted">
-                  by {a.resolved_by} on {when(a.resolved_at!)} UTC
-                </span>
+                {a.resolved_at ? (
+                  <span className="text-muted">
+                    by {a.resolved_by} on {when(a.resolved_at)} UTC
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>

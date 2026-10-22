@@ -111,8 +111,8 @@ export async function callWithRetries(
       failure = `${response.status} ${await response.text()}`
       if (response.status < 500) throw new Error(`${what}: ${failure}`)
     } catch (error) {
-      if ((error as Error).message.startsWith(`${what}: `)) throw error
-      failure = (error as Error).message
+      if (error instanceof Error && error.message.startsWith(`${what}: `)) throw error
+      failure = error instanceof Error ? error.message : String(error)
     }
     if (attempt + 1 >= attempts) throw new Error(`${what}: ${failure} after ${attempts} attempts`)
     await pause(200 * 2 ** attempt)

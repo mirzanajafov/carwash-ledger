@@ -15,6 +15,7 @@ import {
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { describeEnvironment, median, percentile, writeResults } from './env.ts'
+import { pick } from './loadgen.ts'
 
 const VARIANTS = ['prisma-api', 'prisma-sql', 'prisma-cte', 'pg-cte'] as const
 type Variant = (typeof VARIANTS)[number]
@@ -89,7 +90,10 @@ async function seedAccounts(app: pg.Pool, mode: BalanceMode): Promise<{ receivab
      WHERE a.balance_mode <> 'derived'`,
   )
   const byCode = new Map(hot.rows.map((r) => [r.code, BigInt(r.id)]))
-  return { receivable: byCode.get('psp_receivable')!, fees: byCode.get('platform_fees')!, merchants: rest.rows.map((r) => BigInt(r.id)) }
+  const receivable = byCode.get('psp_receivable')
+  const fees = byCode.get('platform_fees')
+  if (receivable === undefined || fees === undefined) throw new Error('psp_receivable and platform_fees were not both created')
+  return { receivable, fees, merchants: rest.rows.map((r) => BigInt(r.id)) }
 }
 
 function makePoster(variant: Variant, app: pg.Pool, prisma: PrismaClient, registry: AccountRegistry): Poster {
@@ -136,7 +140,7 @@ async function runCell(cell: Cell, repeat: number): Promise<Run> {
 
     const postOne = async () => {
       const n = sequence++
-      const merchant = accounts.merchants[Math.floor(Math.random() * accounts.merchants.length)]!
+      const merchant = pick(Math.random, accounts.merchants)
       const gross = 500n + BigInt(Math.floor(Math.random() * 3000))
       const fee = gross / 50n + 10n
       return poster.post({
@@ -184,7 +188,7 @@ async function runCell(cell: Cell, repeat: number): Promise<Run> {
       journalsPerSecond: journals / seconds,
       p50Ms: percentile(latencies, 50),
       p99Ms: percentile(latencies, 99),
-      maxMs: latencies.at(-1)!,
+      maxMs: latencies.at(-1) ?? Number.NaN,
       attemptsPerJournal: attempts / journals,
       roundTripsPerJournal: sum(false),
       triggerStatementsPerJournal: sum(true),

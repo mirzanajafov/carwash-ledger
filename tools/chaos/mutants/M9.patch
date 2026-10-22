@@ -1,11 +1,11 @@
 --- a/packages/ledger/src/balances.ts
 +++ b/packages/ledger/src/balances.ts
-@@ -29,7 +29,7 @@
+@@ -28,7 +28,7 @@
        await client.query('ROLLBACK')
        return null
      }
--    const horizon = await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')
-+    const horizon = await client.query<{ horizon: string }>('SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon')
-     const value = horizon.rows[0]!.horizon
+-    const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')).horizon
++    const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon')).horizon
      const written = await client.query(TAKE_SNAPSHOTS, [value])
      failpoint('snapshot.before_commit')
+     await client.query('COMMIT')

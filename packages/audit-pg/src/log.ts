@@ -12,6 +12,7 @@ import {
   type Node,
   type SubtreeSource,
 } from '@carwash/audit'
+import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 
 export const SEQUENCER_LOCK = 7_240_300
@@ -49,8 +50,7 @@ async function withNodes<T>(db: Queryable, read: (source: SubtreeSource) => T): 
 }
 
 export async function treeSize(db: Queryable): Promise<number> {
-  const { rows } = await db.query<{ size: number }>('SELECT coalesce(max(seq) + 1, 0)::int AS size FROM audit_log')
-  return rows[0]!.size
+  return firstRow(await db.query<{ size: number }>('SELECT coalesce(max(seq) + 1, 0)::int AS size FROM audit_log')).size
 }
 
 export async function head(db: Queryable): Promise<Head> {
@@ -89,8 +89,8 @@ export function canonicalOf(journal: JournalRow): Uint8Array {
 }
 
 export async function sequenceBatch(client: pg.ClientBase, limit: number): Promise<number> {
-  const { rows: locked } = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SEQUENCER_LOCK])
-  if (!locked[0]!.locked) return 0
+  const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SEQUENCER_LOCK]))
+  if (!locked) return 0
   const { rows: queued } = await client.query<{ journal_id: string }>('SELECT q.journal_id::text FROM audit_queue q ORDER BY q.journal_id LIMIT $1', [limit])
   if (queued.length === 0) return 0
   const ids = queued.map((q) => q.journal_id)

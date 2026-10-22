@@ -46,6 +46,12 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
+export function pick<T>(random: () => number, items: readonly T[]): T {
+  const item = items[Math.floor(random() * items.length)]
+  if (item === undefined) throw new Error('cannot pick from an empty list')
+  return item
+}
+
 export function poissonSchedule(rate: number, totalMs: number, seed: number): Float64Array {
   const random = mulberry32(seed)
   const times: number[] = []
@@ -65,7 +71,7 @@ function distribution(values: number[]): Distribution {
     p90: percentile(sorted, 90),
     p99: percentile(sorted, 99),
     p999: percentile(sorted, 99.9),
-    max: sorted.length > 0 ? sorted[sorted.length - 1]! : Number.NaN,
+    max: sorted.at(-1) ?? Number.NaN,
   }
 }
 
@@ -92,9 +98,10 @@ export async function runOpenLoop(options: LoadOptions): Promise<LoadResult> {
   let next = 0
   while (next < schedule.length) {
     const now = performance.now() - start
-    while (next < schedule.length && schedule[next]! <= now) {
+    for (;;) {
+      const scheduled = schedule[next]
+      if (scheduled === undefined || scheduled > now) break
       const index = next++
-      const scheduled = schedule[index]!
       const counted = scheduled >= options.warmupMs
       if (counted && !measuring) {
         measuring = true
@@ -136,8 +143,9 @@ export async function runOpenLoop(options: LoadOptions): Promise<LoadResult> {
         })
       pending.add(job)
     }
-    if (next >= schedule.length) break
-    const wait = schedule[next]! - (performance.now() - start)
+    const upcoming = schedule[next]
+    if (upcoming === undefined) break
+    const wait = upcoming - (performance.now() - start)
     if (wait > 2) await sleep(wait - 1.5)
     else await yieldToLoop()
   }

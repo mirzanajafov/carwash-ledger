@@ -34,16 +34,18 @@ export class Frontier {
 
   push(leaf: Hash): void {
     let hash = leaf
-    for (let position = this.#size; position % 2 === 1; position = (position - 1) / 2) hash = nodeHash(this.#edge.pop()!, hash)
+    for (let position = this.#size; position % 2 === 1; position = (position - 1) / 2) {
+      const left = this.#edge.pop()
+      if (left === undefined) throw new Error(`the frontier at size ${this.#size} is missing a subtree on its edge`)
+      hash = nodeHash(left, hash)
+    }
     this.#edge.push(hash)
     this.#size++
   }
 
   root(): Hash {
     if (this.#size === 0) return sha256(new Uint8Array(0))
-    let root = this.#edge.at(-1)!
-    for (let k = this.#edge.length - 2; k >= 0; k--) root = nodeHash(this.#edge[k]!, root)
-    return root
+    return this.#edge.reduceRight((right, left) => nodeHash(left, right))
   }
 
   toJSON(): FrontierState {

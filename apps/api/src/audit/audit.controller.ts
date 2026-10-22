@@ -5,6 +5,8 @@ import { badRequest, notFound } from '../http/api-error.ts'
 import { runView, VerificationRuns } from './verification-runs.ts'
 import { head, proveConsistency, proveInclusion, rootAt, treeSize } from '@carwash/audit-pg'
 
+function size(value: string, name: string): number
+function size(value: string | undefined, name: string): number | undefined
 function size(value: string | undefined, name: string): number | undefined {
   if (value === undefined) return undefined
   if (!/^\d{1,15}$/.test(value)) throw badRequest(`${name} must be a tree size`)
@@ -62,7 +64,7 @@ export class AuditController {
 
   @Get('audit/leaves/:seq')
   async leaf(@Param('seq') seq: string) {
-    const at = size(seq, 'seq')!
+    const at = size(seq, 'seq')
     const { rows } = await this.#db.pool.query<{ journal_id: string; leaf: Buffer }>('SELECT journal_id::text, leaf FROM audit_log WHERE seq = $1', [at])
     if (!rows[0]) throw notFound(`seq ${at} in the audit log`)
     return { object: 'leaf', seq: at, journal_id: rows[0].journal_id, leaf: toHex(new Uint8Array(rows[0].leaf)) }

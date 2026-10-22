@@ -77,7 +77,7 @@ describe('planPayments', () => {
   it('crashes Kafka for 0.2-5 s at a time, and not at all when asked not to', () => {
     const crashes = planPayments(options).faults.filter((f) => f.kind === 'kafka')
     expect(crashes.length).toBeGreaterThan(2)
-    expect(crashes.every((f) => f.kind === 'kafka' && f.downMs >= 200 && f.downMs <= 5000)).toBe(true)
+    expect(crashes.every((f) => f.downMs >= 200 && f.downMs <= 5000)).toBe(true)
     expect(planPayments({ ...options, kafkaEveryMs: 0 }).faults.some((f) => f.kind === 'kafka')).toBe(false)
     expect(PROXIES).toContain('worker-kafka')
   })

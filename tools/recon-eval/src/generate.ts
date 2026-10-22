@@ -96,7 +96,8 @@ export function generate(options: GeneratorOptions): World {
   for (let day = 0; day < options.days; day++) {
     for (let n = 0; n < options.perDay; n++) {
       const at = day * DAY_MS + Math.floor(random() * DAY_MS)
-      const price = PRICES[Math.floor(random() * PRICES.length)]!
+      const price = PRICES[Math.floor(random() * PRICES.length)]
+      if (price === undefined) throw new Error('there is no price to pick')
       const captured = random() < options.partialShare ? price / 2n + BigInt(Math.floor(random() * Number(price / 2n))) : price
       add('capture', captured, at, `cap-${day}-${n}`)
       if (random() < options.refundShare) {

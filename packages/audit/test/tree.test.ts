@@ -1,5 +1,5 @@
 import fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
+import { assert, describe, expect, it } from 'vitest'
 import {
   completedBy,
   consistencyProof,
@@ -71,15 +71,18 @@ describe('the Merkle tree', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 130 }), fc.nat(), fc.nat(), fc.integer({ min: 0, max: 255 }), (size, pick, node, bit) => {
         const index = pick % size
+        const leaf = leaves[index]
+        const other = leaves[(index + 1) % size]
+        assert(leaf && other)
         const root = rootOf(size, source)
         const proof = inclusionProof(index, size, source)
         expect(proof.length).toBeLessThanOrEqual(Math.ceil(Math.log2(size)))
-        expect(verifyInclusion(leaves[index]!, index, size, proof, root)).toBe(true)
-        if (size > 1) expect(verifyInclusion(leaves[(index + 1) % size]!, index, size, proof, root)).toBe(false)
+        expect(verifyInclusion(leaf, index, size, proof, root)).toBe(true)
+        if (size > 1) expect(verifyInclusion(other, index, size, proof, root)).toBe(false)
         if (proof.length > 0) {
           const at = node % proof.length
           const bad = proof.map((hash, i) => (i === at ? flipBit(hash, bit) : hash))
-          expect(verifyInclusion(leaves[index]!, index, size, bad, root)).toBe(false)
+          expect(verifyInclusion(leaf, index, size, bad, root)).toBe(false)
         }
       }),
       { numRuns: 300 },

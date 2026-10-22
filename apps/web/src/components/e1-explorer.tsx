@@ -25,7 +25,7 @@ function ms(value: number): string {
 }
 
 export function E1Explorer({ points, connections }: { points: E1Point[]; connections: number[] }) {
-  const [chosen, setChosen] = useState(connections.includes(32) ? 32 : connections[0]!)
+  const [chosen, setChosen] = useState(connections.includes(32) ? 32 : (connections[0] ?? 32))
   const series = (pick: (p: E1Point) => number): Series[] =>
     MODES.map((m) => ({
       key: m.mode,

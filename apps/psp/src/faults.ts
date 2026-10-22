@@ -55,7 +55,7 @@ export interface Behaviour {
   slowMs: number
   wrongAmount: boolean
   webhook: ReadonlySet<WebhookFault>
-  draw(name: string): number
+  draw: (name: string) => number
 }
 
 const REMEMBERED_KEYS = 100_000
@@ -66,7 +66,7 @@ export type SettlementFault = (typeof SETTLEMENT_FAULTS)[number]
 
 export interface LineFaults {
   faults: ReadonlySet<SettlementFault>
-  draw(name: string): number
+  draw: (name: string) => number
 }
 
 export interface Weather {
@@ -150,7 +150,10 @@ export class Faults {
     const n = this.#seen.get(key) ?? 0
     this.#seen.delete(key)
     this.#seen.set(key, n + 1)
-    if (this.#seen.size > REMEMBERED_KEYS) this.#seen.delete(this.#seen.keys().next().value!)
+    if (this.#seen.size > REMEMBERED_KEYS) {
+      const oldest = this.#seen.keys().next()
+      if (!oldest.done) this.#seen.delete(oldest.value)
+    }
     return n
   }
 }
@@ -159,10 +162,13 @@ export function unitHash(input: string): number {
   return createHash('sha256').update(input).digest().readUInt32BE(0) / 2 ** 32
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 export function parseFaultPlan(input: unknown): FaultPlan {
-  if (typeof input !== 'object' || input === null) throw new Error('the fault plan must be an object')
-  const source = input as Record<string, unknown>
-  for (const key of Object.keys(source)) {
+  if (!isRecord(input)) throw new Error('the fault plan must be an object')
+  for (const key of Object.keys(input)) {
     if (!(key in NO_FAULTS)) throw new Error(`unknown fault plan field ${key}`)
   }
   const probability = (value: unknown, name: string) => {
@@ -170,30 +176,30 @@ export function parseFaultPlan(input: unknown): FaultPlan {
     if (typeof value !== 'number' || !(value >= 0 && value <= 1)) throw new Error(`${name} must be a probability in [0, 1]`)
     return value
   }
-  const seed = source.seed ?? 0
-  if (!Number.isSafeInteger(seed)) throw new Error('seed must be an integer')
-  const slowMs = source.slowMs ?? NO_FAULTS.slowMs
+  const seed = input.seed ?? 0
+  if (typeof seed !== 'number' || !Number.isSafeInteger(seed)) throw new Error('seed must be an integer')
+  const slowMs = input.slowMs ?? NO_FAULTS.slowMs
   if (!Array.isArray(slowMs) || slowMs.length !== 2 || !slowMs.every((ms) => Number.isSafeInteger(ms) && ms >= 0) || slowMs[0] > slowMs[1]) {
     throw new Error('slowMs must be [low, high] in milliseconds')
   }
-  const settlement = (source.settlement ?? {}) as Record<string, unknown>
-  if (typeof settlement !== 'object' || settlement === null) throw new Error('settlement must be an object')
+  const settlement = input.settlement ?? {}
+  if (!isRecord(settlement)) throw new Error('settlement must be an object')
   for (const key of Object.keys(settlement)) {
     if (!(SETTLEMENT_FAULTS as readonly string[]).includes(key)) throw new Error(`unknown settlement fault ${key}`)
   }
-  const webhook = (source.webhook ?? {}) as Record<string, unknown>
-  if (typeof webhook !== 'object' || webhook === null) throw new Error('webhook must be an object')
+  const webhook = input.webhook ?? {}
+  if (!isRecord(webhook)) throw new Error('webhook must be an object')
   for (const key of Object.keys(webhook)) {
     if (!(WEBHOOK_FAULTS as readonly string[]).includes(key)) throw new Error(`unknown webhook fault ${key}`)
   }
   return {
-    seed: seed as number,
-    decline: probability(source.decline, 'decline'),
-    fail: probability(source.fail, 'fail'),
-    timeoutAfterCommit: probability(source.timeoutAfterCommit, 'timeoutAfterCommit'),
-    slow: probability(source.slow, 'slow'),
+    seed,
+    decline: probability(input.decline, 'decline'),
+    fail: probability(input.fail, 'fail'),
+    timeoutAfterCommit: probability(input.timeoutAfterCommit, 'timeoutAfterCommit'),
+    slow: probability(input.slow, 'slow'),
     slowMs: [slowMs[0], slowMs[1]],
-    wrongAmount: probability(source.wrongAmount, 'wrongAmount'),
+    wrongAmount: probability(input.wrongAmount, 'wrongAmount'),
     webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<WebhookFault, number>,
     settlement: Object.fromEntries(SETTLEMENT_FAULTS.map((fault) => [fault, probability(settlement[fault], `settlement.${fault}`)])) as Record<
       SettlementFault,
@@ -203,15 +209,14 @@ export function parseFaultPlan(input: unknown): FaultPlan {
 }
 
 export function parseWeather(input: unknown): { label: string; plan: FaultPlan; seconds: number } {
-  if (typeof input !== 'object' || input === null) throw new Error('the weather must be an object')
-  const source = input as Record<string, unknown>
-  for (const key of Object.keys(source)) {
+  if (!isRecord(input)) throw new Error('the weather must be an object')
+  for (const key of Object.keys(input)) {
     if (!['label', 'plan', 'seconds'].includes(key)) throw new Error(`unknown weather field ${key}`)
   }
-  const { label, seconds } = source
+  const { label, seconds } = input
   if (typeof label !== 'string' || !/^[a-z][a-z0-9 -]{0,31}$/.test(label)) throw new Error('label must be 1-32 lowercase letters, digits, spaces or dashes')
-  if (!Number.isSafeInteger(seconds) || (seconds as number) < 1 || (seconds as number) > MAX_WEATHER_SECONDS) {
+  if (typeof seconds !== 'number' || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > MAX_WEATHER_SECONDS) {
     throw new Error(`seconds must be an integer from 1 to ${MAX_WEATHER_SECONDS}`)
   }
-  return { label, plan: parseFaultPlan(source.plan), seconds: seconds as number }
+  return { label, plan: parseFaultPlan(input.plan), seconds }
 }

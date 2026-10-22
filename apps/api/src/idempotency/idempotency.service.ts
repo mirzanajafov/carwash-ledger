@@ -1,5 +1,6 @@
 import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
+import { firstRow } from '@carwash/pg'
 import type { Response } from 'express'
 import type pg from 'pg'
 import type { AuthedRequest } from '../auth/access.guard.ts'
@@ -99,8 +100,9 @@ export class IdempotencyService {
          RETURNING lease_id`,
         [...keyParams, method, path, hash, this.#config.leaseSeconds],
       )
-      if (inserted.rowCount === 1) {
-        const leaseId = inserted.rows[0]!.lease_id
+      const [created] = inserted.rows
+      if (created) {
+        const leaseId = created.lease_id
         return { kind: 'owned', owned: { clientId, key, leaseId, recoveryPoint: 'started', paymentId: null, refundId: null, payoutId: null } }
       }
       const { rows } = await client.query<KeyRow>(
@@ -126,7 +128,7 @@ export class IdempotencyService {
         owned: {
           clientId,
           key,
-          leaseId: taken.rows[0]!.lease_id,
+          leaseId: firstRow(taken).lease_id,
           recoveryPoint: row.recovery_point,
           paymentId: row.payment_id,
           refundId: row.refund_id,

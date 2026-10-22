@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 
 export function AdminLogin() {
   const router = useRouter()
@@ -9,7 +9,7 @@ export function AdminLogin() {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
-  async function submit(event: FormEvent) {
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
     setNote(null)

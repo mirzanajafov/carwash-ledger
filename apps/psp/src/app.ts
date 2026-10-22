@@ -27,16 +27,16 @@ export async function startPsp(config: Config, log?: (message: string) => void):
   const psp = new Psp(pool, faults, {
     authorizationTtlSeconds: config.authorizationTtlSeconds,
     idempotencyWindowSeconds: config.idempotencyWindowSeconds,
-    webhooks: config.webhookUrl !== undefined,
+    webhooks: config.webhook !== undefined,
   })
-  const webhooks = config.webhookUrl === undefined ? undefined : new WebhookSender(pool, { url: config.webhookUrl, secret: config.webhookSecret!, log })
+  const webhooks = config.webhook && new WebhookSender(pool, { ...config.webhook, log })
   const settlements = new Settlements(pool, faults, { daySeconds: config.settlementDaySeconds, feeBps: config.feeBps, feeFixed: config.feeFixed })
   const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, log })
   server.listen(config.port, '0.0.0.0')
   await once(server, 'listening')
   webhooks?.start()
   const sweeper = setInterval(() => {
-    psp.sweepExpiredKeys().catch((error: Error) => log?.(`psp sweeper: ${error.message}`))
+    psp.sweepExpiredKeys().catch((error: unknown) => log?.(`psp sweeper: ${error instanceof Error ? error.message : String(error)}`))
   }, SWEEP_EVERY_MS)
   sweeper.unref()
 

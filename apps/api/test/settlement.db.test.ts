@@ -1,4 +1,5 @@
 import { checkLedger, checkSettlement, violations } from '@carwash/invariants'
+import { firstRow } from '@carwash/pg'
 import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { startStack, type Stack } from './support.ts'
@@ -26,14 +27,15 @@ function only(fault: SettlementFault) {
   return { ...NO_FAULTS, settlement: Object.fromEntries(SETTLEMENT_FAULTS.map((f) => [f, f === fault ? 1 : 0])) as Record<SettlementFault, number> }
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
   today = stack.psp.settlements.calendar().current_day
 })
 
-afterAll(async () => {
-  await stack?.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('settlement', () => {
   it('ingests a closed day once, posts what the file says, and finds nothing to report', async () => {
@@ -54,27 +56,29 @@ describe('settlement', () => {
         breaks: { missing_line: 0, duplicate_line: 0, wrong_amount: 0, fee_difference: 0, unknown_line: 0 },
       },
     })
-    const { rows: files } = await stack.admin.query<{ id: string; gross: string; fee: string; net: string }>(
-      'SELECT id, gross::text, fee::text, net::text FROM settlement_files WHERE day = $1',
-      [today],
+    const file = firstRow(
+      await stack.admin.query<{ id: string; gross: string; fee: string; net: string }>(
+        'SELECT id, gross::text, fee::text, net::text FROM settlement_files WHERE day = $1',
+        [today],
+      ),
     )
-    expect(files[0]).toMatchObject({ gross: String(1500 + 2400 - 400 + 900), fee: String(26 + 37 + 19) })
+    expect(file).toMatchObject({ gross: String(1500 + 2400 - 400 + 900), fee: String(26 + 37 + 19) })
     const { rows: entries } = await stack.admin.query<{ code: string; amount: string }>(
       `SELECT a.code, e.amount::text FROM journals j JOIN entries e ON e.journal_id = j.id JOIN accounts a ON a.id = e.account_id
        WHERE j.external_ref = $1 ORDER BY a.code`,
-      [`settlement:${files[0]!.id}`],
+      [`settlement:${file.id}`],
     )
     expect(entries).toEqual([
-      { code: 'bank:EUR', amount: files[0]!.net },
-      { code: 'psp_fee_expense:EUR', amount: files[0]!.fee },
-      { code: 'psp_receivable:EUR', amount: `-${files[0]!.gross}` },
+      { code: 'bank:EUR', amount: file.net },
+      { code: 'psp_fee_expense:EUR', amount: file.fee },
+      { code: 'psp_receivable:EUR', amount: `-${file.gross}` },
     ])
     expect((await stack.call('POST', `/v1/settlements/${today}/ingest`, { as: 'admin' })).body.outcome).toBe('already')
     const days = await stack.call('GET', '/v1/reconciliation/days', { as: 'admin' })
-    expect(days.body).toMatchObject({ day_seconds: 86_400, data: [{ day: today, id: files[0]!.id, lines: 4, gross: files[0]!.gross, breaks: {} }] })
+    expect(days.body).toMatchObject({ day_seconds: 86_400, data: [{ day: today, id: file.id, lines: 4, gross: file.gross, breaks: {} }] })
     expect((await stack.call('GET', '/v1/reconciliation/days')).status).toBe(403)
     const day = await stack.call('GET', `/v1/reconciliation/days/${today}`, { as: 'admin' })
-    expect(day.body).toMatchObject({ day: today, file: { id: files[0]!.id, lines: 4 }, breaks: [] })
+    expect(day.body).toMatchObject({ day: today, file: { id: file.id, lines: 4 }, breaks: [] })
     expect(day.body.lines.map((l: { kind: string; break: string | null }) => [l.kind, l.break])).toEqual([
       ['capture', null],
       ['capture', null],

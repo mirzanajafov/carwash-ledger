@@ -1,6 +1,7 @@
 import { createPrisma, type PrismaClient } from '@carwash/db'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
+import { assert } from 'vitest'
 import {
   AccountRegistry,
   BALANCE_MODES,
@@ -86,20 +87,19 @@ export async function createAllModes(pool: pg.Pool, options: { merchants?: numbe
 }
 
 export function capture(accounts: ModeAccounts, merchant: number, gross: bigint, fee: bigint): EntryInput[] {
+  const payee = accounts.merchants[merchant % accounts.merchants.length]
+  assert(payee)
   return [
     { accountId: accounts.receivable.id, amount: gross },
-    { accountId: accounts.merchants[merchant % accounts.merchants.length]!.id, amount: -(gross - fee) },
+    { accountId: payee.id, amount: -(gross - fee) },
     { accountId: accounts.fees.id, amount: -fee },
   ]
 }
 
 export async function inParallel<T>(items: readonly T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
-  let next = 0
+  const queue = items.values()
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const item = items[next++]!
-      await run(item)
-    }
+    for (const item of queue) await run(item)
   })
   await Promise.all(workers)
 }

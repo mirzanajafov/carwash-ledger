@@ -85,7 +85,7 @@ export class PspClient {
       if (response.status !== 200) return { kind: 'unknown', reason: `HTTP ${response.status}` }
       return { kind: 'file', csv: await response.text() }
     } catch (error) {
-      return { kind: 'unknown', reason: (error as Error).message }
+      return { kind: 'unknown', reason: error instanceof Error ? error.message : String(error) }
     }
   }
 
@@ -103,7 +103,8 @@ export class PspClient {
         signal: AbortSignal.timeout(this.#config.pspTimeoutMs),
       })
     } catch (error) {
-      return { kind: 'unknown', reason: (error as Error).name === 'TimeoutError' ? 'timeout' : (error as Error).message }
+      if (error instanceof Error && error.name === 'TimeoutError') return { kind: 'unknown', reason: 'timeout' }
+      return { kind: 'unknown', reason: error instanceof Error ? error.message : String(error) }
     }
     try {
       return { kind: 'http', status: response.status, body: await response.json() }

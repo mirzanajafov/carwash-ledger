@@ -12,8 +12,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     closing = true
     running.close().then(
       () => process.exit(0),
-      (error: Error) => {
-        log(`psp: ${error.message}`)
+      (error: unknown) => {
+        log(`psp: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       },
     )

@@ -29,7 +29,7 @@ export function shardFor(externalRef: string, accountId: bigint, shards: number)
   if (shards <= 1) return 0
   let hash = 0x811c9dc5
   for (const char of `${accountId}:${externalRef}`) {
-    hash ^= char.codePointAt(0)!
+    hash ^= char.codePointAt(0) ?? 0
     hash = Math.imul(hash, 0x01000193) >>> 0
   }
   return hash % shards

@@ -124,7 +124,7 @@ export class EventConsumer {
         return
       } catch (error) {
         if (this.#stop.signal.aborted) throw error
-        if (failures === 0 || failures % 50 === 0) this.#log(`${this.#spec.name}: ${(error as Error).message}`)
+        if (failures === 0 || failures % 50 === 0) this.#log(`${this.#spec.name}: ${error instanceof Error ? error.message : String(error)}`)
         await sleep(Math.min(2000, 50 * 2 ** Math.min(failures, 6)), undefined, { signal: this.#stop.signal }).catch(() => undefined)
       }
     }

@@ -20,5 +20,7 @@ export function between(random: Random, low: number, high: number): number {
 }
 
 export function pick<T>(random: Random, items: readonly T[]): T {
-  return items[Math.floor(random() * items.length)]!
+  const item = items[Math.floor(random() * items.length)]
+  if (item === undefined) throw new Error('cannot pick from an empty list')
+  return item
 }

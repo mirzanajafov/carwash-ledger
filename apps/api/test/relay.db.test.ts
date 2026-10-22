@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { checkEvents, violations } from '@carwash/invariants'
 import { kafkaClient, type Envelope } from '@carwash/outbox'
-import { NestFactory } from '@nestjs/core'
 import type { INestApplicationContext } from '@nestjs/common'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { NestFactory } from '@nestjs/core'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { EventConsumers } from '../src/consumers/event-consumers.service.ts'
 import { OutboxRelay } from '../src/worker/outbox-relay.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
@@ -16,18 +16,20 @@ const PREFIX = `test-${randomUUID()}.`
 let stack: Stack
 let worker: INestApplicationContext | undefined
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
+  cleanup.defer(async () => {
+    const admin = kafkaClient({ brokers: BROKERS, clientId: 'api-test' }).admin()
+    await admin.connect()
+    await admin.deleteTopics({ topics: [`${PREFIX}payments`, `${PREFIX}ledger`] }).catch(() => undefined)
+    await admin.disconnect()
+  })
 })
 
-afterAll(async () => {
-  await worker?.close()
-  const admin = kafkaClient({ brokers: BROKERS, clientId: 'api-test' }).admin()
-  await admin.connect()
-  await admin.deleteTopics({ topics: [`${PREFIX}payments`, `${PREFIX}ledger`] }).catch(() => undefined)
-  await admin.disconnect()
-  await stack?.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the worker relay', () => {
   it('publishes what the API wrote to the outbox, in order per payment', async () => {
@@ -37,6 +39,7 @@ describe('the worker relay', () => {
       WorkerModule.register({ ...stack.config, recoveryEveryMs: 0, kafkaBrokers: BROKERS, kafkaTopicPrefix: PREFIX, relayWorkers: 2 }),
       { logger: false },
     )
+    cleanup.defer(() => worker?.close())
     await worker.init()
     const deadline = Date.now() + 30_000
     while ((await count(stack.admin, 'SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL')) > 0 && Date.now() < deadline) {
@@ -55,7 +58,8 @@ describe('the worker relay', () => {
         void consumer.run({
           eachMessage: async ({ message }) => {
             if (message.key?.toString() !== payment.id) return
-            types.push((JSON.parse(message.value!.toString()) as Envelope).type)
+            assert(message.value)
+            types.push((JSON.parse(message.value.toString()) as Envelope).type)
             if (types.length === 4) {
               clearTimeout(timer)
               resolve()
@@ -78,7 +82,8 @@ describe('the worker relay', () => {
       await sleep(250)
       found = violations(await checkEvents(stack.admin))
     }
-    expect(worker!.get(EventConsumers).running).toBe(true)
+    assert(worker)
+    expect(worker.get(EventConsumers).running).toBe(true)
     expect(found).toEqual([])
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM receipts')).toBe(2)
   })

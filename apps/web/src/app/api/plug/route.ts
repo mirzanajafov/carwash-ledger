@@ -35,7 +35,7 @@ export async function POST(request: Request): Promise<Response> {
         if (done) return controller.close()
         controller.enqueue(encoder.encode(`${JSON.stringify({ ...value, at: Math.round(value.at) })}\n`))
       } catch (error) {
-        controller.enqueue(encoder.encode(`${JSON.stringify({ kind: 'failed', at: 0, message: (error as Error).message })}\n`))
+        controller.enqueue(encoder.encode(`${JSON.stringify({ kind: 'failed', at: 0, message: error instanceof Error ? error.message : String(error) })}\n`))
         controller.close()
       }
     },

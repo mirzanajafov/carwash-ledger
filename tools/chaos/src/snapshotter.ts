@@ -18,7 +18,7 @@ armFailpoints(parseFailpoints(process.env.CHAOS_FAILPOINTS ?? ''), (name) => {
 })
 
 function report(message: FromWorker): void {
-  if (process.connected) process.send!(message)
+  if (process.connected) process.send?.(message)
 }
 
 process.on('message', (message: ToWorker) => {

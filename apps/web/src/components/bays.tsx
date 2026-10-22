@@ -2,11 +2,13 @@ import { merchantName, programOf } from '@/lib/accounts'
 import type { Payment } from '@/lib/live'
 import { money, since } from '@/lib/money'
 
+const REFUNDED = { label: 'Refunded', tone: 'text-violet border-violet/40' }
+
 const STATUS: Record<string, { label: string; tone: string }> = {
   created: { label: 'Started', tone: 'text-muted border-line' },
   authorized: { label: 'Authorized', tone: 'text-warn border-warn/40' },
   captured: { label: 'Paid', tone: 'text-ok border-ok/40' },
-  refunded: { label: 'Refunded', tone: 'text-violet border-violet/40' },
+  refunded: REFUNDED,
   canceled: { label: 'Canceled', tone: 'text-muted border-line' },
   failed: { label: 'Declined', tone: 'text-bad border-bad/40' },
 }
@@ -32,7 +34,7 @@ export function Bays({ payments, now }: { payments: readonly Payment[]; now: num
                 <p className="truncate text-xs font-medium uppercase tracking-wide text-muted">{merchantName(payment.merchant)}</p>
                 <p className="truncate text-sm font-medium">{programOf(payment.amount)}</p>
               </div>
-              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${partly ? STATUS.refunded!.tone : status.tone}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${partly ? REFUNDED.tone : status.tone}`}>
                 {partly ? 'Part refund' : status.label}
               </span>
             </div>

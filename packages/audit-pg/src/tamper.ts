@@ -1,4 +1,5 @@
 import { leafHash, nodeHash, type Hash } from '@carwash/audit'
+import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { canonicalOf, SEQUENCER_LOCK, type JournalRow } from './log.ts'
 
@@ -42,8 +43,7 @@ async function moveCents(client: pg.ClientBase, journalId: string, cents: number
 }
 
 async function rewriteHashes(client: pg.ClientBase, seq: number, journalId: string): Promise<void> {
-  const { rows } = await client.query<JournalRow>(JOURNAL, [journalId])
-  let hash: Hash = leafHash(canonicalOf(rows[0]!))
+  let hash: Hash = leafHash(canonicalOf(firstRow(await client.query<JournalRow>(JOURNAL, [journalId]))))
   await client.query('UPDATE audit_log SET leaf = $2 WHERE seq = $1', [seq, Buffer.from(hash)])
   await client.query(RECHAIN, [seq])
   await client.query('UPDATE audit_nodes SET hash = $2 WHERE level = 0 AND idx = $1', [seq, Buffer.from(hash)])
@@ -77,7 +77,7 @@ export async function tamper(client: pg.ClientBase, tamperClass: TamperClass, se
       [journalId],
     )
     const journal = await client.query<{ row: string }>('DELETE FROM journals WHERE id = $1 RETURNING to_jsonb(journals.*)::text AS row', [journalId])
-    return { tamperClass, seq, journalId, undo: { journal: journal.rows[0]!.row, entries: entries.rows[0]!.rows } }
+    return { tamperClass, seq, journalId, undo: { journal: firstRow(journal).row, entries: firstRow(entries).rows } }
   }
   const amounts = await moveCents(client, journalId, cents)
   if (tamperClass === 2) await rewriteHashes(client, seq, journalId)

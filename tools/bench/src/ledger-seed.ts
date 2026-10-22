@@ -1,7 +1,9 @@
+import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 
 export const MERCHANTS = 50
 const BATCH = 50_000
+const PRICES = [900, 1500, 2400, 3500, 4900]
 
 export interface SeedAccounts {
   receivable: string
@@ -12,11 +14,13 @@ export interface SeedAccounts {
 
 export async function createSeedAccounts(app: pg.Pool, merchants = MERCHANTS): Promise<SeedAccounts> {
   const create = async (code: string, type: string) => {
-    const { rows } = await app.query<{ id: string }>(
-      `INSERT INTO accounts (code, type, currency, balance_mode, shards) VALUES ($1, $2::account_type, 'EUR', 'derived', 1) RETURNING id::text`,
-      [code, type],
+    const { id } = firstRow(
+      await app.query<{ id: string }>(
+        `INSERT INTO accounts (code, type, currency, balance_mode, shards) VALUES ($1, $2::account_type, 'EUR', 'derived', 1) RETURNING id::text`,
+        [code, type],
+      ),
     )
-    return rows[0]!.id
+    return id
   }
   const accounts: SeedAccounts = {
     receivable: await create('psp_receivable', 'asset'),
@@ -28,11 +32,19 @@ export async function createSeedAccounts(app: pg.Pool, merchants = MERCHANTS): P
   return accounts
 }
 
+export function grossOf(journal: number): number {
+  const gross = PRICES[journal % PRICES.length]
+  if (gross === undefined) throw new Error(`no gross amount for journal ${journal}`)
+  return gross
+}
+
 async function hasEntryCurrency(admin: pg.Pool): Promise<boolean> {
-  const { rows } = await admin.query<{ present: boolean }>(
-    `SELECT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'entries'::regclass AND attname = 'currency' AND NOT attisdropped) AS present`,
+  const { present } = firstRow(
+    await admin.query<{ present: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'entries'::regclass AND attname = 'currency' AND NOT attisdropped) AS present`,
+    ),
   )
-  return rows[0]!.present
+  return present
 }
 
 export async function seedJournals(admin: pg.Pool, accounts: SeedAccounts, from: number, to: number, options: { queueAudit: boolean }): Promise<number> {
@@ -48,7 +60,7 @@ export async function seedJournals(admin: pg.Pool, accounts: SeedAccounts, from:
         `WITH j AS (
            INSERT INTO journals (external_ref) SELECT 'seed:' || g FROM generate_series($1::bigint, $2::bigint) g RETURNING id, external_ref
          ), n AS (
-           SELECT id, substr(external_ref, 6)::bigint AS g, (ARRAY[900, 1500, 2400, 3500, 4900])[1 + substr(external_ref, 6)::bigint % 5]::bigint AS gross FROM j
+           SELECT id, substr(external_ref, 6)::bigint AS g, (ARRAY[${PRICES.join(', ')}])[1 + substr(external_ref, 6)::bigint % ${PRICES.length}]::bigint AS gross FROM j
          )${options.queueAudit ? ', q AS (INSERT INTO audit_queue (journal_id) SELECT id FROM n)' : ''}
          INSERT INTO entries (journal_id, account_id, amount${currency ? ', currency' : ''})
          SELECT n.id, x.account_id, x.amount${currency ? `, 'EUR'` : ''}

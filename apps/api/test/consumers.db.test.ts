@@ -22,8 +22,11 @@ async function forgetEverythingConsumed(): Promise<void> {
   await stack.admin.query('DELETE FROM inbox; DELETE FROM receipts; DELETE FROM receipt_counters; DELETE FROM statements')
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
   app = stack.app.get(Database).pool
   const call = stack.call
   for (const merchant of ['wash_1', 'wash_2', 'wash_1'] as const) {
@@ -40,9 +43,7 @@ beforeAll(async () => {
   await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_1', currency: 'EUR' } })
 })
 
-afterAll(async () => {
-  await stack?.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the consumers', () => {
   it('issue one receipt per capture, numbered per merchant from 1, and keep statements equal to the ledger', async () => {
@@ -55,7 +56,7 @@ describe('the consumers', () => {
       ['wash_2', 1],
     ])
     expect(issued.filter((r) => r.merchant === 'wash_1').map((r) => r.payment_id)).toEqual(captured.wash_1)
-    expect(issued.find((r) => r.payment_id === captured.wash_1[2])!.amount).toBe('900')
+    expect(issued.find((r) => r.payment_id === captured.wash_1[2])).toMatchObject({ amount: '900' })
     expect(violations(await checkEvents(stack.admin))).toEqual([])
     expect(violations(await checkLedger(stack.admin))).toEqual([])
   })
@@ -66,11 +67,11 @@ describe('the consumers', () => {
     await fc.assert(
       fc.asyncProperty(
         fc.shuffledSubarray(events, { minLength: events.length, maxLength: events.length }),
-        fc.array(fc.integer({ min: 0, max: events.length - 1 }), { maxLength: events.length }),
+        fc.array(fc.constantFrom(...events), { maxLength: events.length }),
         fc.integer({ min: 1, max: 12 }),
         async (order, again, size) => {
           await forgetEverythingConsumed()
-          const arrivals: OutboxEvent[] = [...order, ...again.map((i) => events[i]!)]
+          const arrivals: OutboxEvent[] = [...order, ...again]
           const batches = Array.from({ length: Math.ceil(arrivals.length / size) }, (_, i) => arrivals.slice(i * size, (i + 1) * size))
           await deliver(app, batches)
           expect(violations(await checkEvents(stack.admin))).toEqual([])

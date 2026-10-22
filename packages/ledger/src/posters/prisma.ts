@@ -64,11 +64,11 @@ export class PrismaSqlPoster extends PrismaPoster {
   readonly name = 'prisma-sql'
 
   protected async write(tx: Tx, plan: JournalPlan): Promise<bigint> {
-    const rows = await tx.$queryRawUnsafe<{ id: bigint }[]>(INSERT_JOURNAL, plan.externalRef, plan.reversesId?.toString() ?? null)
-    const id = BigInt(rows[0]!.id)
-    await tx.$executeRawUnsafe(INSERT_ENTRIES, id.toString(), ...entryParams(plan))
+    const [journal] = await tx.$queryRawUnsafe<{ id: bigint }[]>(INSERT_JOURNAL, plan.externalRef, plan.reversesId?.toString() ?? null)
+    if (!journal) throw new Error(`inserting journal ${plan.externalRef} returned no row`)
+    await tx.$executeRawUnsafe(INSERT_ENTRIES, journal.id.toString(), ...entryParams(plan))
     if (plan.deltas.length > 0) expectApplied(await tx.$executeRawUnsafe(APPLY_DELTAS, ...deltaParams(plan)), plan)
-    return id
+    return journal.id
   }
 }
 
@@ -76,15 +76,15 @@ export class PrismaCtePoster extends PrismaPoster {
   readonly name = 'prisma-cte'
 
   protected async write(tx: Tx, plan: JournalPlan): Promise<bigint> {
-    const rows = await tx.$queryRawUnsafe<{ id: bigint; balances: bigint }[]>(
+    const [row] = await tx.$queryRawUnsafe<{ id: bigint; balances: bigint }[]>(
       POST_JOURNAL,
       plan.externalRef,
       plan.reversesId?.toString() ?? null,
       ...entryParams(plan),
       ...deltaParams(plan),
     )
-    const row = rows[0]!
+    if (!row) throw new Error(`posting journal ${plan.externalRef} returned no row`)
     expectApplied(Number(row.balances), plan)
-    return BigInt(row.id)
+    return row.id
   }
 }

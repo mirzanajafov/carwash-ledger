@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { restore, tamper, type TamperClass, type Tampered } from '@carwash/audit-pg'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import type pg from 'pg'
 
 export class Conflict extends Error {
@@ -22,12 +22,14 @@ export interface Tamper {
   restores_at: string | null
 }
 
+type Saved = Tampered & { witnessedSize: number; at: string }
+
 export class TamperService {
   readonly #pool: pg.Pool
   readonly #file: string
   readonly #random: () => number
   readonly #autoRestoreMs: number
-  #current: (Tampered & { witnessedSize: number; at: string }) | undefined
+  #current: Saved | undefined
   #queue: Promise<unknown> = Promise.resolve()
   #timer: NodeJS.Timeout | undefined
 
@@ -54,8 +56,10 @@ export class TamperService {
   }
 
   current(): Tamper | null {
-    const current = this.#current
-    if (!current) return null
+    return this.#current ? this.#view(this.#current) : null
+  }
+
+  #view(current: Saved): Tamper {
     const restoresAt = this.#autoRestoreMs > 0 ? new Date(Date.parse(current.at) + this.#autoRestoreMs).toISOString() : null
     return {
       tamper_class: current.tamperClass,
@@ -70,14 +74,14 @@ export class TamperService {
   tamper(tamperClass: TamperClass): Promise<Tamper> {
     return this.#serial(async () => {
       if (this.#current) throw new Conflict('already_tampered', `journal ${this.#current.journalId} is tampered with already, so restore it first`)
-      const { rows } = await this.#pool.query<{ size: string | null }>('SELECT max(size)::text AS size FROM audit_checkpoints')
-      const witnessedSize = Number(rows[0]!.size ?? 0)
+      const witnessedSize = Number(firstRow(await this.#pool.query<{ size: string | null }>('SELECT max(size)::text AS size FROM audit_checkpoints')).size ?? 0)
       if (witnessedSize === 0) throw new Conflict('nothing_witnessed', 'the witness has not signed a checkpoint yet')
       const seq = Math.floor(this.#random() * witnessedSize)
       const done = await this.#transaction((client) => tamper(client, tamperClass, seq))
-      this.#save({ ...done, witnessedSize, at: new Date().toISOString() })
+      const saved = { ...done, witnessedSize, at: new Date().toISOString() }
+      this.#save(saved)
       this.#schedule()
-      return this.current()!
+      return this.#view(saved)
     })
   }
 
@@ -86,7 +90,7 @@ export class TamperService {
       const current = this.#current
       if (!current) throw new Conflict('nothing_to_restore', 'nothing is tampered with')
       await this.#transaction((client) => restore(client, current))
-      const restored = this.current()!
+      const restored = this.#view(current)
       this.#save(undefined)
       this.#schedule()
       return restored
@@ -117,7 +121,7 @@ export class TamperService {
     }
   }
 
-  #save(current: (Tampered & { witnessedSize: number; at: string }) | undefined): void {
+  #save(current: Saved | undefined): void {
     if (current) {
       writeFileSync(`${this.#file}.next`, JSON.stringify(current), { mode: 0o600 })
       renameSync(`${this.#file}.next`, this.#file)

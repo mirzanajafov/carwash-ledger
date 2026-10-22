@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { assert, describe, expect, it } from 'vitest'
 import { Faults, NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '../src/faults.ts'
 import { belongsTo, planLines, pspFee, renderCsv, type SettleableOperation } from '../src/settlement.ts'
 
@@ -62,13 +62,15 @@ describe('planLines', () => {
 
   it('renders a header record and one record per listed line', () => {
     const lines = planLines(ops, 10, new Set(), new Faults(NO_FAULTS), settings)
+    const [capture, refund] = lines
+    assert(capture && refund)
     const csv = renderCsv({ id: 'stl_EUR_10', day: 10, currency: 'EUR', lines: 2, gross: 1000, fee: 26, net: 974 }, lines)
     expect(csv.trim().split('\n')).toEqual([
       'file,day,currency,lines,gross,fee,net',
       'stl_EUR_10,10,EUR,2,1000,26,974',
       'line,operation,reference,kind,gross,fee,net,operated_at',
-      `1,c1,key-c1,capture,1500,26,1474,${lines[0]!.operatedAt.toISOString()}`,
-      `2,r1,key-r1,refund,-500,0,-500,${lines[1]!.operatedAt.toISOString()}`,
+      `1,c1,key-c1,capture,1500,26,1474,${capture.operatedAt.toISOString()}`,
+      `2,r1,key-r1,refund,-500,0,-500,${refund.operatedAt.toISOString()}`,
     ])
   })
 })

@@ -42,11 +42,13 @@ describe('the live state', () => {
     })
     state = reduce(state, { type: 'journal', data: journal('7', []), at: 3 })
     expect(state.journals.map((j) => j.id)).toEqual(['7', '5'])
-    expect(state.postings.receivable!.map((p) => [p.side, p.amount])).toEqual([
-      ['debit', 900n],
-      ['debit', 2400n],
-    ])
-    expect(state.postings.drawer!.map((p) => [p.side, p.amount])).toEqual([['credit', 58n]])
+    expect(state.postings).toMatchObject({
+      receivable: [
+        { side: 'debit', amount: 900n },
+        { side: 'debit', amount: 2400n },
+      ],
+      drawer: [{ side: 'credit', amount: 58n }],
+    })
     expect(state.fresh.payables).toBe(2)
   })
 

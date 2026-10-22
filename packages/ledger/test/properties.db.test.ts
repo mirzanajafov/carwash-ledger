@@ -1,14 +1,15 @@
 import { checkLedger, violations } from '@carwash/invariants'
+import { firstRow } from '@carwash/pg'
 import fc from 'fast-check'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { BALANCE_MODES, InvalidJournalError, readBalance, takeSnapshots, type Account, type BalanceMode, type EntryInput } from '../src/index.ts'
 import { createModeAccounts, inParallel, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
 let ledger: LedgerFixture
 let audit: pg.Pool
-let byCurrency: Map<string, Account[]>
-let byMode: Map<BalanceMode, ModeAccounts>
+let byCurrency: Record<'EUR' | 'USD', Account[]>
+let byMode: Record<BalanceMode, ModeAccounts>
 let refCounter = 0
 
 const amount = fc.bigInt({ min: -1_000_000n, max: 1_000_000n }).filter((a) => a !== 0n)
@@ -28,8 +29,12 @@ type JournalShape = typeof journalShape extends fc.Arbitrary<infer T> ? T : neve
 function balancedEntries(shape: JournalShape): EntryInput[] {
   const entries: EntryInput[] = []
   for (const group of shape) {
-    const accounts = byCurrency.get(group.currency)!
-    const pick = (n: number) => accounts[n % accounts.length]!.id
+    const accounts = byCurrency[group.currency]
+    const pick = (n: number) => {
+      const account = accounts[n % accounts.length]
+      assert(account)
+      return account.id
+    }
     const groupEntries = group.parts.map((p) => ({ accountId: pick(p.account), amount: p.amount }))
     const total = groupEntries.reduce((sum, e) => sum + e.amount, 0n)
     if (total !== 0n) groupEntries.push({ accountId: pick(group.closer), amount: -total })
@@ -50,27 +55,31 @@ async function expectedBalances(): Promise<Map<bigint, bigint>> {
   return new Map(result.rows.map((r) => [BigInt(r.account_id), BigInt(r.total)]))
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   ledger = await openLedger(16)
+  cleanup.defer(() => ledger.close())
   audit = ledger.db.pool('ledger_audit', 2)
-  byCurrency = new Map()
-  for (const currency of ['EUR', 'USD']) {
+  const accountsIn = async (currency: string) => {
     const accounts: Account[] = []
     for (const mode of BALANCE_MODES) {
       const set = await createModeAccounts(ledger.app, mode, { currency, merchants: 2, prefix: 'prop:' })
       accounts.push(set.receivable, set.fees, ...set.merchants)
     }
-    byCurrency.set(currency, accounts)
+    return accounts
   }
-  byMode = new Map()
-  for (const mode of BALANCE_MODES) {
-    byMode.set(mode, await createModeAccounts(ledger.app, mode, { merchants: 3, prefix: 'diff:' }))
+  byCurrency = { EUR: await accountsIn('EUR'), USD: await accountsIn('USD') }
+  const accountsFor = (mode: BalanceMode) => createModeAccounts(ledger.app, mode, { merchants: 3, prefix: 'diff:' })
+  byMode = {
+    locked: await accountsFor('locked'),
+    serializable: await accountsFor('serializable'),
+    derived: await accountsFor('derived'),
+    sharded: await accountsFor('sharded'),
   }
 })
 
-afterAll(async () => {
-  await ledger.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('ledger properties', () => {
   it('random balanced journals keep every invariant and every balance mode exact', async () => {
@@ -84,11 +93,13 @@ describe('ledger properties', () => {
         async (journals) => {
           for (const journal of journals) {
             const entries = balancedEntries(journal.shape)
-            await ledger.posters[journal.poster]!.post({ externalRef: nextRef('balanced'), entries })
+            const poster = ledger.posters[journal.poster]
+            assert(poster)
+            await poster.post({ externalRef: nextRef('balanced'), entries })
             for (const e of entries) model.set(e.accountId, (model.get(e.accountId) ?? 0n) + e.amount)
             if (journal.snapshot) await takeSnapshots(ledger.app)
           }
-          for (const accounts of byCurrency.values()) {
+          for (const accounts of Object.values(byCurrency)) {
             for (const account of accounts) {
               expect(await readBalance(ledger.app, account)).toBe(model.get(account.id) ?? 0n)
             }
@@ -103,9 +114,9 @@ describe('ledger properties', () => {
   it('unbalanced journals are rejected by the code and by the database', async () => {
     await fc.assert(
       fc.asyncProperty(journalShape, amount, fc.nat(), async (shape, skew, at) => {
-        const entries = balancedEntries(shape)
-        const index = at % entries.length
-        entries[index] = { ...entries[index]!, amount: entries[index]!.amount + skew }
+        const balanced = balancedEntries(shape)
+        const index = at % balanced.length
+        const entries = balanced.map((e, i) => (i === index ? { ...e, amount: e.amount + skew } : e))
         fc.pre(entries.every((e) => e.amount !== 0n))
 
         const before = await expectedBalances()
@@ -117,13 +128,13 @@ describe('ledger properties', () => {
           state = await sqlState(
             (async () => {
               await client.query('BEGIN')
-              const journal = await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [
-                nextRef('raw-unbalanced'),
-              ])
+              const journal = firstRow(
+                await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [nextRef('raw-unbalanced')]),
+              )
               await client.query(
                 `INSERT INTO entries (journal_id, account_id, amount)
                  SELECT $1::bigint, t.a, t.m FROM unnest($2::bigint[], $3::bigint[]) AS t(a, m)`,
-                [journal.rows[0]!.id, entries.map((e) => e.accountId.toString()), entries.map((e) => e.amount.toString())],
+                [journal.id, entries.map((e) => e.accountId.toString()), entries.map((e) => e.amount.toString())],
               )
               await client.query('COMMIT')
             })(),
@@ -148,9 +159,9 @@ describe('ledger properties', () => {
     await fc.assert(
       fc.asyncProperty(fc.array(template, { minLength: 5, maxLength: 40 }), async (templates) => {
         const work = templates.flatMap((moves, t) => BALANCE_MODES.map((mode) => ({ mode, moves, ref: nextRef(`diff-${t}-${mode}`) })))
-        let snapshotting = true
+        const stop = new AbortController()
         const snapshots = (async () => {
-          while (snapshotting) {
+          while (!stop.signal.aborted) {
             await takeSnapshots(ledger.app)
             await new Promise((resolve) => setTimeout(resolve, 2))
           }
@@ -159,20 +170,21 @@ describe('ledger properties', () => {
           work.sort(() => Math.random() - 0.5),
           12,
           async ({ mode, moves, ref }) => {
-            const accounts = roles(byMode.get(mode)!)
+            const accounts = roles(byMode[mode])
             const entries: EntryInput[] = []
             for (const move of moves) {
-              const from = accounts[move.from % accounts.length]!.id
-              const to = accounts[(move.from + 1 + (move.to % (accounts.length - 1))) % accounts.length]!.id
-              entries.push({ accountId: from, amount: -move.amount }, { accountId: to, amount: move.amount })
+              const from = accounts[move.from % accounts.length]
+              const to = accounts[(move.from + 1 + (move.to % (accounts.length - 1))) % accounts.length]
+              assert(from && to)
+              entries.push({ accountId: from.id, amount: -move.amount }, { accountId: to.id, amount: move.amount })
             }
             await ledger.poster.post({ externalRef: ref, entries })
           },
         )
-        snapshotting = false
+        stop.abort()
         await snapshots
 
-        const perMode = await Promise.all(BALANCE_MODES.map(async (mode) => Promise.all(roles(byMode.get(mode)!).map((a) => readBalance(ledger.app, a)))))
+        const perMode = await Promise.all(BALANCE_MODES.map(async (mode) => Promise.all(roles(byMode[mode]).map((a) => readBalance(ledger.app, a)))))
         for (const balances of perMode.slice(1)) expect(balances).toEqual(perMode[0])
         expect(violations(await checkLedger(audit))).toEqual([])
       }),

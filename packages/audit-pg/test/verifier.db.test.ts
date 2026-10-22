@@ -1,16 +1,16 @@
 import { once } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
-import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
+import { firstRow } from '@carwash/pg'
 import { createTestDatabase, signCopies, type SignedCopies, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import {
   Checkpointer,
   head,
@@ -29,9 +29,7 @@ let db: TestDatabase
 let app: pg.Pool
 let admin: pg.Pool
 let poster: PgCtePoster
-let accounts: bigint[]
-let dir: string
-let server: Server
+let accounts: Record<'receivable' | 'merchant' | 'fees', bigint>
 let witnessed: WitnessAnchor
 let witness: Witness
 let checkpointer: Checkpointer
@@ -44,9 +42,9 @@ async function post(count: number): Promise<void> {
     await poster.post({
       externalRef: `capture:${posted}`,
       entries: [
-        { accountId: accounts[0]!, amount: BigInt(amount) },
-        { accountId: accounts[1]!, amount: BigInt(-(amount - fee)) },
-        { accountId: accounts[2]!, amount: BigInt(-fee) },
+        { accountId: accounts.receivable, amount: BigInt(amount) },
+        { accountId: accounts.merchant, amount: BigInt(-(amount - fee)) },
+        { accountId: accounts.fees, amount: BigInt(-fee) },
       ],
     })
   }
@@ -85,28 +83,35 @@ function tampered(tamperClass: TamperClass, seq: number, options: { witness?: bo
   })
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   db = await createTestDatabase()
+  cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 4)
   admin = db.pool('admin', 2)
-  accounts = []
-  for (const [code, type] of [
-    ['receivable', 'asset'],
-    ['merchant', 'liability'],
-    ['fees', 'revenue'],
-  ] as const) {
-    const { rows } = await app.query<{ id: string }>(
-      `INSERT INTO accounts (code, type, currency, balance_mode, shards) VALUES ($1, $2::account_type, 'EUR', 'derived', 1) RETURNING id::text`,
-      [code, type],
+  const account = async (code: string, type: string) => {
+    const { id } = firstRow(
+      await app.query<{ id: string }>(
+        `INSERT INTO accounts (code, type, currency, balance_mode, shards) VALUES ($1, $2::account_type, 'EUR', 'derived', 1) RETURNING id::text`,
+        [code, type],
+      ),
     )
-    accounts.push(BigInt(rows[0]!.id))
+    return BigInt(id)
   }
+  accounts = { receivable: await account('receivable', 'asset'), merchant: await account('merchant', 'liability'), fees: await account('fees', 'revenue') }
   poster = new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app)))
-  dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  const dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  cleanup.defer(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
   witness = new Witness(dir, 'carwash-ledger')
-  server = createWitnessServer(witness, 'token')
+  const server = createWitnessServer(witness, 'token')
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
+  cleanup.defer(() => {
+    server.close()
+  })
   checkpointer = new Checkpointer(app, new WitnessClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, 'token', 2000))
   await post(16)
   expect(await checkpointer.run()).toMatchObject({ kind: 'signed', size: 16 })
@@ -116,18 +121,15 @@ beforeAll(async () => {
   witnessed = anchor()
 })
 
-afterAll(async () => {
-  server?.close()
-  await db?.drop()
-  if (dir) rmSync(dir, { recursive: true, force: true })
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('full verification', () => {
   it('sequences queued journals in the order of their ids, not the order of their ids as text', async () => {
     const { rows } = await admin.query<{ id: string }>('SELECT a.journal_id::text AS id FROM audit_log a ORDER BY a.seq')
     const ids = rows.map((r) => BigInt(r.id))
     expect(ids.length).toBe(40)
-    expect(ids.every((id, i) => i === 0 || id > ids[i - 1]!)).toBe(true)
+    expect(ids).toEqual(ids.toSorted((a, b) => Number(a - b)))
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('finds nothing in an honest log, compares every signed root and ends where the log ends', async () => {
@@ -192,8 +194,8 @@ describe('full verification', () => {
     expect(forged.examples).toEqual([{ kind: 'signature', size: 17 }])
 
     const last = await inRollback(async (client) => {
-      const { rows } = await client.query<{ journal_id: string }>('DELETE FROM audit_log WHERE seq = 39 RETURNING journal_id::text')
-      return { journalId: rows[0]!.journal_id, report: await verifyLog(client, { witness: witnessed }) }
+      const { journal_id: journalId } = firstRow(await client.query<{ journal_id: string }>('DELETE FROM audit_log WHERE seq = 39 RETURNING journal_id::text'))
+      return { journalId, report: await verifyLog(client, { witness: witnessed }) }
     })
     expect(last.report.examples).toEqual([{ kind: 'unsequenced', journalId: last.journalId }])
   })
@@ -273,10 +275,11 @@ describe('restoring a tamper', () => {
 describe('incremental verification', () => {
   it('reads only the new journals, picks up the signed roots after its state, and ends where a full run ends', async () => {
     const full = await verifyLog(app, { witness: witnessed })
+    assert(full.state)
     await post(30)
     expect(await checkpointer.run()).toMatchObject({ kind: 'signed', size: 70 })
     witnessed = anchor()
-    const step = await verifyLog(app, { witness: witnessed, from: full.state!, batch: 6 })
+    const step = await verifyLog(app, { witness: witnessed, from: full.state, batch: 6 })
     expect(step).toMatchObject({ mode: 'incremental', from: 40, size: 70, journals: 30, witnessed: 1, findings: 0 })
     expect(step.state).toEqual((await verifyLog(app, { witness: witnessed })).state)
   })
@@ -284,12 +287,13 @@ describe('incremental verification', () => {
   it('catches a rewrite below its state through the stored chain and root, even where no checkpoint covers it', async () => {
     await post(5)
     const full = await verifyLog(app, { witness: witnessed })
-    expect(full.state!.size).toBe(75)
-    const { report } = await tampered(2, 72, { from: full.state! })
+    assert(full.state)
+    expect(full.state.size).toBe(75)
+    const { report } = await tampered(2, 72, { from: full.state })
     expect(report.examples).toEqual(
       expect.arrayContaining([
-        { kind: 'history', size: full.state!.size, what: 'chain' },
-        { kind: 'history', size: full.state!.size, what: 'root' },
+        { kind: 'history', size: full.state.size, what: 'chain' },
+        { kind: 'history', size: full.state.size, what: 'root' },
       ]),
     )
     expect((await tampered(2, 72)).report.findings).toBe(0)
@@ -297,13 +301,15 @@ describe('incremental verification', () => {
 
   it('does not see an entry edited below its state with the hashes left alone, which is what a full run is for', async () => {
     const full = await verifyLog(app, { witness: witnessed })
-    expect((await tampered(1, 20, { from: full.state! })).report.findings).toBe(0)
+    assert(full.state)
+    expect((await tampered(1, 20, { from: full.state })).report.findings).toBe(0)
     expect((await tampered(1, 20)).report.findings).toBeGreaterThan(0)
   })
 })
 
 describe('sharing the process', () => {
   const BULK = 10_000
+  const scoped = new AsyncDisposableStack()
   let client: pg.PoolClient
   let stand: SignedCopies
 
@@ -323,12 +329,18 @@ describe('sharing the process', () => {
 
   beforeAll(async () => {
     client = await admin.connect()
+    scoped.defer(() => {
+      client.release()
+    })
     await client.query('BEGIN')
+    scoped.defer(async () => {
+      await client.query('ROLLBACK')
+    })
     await client.query(
       `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
        INSERT INTO entries (journal_id, account_id, amount)
        SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
-      [accounts[0], accounts[1], BULK],
+      [accounts.receivable, accounts.merchant, BULK],
     )
     let sequenced: number
     do {
@@ -338,10 +350,7 @@ describe('sharing the process', () => {
     stand = await signCopies(client, posted + BULK, 1)
   })
 
-  afterAll(async () => {
-    await client.query('ROLLBACK')
-    client.release()
-  })
+  afterAll(() => scoped.disposeAsync())
 
   it('lets other work run between journals instead of hashing the whole log in one go', async () => {
     const run = await measured(async () => {

@@ -60,10 +60,10 @@ export class Service {
     this.#child = child
     child.on('error', (error) => this.#events.log(`${this.name}: ${error.message}`))
     createInterface({ input: child.stdio[4] as Readable }).on('line', (line) => {
-      const hit = /^failpoint (\S+)$/.exec(line)
-      if (!hit) return
+      const [, name] = /^failpoint (\S+)$/.exec(line) ?? []
+      if (name === undefined) return
       this.#failpoint = true
-      this.#events.failpoint(this, hit[1]!)
+      this.#events.failpoint(this, name)
     })
     child.on('message', (message: { type?: string }) => {
       if (message.type !== 'ready' || this.#child !== child) return
@@ -94,7 +94,7 @@ export class Service {
   disarm(): void {
     this.#env.CHAOS_FAILPOINTS = ''
     const child = this.#child
-    if (child === undefined || !child.connected) return
+    if (!child?.connected) return
     try {
       child.send({ type: 'disarm' })
     } catch {

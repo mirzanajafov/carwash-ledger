@@ -1,5 +1,5 @@
 import { failpoint } from '@carwash/failpoints'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { DERIVED_BALANCE, SELECT_JOURNAL_ENTRIES, STORED_BALANCE, TAKE_SNAPSHOTS } from './sql.ts'
 import { InvalidJournalError } from './errors.ts'
@@ -9,8 +9,7 @@ export const SNAPSHOT_LOCK_KEY = 7_240_001
 
 export async function readBalance(db: Queryable, account: Account): Promise<bigint> {
   const sql = account.balanceMode === 'derived' ? DERIVED_BALANCE : STORED_BALANCE
-  const result = await db.query<{ amount: string }>(sql, [account.id.toString()])
-  return BigInt(result.rows[0]!.amount)
+  return BigInt(firstRow(await db.query<{ amount: string }>(sql, [account.id.toString()])).amount)
 }
 
 export interface SnapshotRun {
@@ -24,13 +23,12 @@ export async function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null> 
   let broken = false
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
-    const lock = await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SNAPSHOT_LOCK_KEY])
-    if (!lock.rows[0]!.locked) {
+    const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SNAPSHOT_LOCK_KEY]))
+    if (!locked) {
       await client.query('ROLLBACK')
       return null
     }
-    const horizon = await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')
-    const value = horizon.rows[0]!.horizon
+    const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')).horizon
     const written = await client.query(TAKE_SNAPSHOTS, [value])
     failpoint('snapshot.before_commit')
     await client.query('COMMIT')

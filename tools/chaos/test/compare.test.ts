@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ClientLedger, type Op } from '../src/client.ts'
 import { compareWithClient, unsettled, type LedgerJournal } from '../src/compare.ts'
+import type { EntrySpec } from '../src/messages.ts'
 
-const capture = [
+const capture: [EntrySpec, EntrySpec, EntrySpec] = [
   { accountId: '1', amount: '1000' },
   { accountId: '2', amount: '-970' },
   { accountId: '3', amount: '-30' },
@@ -20,7 +21,7 @@ function scenario() {
   const rev = client.add({ ref: 'rev:cap:1', kind: 'reversal', entries: reversal, reversesRef: 'cap:1', reversesId: '10' })
   acknowledged(client, cap, '10')
   acknowledged(client, rev, '11')
-  const journals: LedgerJournal[] = [
+  const journals: [LedgerJournal, LedgerJournal] = [
     { id: '10', externalRef: 'cap:1', reversesId: null, entries: [...capture].reverse() },
     { id: '11', externalRef: 'rev:cap:1', reversesId: '10', entries: reversal },
   ]
@@ -42,8 +43,8 @@ describe('compareWithClient', () => {
   it('finds a journal no client sent, changed entries and a wrong reversal link', () => {
     const { client, journals } = scenario()
     const tampered: LedgerJournal[] = [
-      { ...journals[0]!, entries: [capture[0]!, { accountId: '2', amount: '-971' }, { accountId: '3', amount: '-29' }] },
-      { ...journals[1]!, reversesId: '12' },
+      { ...journals[0], entries: [capture[0], { accountId: '2', amount: '-971' }, { accountId: '3', amount: '-29' }] },
+      { ...journals[1], reversesId: '12' },
       { id: '12', externalRef: 'cap:99', reversesId: null, entries: capture },
     ]
     const result = compareWithClient(client.ops.values(), tampered)

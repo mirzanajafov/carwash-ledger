@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { assert, describe, expect, it } from 'vitest'
 import { InvalidJournalError, MAX_ENTRIES, planJournal, shardFor, type Account, type BalanceMode } from '../src/index.ts'
 
 let nextId = 1n
@@ -167,7 +167,12 @@ describe('shardFor', () => {
 
   it('spreads journals evenly over shards', () => {
     const counts = new Array<number>(16).fill(0)
-    for (let i = 0; i < 16_000; i++) counts[shardFor(`capture:${i}`, 42n, 16)]!++
+    for (let i = 0; i < 16_000; i++) {
+      const shard = shardFor(`capture:${i}`, 42n, 16)
+      const before = counts[shard]
+      assert(before !== undefined)
+      counts[shard] = before + 1
+    }
     for (const count of counts) {
       expect(count).toBeGreaterThan(800)
       expect(count).toBeLessThan(1200)

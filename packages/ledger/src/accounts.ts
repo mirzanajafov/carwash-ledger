@@ -1,4 +1,4 @@
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { UnknownAccountError } from './errors.ts'
 import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS, SELECT_ACCOUNTS_BY_CODE } from './sql.ts'
@@ -52,9 +52,21 @@ export class AccountRegistry {
     if (missing.length > 0) {
       for (const account of await load(missing)) this.#accounts.set(account.id, account)
     }
-    const unknown = wanted.filter((id) => !this.#accounts.has(id))
+    const found = new Map<bigint, Account>()
+    const unknown: bigint[] = []
+    for (const id of wanted) {
+      const account = this.#accounts.get(id)
+      if (account) found.set(id, account)
+      else unknown.push(id)
+    }
     if (unknown.length > 0) throw new UnknownAccountError(unknown)
-    return new Map(wanted.map((id) => [id, this.#accounts.get(id)!]))
+    return found
+  }
+
+  async account(id: bigint): Promise<Account> {
+    const account = (await this.resolve([id])).get(id)
+    if (!account) throw new UnknownAccountError([id])
+    return account
   }
 }
 
@@ -69,7 +81,7 @@ export interface NewAccount {
 export async function insertAccount(client: pg.ClientBase, spec: NewAccount): Promise<Account> {
   const shards = spec.balanceMode === 'sharded' ? (spec.shards ?? 16) : 1
   const inserted = await client.query<{ id: string }>(INSERT_ACCOUNT, [spec.code, spec.type, spec.currency, spec.balanceMode, shards])
-  const id = BigInt(inserted.rows[0]!.id)
+  const id = BigInt(firstRow(inserted).id)
   if (spec.balanceMode !== 'derived') await client.query(INSERT_BALANCE_ROWS, [id.toString(), shards])
   return { id, code: spec.code, type: spec.type, currency: spec.currency, balanceMode: spec.balanceMode, shards }
 }

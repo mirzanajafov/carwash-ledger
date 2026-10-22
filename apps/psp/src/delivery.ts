@@ -62,7 +62,7 @@ export class WebhookSender {
           const sent = await this.tick()
           if (sent < this.#options.batch) await sleep(this.#options.intervalMs)
         } catch (error) {
-          this.#options.log(`psp webhooks: ${(error as Error).message}`)
+          this.#options.log(`psp webhooks: ${error instanceof Error ? error.message : String(error)}`)
           await sleep(this.#options.intervalMs)
         }
       }
@@ -100,7 +100,7 @@ export class WebhookSender {
       }
       error = `HTTP ${response.status}`
     } catch (failure) {
-      error = (failure as Error).message
+      error = failure instanceof Error ? failure.message : String(failure)
     }
     if (delivery.attempts >= this.#options.maxAttempts) {
       await this.#pool.query('UPDATE deliveries SET failed_at = now(), last_error = $2 WHERE id = $1', [delivery.id, error])

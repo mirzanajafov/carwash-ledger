@@ -54,8 +54,8 @@ export async function runPgbench(options: PgbenchOptions): Promise<PgbenchResult
   const output = await new Promise<string>((resolve, reject) => {
     const child = spawn('pgbench', args, { env })
     let text = ''
-    child.stdout.on('data', (d) => (text += d))
-    child.stderr.on('data', (d) => (text += d))
+    child.stdout.on('data', (chunk: Buffer) => (text += chunk.toString()))
+    child.stderr.on('data', (chunk: Buffer) => (text += chunk.toString()))
     child.on('error', reject)
     child.on('close', (code) => (code === 0 ? resolve(text) : reject(new Error(`pgbench exited ${code}: ${text}`))))
   })

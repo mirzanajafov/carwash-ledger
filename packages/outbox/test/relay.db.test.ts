@@ -1,8 +1,8 @@
 import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, type Account } from '@carwash/ledger'
-import { checkout } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
+import { afterAll, assert, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { LANES, Relay, RELAY_DEFAULTS, relayOnce, writeEvent, writeJournalEvents, type NewEvent, type OutboxRow, type Publisher } from '../src/index.ts'
 
 let db: TestDatabase
@@ -39,8 +39,7 @@ async function addEvents(keys: readonly string[]): Promise<void> {
 }
 
 async function unpublished(): Promise<number> {
-  const { rows } = await app.query<{ n: number }>('SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL')
-  return rows[0]!.n
+  return firstRow(await app.query<{ n: number }>('SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL')).n
 }
 
 async function once(publisher: Publisher) {
@@ -53,18 +52,18 @@ async function once(publisher: Publisher) {
 }
 
 async function laneOf(key: string): Promise<number> {
-  const { rows } = await app.query<{ lane: number }>('SELECT lane FROM outbox WHERE key = $1 LIMIT 1', [key])
-  return rows[0]!.lane
+  return firstRow(await app.query<{ lane: number }>('SELECT lane FROM outbox WHERE key = $1 LIMIT 1', [key])).lane
 }
+
+const cleanup = new AsyncDisposableStack()
 
 beforeAll(async () => {
   db = await createTestDatabase()
+  cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 12)
 })
 
-afterAll(async () => {
-  await db?.drop()
-})
+afterAll(() => cleanup.disposeAsync())
 
 beforeEach(async () => {
   await app.query('DELETE FROM outbox')
@@ -99,17 +98,15 @@ describe('the outbox', () => {
     const { rows } = await app.query<{ topic: string; key: string; type: string; payload: Record<string, string> }>(
       'SELECT topic, key, type, payload FROM outbox ORDER BY id',
     )
-    expect(rows.map((row) => [row.topic, row.key, row.type])).toEqual([
-      ['ledger', receivable.id.toString(), 'entry.posted'],
-      ['ledger', payable.id.toString(), 'entry.posted'],
+    expect(rows).toMatchObject([
+      { topic: 'ledger', key: receivable.id.toString(), type: 'entry.posted' },
+      {
+        topic: 'ledger',
+        key: payable.id.toString(),
+        type: 'entry.posted',
+        payload: { journal_id: journalId.toString(), external_ref: 'ob:kept', account: 'ob:payable', currency: 'EUR', amount: '-1500' },
+      },
     ])
-    expect(rows[1]!.payload).toMatchObject({
-      journal_id: journalId.toString(),
-      external_ref: 'ob:kept',
-      account: 'ob:payable',
-      currency: 'EUR',
-      amount: '-1500',
-    })
   })
 
   it('writes an event on the client it is given, so rolling back the transaction takes the event back', async () => {
@@ -136,7 +133,7 @@ describe('the outbox', () => {
     const { rows: spread } = await app.query<{ lanes: number }>(
       `SELECT count(DISTINCT (hashtextextended(k::text, 0) & ${LANES - 1}))::int AS lanes FROM generate_series(1, 1000) AS k`,
     )
-    expect(spread[0]!.lanes).toBe(LANES)
+    expect(spread).toEqual([{ lanes: LANES }])
   })
 })
 
@@ -145,8 +142,9 @@ describe('relayOnce', () => {
     await addEvents(['k1', 'k2', 'k1', 'k3', 'k1'])
     const publisher = new Recorder()
     const relayed = await once(publisher)
+    assert(relayed)
     const lanes = [...new Set(await Promise.all(['k1', 'k2', 'k3'].map(laneOf)))].sort((a, b) => a - b)
-    expect({ ...relayed!, lanes: [...relayed!.lanes].sort((a, b) => a - b) }).toEqual({ lanes, published: 5 })
+    expect({ ...relayed, lanes: [...relayed.lanes].sort((a, b) => a - b) }).toEqual({ lanes, published: 5 })
     expect(publisher.batches).toHaveLength(1)
     expect(publisher.rows.map((row) => Number(row.id))).toEqual([...publisher.rows.map((row) => Number(row.id))].sort((a, b) => a - b))
     expect(await unpublished()).toBe(0)
@@ -200,7 +198,7 @@ describe('relayOnce', () => {
       const { rows } = await lease.client.query<{ held: number }>(
         "SELECT count(*)::int AS held FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()",
       )
-      expect(rows[0]!.held).toBe(0)
+      expect(rows).toEqual([{ held: 0 }])
     } finally {
       lease.release()
     }
@@ -223,10 +221,12 @@ describe('Relay', () => {
     } finally {
       await relay.stop()
     }
-    const { rows } = await app.query<{ worst: number }>(
-      `SELECT max(extract(epoch FROM published_at - created_at) * 1000)::float8 AS worst FROM outbox WHERE type = 'test.stream'`,
+    const { worst } = firstRow(
+      await app.query<{ worst: number }>(
+        `SELECT max(extract(epoch FROM published_at - created_at) * 1000)::float8 AS worst FROM outbox WHERE type = 'test.stream'`,
+      ),
     )
-    expect(rows[0]!.worst).toBeLessThan(400)
+    expect(worst).toBeLessThan(400)
   })
 
   it('keeps each key in order while several relays and writers run at once', async () => {
