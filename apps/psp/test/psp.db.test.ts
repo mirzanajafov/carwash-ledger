@@ -62,9 +62,13 @@ async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 10_000
   }
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   db = await createScratchDatabase('psp')
+  cleanup.defer(() => db.drop())
   sql = new pg.Pool({ connectionString: db.url, max: 2 })
+  cleanup.defer(() => sql.end())
   received = []
   receiver = createServer(async (request, response) => {
     const chunks: Buffer[] = []
@@ -75,6 +79,10 @@ beforeAll(async () => {
   })
   receiver.listen(0, '127.0.0.1')
   await once(receiver, 'listening')
+  cleanup.defer(() => {
+    receiver.closeAllConnections()
+    receiver.close()
+  })
   running = await startPsp(
     {
       port: 0,
@@ -92,15 +100,10 @@ beforeAll(async () => {
     },
     () => undefined,
   )
+  cleanup.defer(() => running.close())
 })
 
-afterAll(async () => {
-  await running.close()
-  await sql.end()
-  receiver.closeAllConnections()
-  receiver.close()
-  await db.drop()
-})
+afterAll(() => cleanup.disposeAsync())
 
 beforeEach(() => {
   running.faults.plan = NO_FAULTS

@@ -50,7 +50,7 @@ export class Worker {
     child.on('error', (error) => this.#events.log(`${this.kind}-${this.index}: ${error.message}`))
     if (child.stderr === null) throw new Error(`${this.kind}-${this.index} has no stderr pipe`)
     createInterface({ input: child.stderr }).on('line', (line) => {
-      const name = /^failpoint (\S+)$/.exec(line)?.[1]
+      const [, name] = /^failpoint (\S+)$/.exec(line) ?? []
       if (name !== undefined) this.#events.failpoint(name)
       else this.#events.log(`${this.kind}-${this.index}: ${line}`)
     })

@@ -21,16 +21,17 @@ async function journalCount(ref: string): Promise<number> {
   return firstRow(await ledger.app.query<{ n: number }>('SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [ref])).n
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   ledger = await openLedger(4)
+  cleanup.defer(() => ledger.close())
   registry = new AccountRegistry(pgAccountLoader(ledger.app))
   locked = await createModeAccounts(ledger.app, 'locked', { prefix: 'tx:' })
   sharded = await createModeAccounts(ledger.app, 'sharded', { prefix: 'tx:' })
 })
 
-afterAll(async () => {
-  await ledger.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('postInTransaction', () => {
   it('commits and rolls back with the transaction it was given', async () => {

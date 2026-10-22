@@ -17,15 +17,7 @@ export class PaymentsController {
 
   @Post()
   create(@Req() request: AuthedRequest, @Res() response: Response, @Body() body: CreatePaymentBody): Promise<void> {
-    return this.#idempotency.run(request, response, (owned) =>
-      this.#payments.create(owned, {
-        amount: body.amount,
-        currency: body.currency,
-        merchant: body.merchant,
-        token: body.token,
-        capture: body.capture ?? 'auto',
-      }),
-    )
+    return this.#idempotency.run(request, response, (owned) => this.#payments.create(owned, body))
   }
 
   @Post(':id/capture')

@@ -19,13 +19,13 @@ function refuse(status: number, code: string, message: string, headers: Record<s
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { preset?: unknown; custom?: { plan?: unknown; minutes?: unknown } }
+  const body = (await request.json().catch(() => ({}))) as { preset?: unknown; custom?: { plan?: unknown; minutes?: unknown } | null }
   try {
     if (body.custom !== undefined) {
       if (!(await adminSession())) return refuse(403, 'forbidden', 'only an admin session can set its own weather')
-      const minutes = Number(body.custom.minutes)
+      const minutes = Number(body.custom?.minutes)
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) return refuse(400, 'invalid', 'minutes must be a whole number from 1 to 60')
-      return relay(await callPsp('PUT', '/admin/weather', { label: 'custom', plan: body.custom.plan, seconds: minutes * 60 }))
+      return relay(await callPsp('PUT', '/admin/weather', { label: 'custom', plan: body.custom?.plan, seconds: minutes * 60 }))
     }
     const preset = presetNamed(body.preset)
     if (!preset) return refuse(400, 'invalid', 'pick one of the presets')

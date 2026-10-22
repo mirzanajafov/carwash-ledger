@@ -27,14 +27,15 @@ function only(fault: SettlementFault) {
   return { ...NO_FAULTS, settlement: Object.fromEntries(SETTLEMENT_FAULTS.map((f) => [f, f === fault ? 1 : 0])) as Record<SettlementFault, number> }
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
   today = stack.psp.settlements.calendar().current_day
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('settlement', () => {
   it('ingests a closed day once, posts what the file says, and finds nothing to report', async () => {

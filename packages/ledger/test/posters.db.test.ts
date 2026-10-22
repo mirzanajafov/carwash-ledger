@@ -5,13 +5,14 @@ import { capture, createModeAccounts, inParallel, openLedger, type LedgerFixture
 
 let ledger: LedgerFixture
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   ledger = await openLedger(16)
+  cleanup.defer(() => ledger.close())
 })
 
-afterAll(async () => {
-  await ledger.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('concurrent captures on the hot accounts', () => {
   const journals = 120

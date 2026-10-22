@@ -6,13 +6,14 @@ import { capture, createModeAccounts, openLedger, type LedgerFixture } from './s
 
 let ledger: LedgerFixture
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   ledger = await openLedger(2)
+  cleanup.defer(() => ledger.close())
 })
 
-afterAll(async () => {
-  await ledger.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('a checked-out connection that dies between statements', () => {
   it('is caught instead of crashing the process, dropped from the pool, and the next posting works', async () => {

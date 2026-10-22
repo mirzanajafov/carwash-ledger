@@ -228,7 +228,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
     }
 
-    const crashing = new Set<'postgres'>()
+    const busy = { postgres: false }
     let toxicCount = 0
     const applyFault = async (fault: Fault, index: number): Promise<void> => {
       try {
@@ -239,13 +239,13 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
           worker.kill()
           report.kills.random++
         } else if (fault.kind === 'postgres') {
-          if (crashing.has('postgres')) return
-          crashing.add('postgres')
+          if (busy.postgres) return
+          busy.postgres = true
           try {
             report.postgres.kills++
             report.postgres.recoveryMs.push(await crashPostgres(postgres, fault.downMs))
           } finally {
-            crashing.delete('postgres')
+            busy.postgres = false
           }
         } else {
           report.toxics[fault.toxic]++
@@ -298,7 +298,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
         }
       }
       for (const op of client.due(t)) dispatch(op)
-      if (!checking && postgres.running && !crashing.has('postgres') && t - lastCheck >= options.checkEveryMs) {
+      if (!checking && postgres.running && !busy.postgres && t - lastCheck >= options.checkEveryMs) {
         lastCheck = t
         checking = true
         void periodicCheck()

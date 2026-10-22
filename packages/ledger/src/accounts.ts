@@ -62,6 +62,12 @@ export class AccountRegistry {
     if (unknown.length > 0) throw new UnknownAccountError(unknown)
     return found
   }
+
+  async account(id: bigint): Promise<Account> {
+    const account = (await this.resolve([id])).get(id)
+    if (!account) throw new UnknownAccountError([id])
+    return account
+  }
 }
 
 export interface NewAccount {

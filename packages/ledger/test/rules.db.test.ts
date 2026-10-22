@@ -30,15 +30,16 @@ async function insertEntry(client: pg.PoolClient, journalId: string, accountId: 
   await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [journalId, accountId.toString(), amount.toString()])
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   ledger = await openLedger()
+  cleanup.defer(() => ledger.close())
   eur = await createModeAccounts(ledger.app, 'locked')
   usd = await createModeAccounts(ledger.app, 'locked', { currency: 'USD' })
 })
 
-afterAll(async () => {
-  await ledger.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('what the database enforces', () => {
   it('rejects an unbalanced journal at commit', async () => {

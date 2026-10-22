@@ -13,19 +13,22 @@ const prefix = `test-${randomUUID()}.`
 const topic = `${prefix}${TOPICS.payments}`
 const kafka = kafkaClient({ brokers: BROKERS, clientId: 'outbox-test' })
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   db = await createTestDatabase()
+  cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 8)
   expect(await ensureTopics(kafka, [{ topic, partitions: 4, retentionHours: 1 }])).toEqual([topic])
+  cleanup.defer(async () => {
+    const admin = kafka.admin()
+    await admin.connect()
+    await admin.deleteTopics({ topics: [topic] }).catch(() => undefined)
+    await admin.disconnect()
+  })
 })
 
-afterAll(async () => {
-  const admin = kafka.admin()
-  await admin.connect()
-  await admin.deleteTopics({ topics: [topic] }).catch(() => undefined)
-  await admin.disconnect()
-  await db.drop()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the relay against Kafka', () => {
   it('delivers every event with its id and type, in order per key', async () => {

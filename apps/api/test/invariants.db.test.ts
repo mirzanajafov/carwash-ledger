@@ -157,8 +157,11 @@ async function postJournal(client: pg.ClientBase, ref: string, entries: [string,
   return journalId
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
   const call = stack.call
   payments.auto = (await call('POST', '/v1/payments', { body: pay('tok_ok') })).body.id
   payments.manual = (await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body.id
@@ -182,9 +185,7 @@ beforeAll(async () => {
   base = clean.base
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the payment invariants', () => {
   it('find nothing wrong after payments, refunds, payouts, a decline and a refused PSP answer', async () => {

@@ -37,7 +37,14 @@ export function chainHash(previous: Hash, leaf: Hash): Hash {
 export const EMPTY_CHAIN: Hash = new Uint8Array(32)
 
 export function equal(a: Hash, b: Hash): boolean {
-  return a.length === b.length && a.every((byte, i) => byte === b[i])
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (const [i, byte] of a.entries()) {
+    const other = b[i]
+    if (other === undefined) return false
+    diff |= byte ^ other
+  }
+  return diff === 0
 }
 
 export function toHex(hash: Hash): string {
@@ -183,8 +190,8 @@ export function completedBy(index: number, leaf: Hash, source: SubtreeSource): {
 export function rootFromLeaves(leaves: readonly Hash[]): Hash {
   if (leaves.length === 0) return sha256(new Uint8Array(0))
   const build = (part: readonly Hash[]): Hash => {
-    const [leaf, ...more] = part
-    if (leaf !== undefined && more.length === 0) return leaf
+    const [leaf] = part
+    if (leaf !== undefined && part.length === 1) return leaf
     const k = largestPowerOfTwoBelow(part.length)
     return nodeHash(build(part.slice(0, k)), build(part.slice(k)))
   }

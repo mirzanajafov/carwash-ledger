@@ -37,7 +37,7 @@ interface E5Row {
   fallback: string
   lines: number
   falseBreaks: number
-  faults: Record<string, { detectionRate: number }>
+  faults: Record<string, { detectionRate: number | null }>
   dropped: { placedRight: number; placedWrong: number; unplaced: number }
 }
 
@@ -66,7 +66,7 @@ interface E6Size {
   size: number
   sequencer: { perSecond: number }
   verifyMedianMs: number
-  proofs: { bytes: number; ms: { p50: number } }
+  proofs: { bytes: { min: number; max: number }; ms: { p50: number } }
   bytes: { audit_log: number; audit_nodes: number }
 }
 
@@ -128,9 +128,9 @@ function median(xs: number[]): number {
   const sorted = [...xs].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
   const upper = sorted[mid]
-  const lower = sorted.length % 2 ? upper : sorted[mid - 1]
+  const lower = sorted[sorted.length % 2 ? mid : mid - 1]
   if (lower === undefined || upper === undefined) throw new Error('there is no median of nothing')
-  return sorted.length % 2 ? upper : (lower + upper) / 2
+  return (lower + upper) / 2
 }
 
 function round(x: number, digits = 1): number {
@@ -193,7 +193,7 @@ function e5() {
     fallback: r.fallback,
     lines: r.lines,
     falseBreaks: r.falseBreaks,
-    detection: Object.fromEntries(Object.entries(r.faults).map(([name, f]) => [name, round(f.detectionRate * 100)])),
+    detection: Object.fromEntries(Object.entries(r.faults).map(([name, f]) => [name, round((f.detectionRate ?? 0) * 100)])),
     dropped: { right: r.dropped.placedRight, wrong: r.dropped.placedWrong, unplaced: r.dropped.unplaced },
   }))
   return { source: dir, rows }
@@ -344,6 +344,9 @@ function chaos() {
 }
 
 const evidence = { e1: e1(), e2: e2(), e4: e4(), e5: e5(), e6: e6(), e7: e7(), chaos: chaos() }
+
+export type Evidence = typeof evidence
+
 writeFileSync(OUT, `${JSON.stringify(evidence, null, 1)}\n`)
 console.log(
   `wrote ${OUT}: ${evidence.e1.points.length} E1 points, ${evidence.e2.rows.length} E2 rows, ${evidence.e4.steady.length} E4 rates and ${evidence.e4.outages.length} outages, ${evidence.e5.rows.length} E5 rows, ${evidence.e6.scale.length} E6 sizes and ${evidence.e6.trials.length} trial rows, ${evidence.e7.rows.length} E7 procedures, ${evidence.chaos.runs.length} chaos campaigns`,

@@ -71,13 +71,14 @@ async function sequenceAll(): Promise<void> {
   while ((await db.transaction((client) => sequenceBatch(client, 1000))) > 0);
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the live feed', () => {
   it('streams balances, every new journal with its entries, and payments as they move, to anyone', async () => {

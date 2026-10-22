@@ -16,7 +16,7 @@ export interface CreatePaymentInput {
   currency: string
   merchant: string
   token: string
-  capture: 'auto' | 'manual'
+  capture?: 'auto' | 'manual'
 }
 
 const CARD_KINDS = ['authorize', 'capture', 'cancel'] as const
@@ -41,6 +41,7 @@ export class PaymentsService {
   }
 
   async create(owned: OwnedKey, input: CreatePaymentInput): Promise<Final> {
+    const capture = input.capture ?? 'auto'
     if (owned.paymentId === null) {
       await this.#db.transaction(async (client) => {
         const { rows } = await client.query<{ id: string; currency: string }>('SELECT id::text, currency FROM merchants WHERE code = $1', [input.merchant])
@@ -54,7 +55,7 @@ export class PaymentsService {
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO payments (client_id, merchant_id, amount, currency, capture_mode, token)
            VALUES ($1, $2, $3, $4, $5::capture_mode, $6) RETURNING id`,
-          [owned.clientId, merchant.id, input.amount, input.currency, input.capture, input.token],
+          [owned.clientId, merchant.id, input.amount, input.currency, capture, input.token],
         )
         const paymentId = firstRow(inserted).id
         await client.query(`INSERT INTO attempts (kind, payment_id, amount, currency) VALUES ('authorize', $1, $2, $3)`, [
@@ -65,7 +66,7 @@ export class PaymentsService {
         await this.#idempotency.recordPoint(client, owned, 'payment_created', { paymentId })
       })
     }
-    const expected: PaymentStatus[] = input.capture === 'auto' ? ['captured', 'failed'] : ['authorized', 'failed']
+    const expected: PaymentStatus[] = capture === 'auto' ? ['captured', 'failed'] : ['authorized', 'failed']
     return this.#drive(owned, owned.paymentId!, expected)
   }
 

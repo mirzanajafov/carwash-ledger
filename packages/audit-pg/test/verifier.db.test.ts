@@ -86,8 +86,11 @@ function tampered(tamperClass: TamperClass, seq: number, options: { witness?: bo
   })
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   db = await createTestDatabase()
+  cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 4)
   admin = db.pool('admin', 2)
   const account = async (code: string, type: string) => {
@@ -102,10 +105,16 @@ beforeAll(async () => {
   accounts = { receivable: await account('receivable', 'asset'), merchant: await account('merchant', 'liability'), fees: await account('fees', 'revenue') }
   poster = new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app)))
   dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  cleanup.defer(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
   witness = new Witness(dir, 'carwash-ledger')
   server = createWitnessServer(witness, 'token')
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
+  cleanup.defer(() => {
+    server.close()
+  })
   checkpointer = new Checkpointer(app, new WitnessClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, 'token', 2000))
   await post(16)
   expect(await checkpointer.run()).toMatchObject({ kind: 'signed', size: 16 })
@@ -115,11 +124,7 @@ beforeAll(async () => {
   witnessed = anchor()
 })
 
-afterAll(async () => {
-  server.close()
-  await db.drop()
-  if (dir) rmSync(dir, { recursive: true, force: true })
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('full verification', () => {
   it('sequences queued journals in the order of their ids, not the order of their ids as text', async () => {

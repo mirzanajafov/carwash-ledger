@@ -387,7 +387,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     )
     const forger = new Forger(audit, endpoints, WEBHOOK_SECRET, mulberry32(seed ^ 0x77656268))
 
-    const crashing = new Set<'postgres' | 'kafka'>()
+    const busy = { postgres: false, kafka: false }
     let toxicCount = 0
     const applyFault = async (fault: PaymentFault, index: number): Promise<void> => {
       try {
@@ -397,26 +397,26 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
             log(`killed ${fault.target}`)
           }
         } else if (fault.kind === 'postgres') {
-          if (crashing.has('postgres')) return
-          crashing.add('postgres')
+          if (busy.postgres) return
+          busy.postgres = true
           try {
             report.postgres.kills++
             log(`postgres crash, down for ${fault.downMs} ms`)
             report.postgres.recoveryMs.push(await crashPostgres(postgres, fault.downMs))
             log(`postgres back after ${report.postgres.recoveryMs.at(-1)} ms`)
           } finally {
-            crashing.delete('postgres')
+            busy.postgres = false
           }
         } else if (fault.kind === 'kafka') {
-          if (crashing.has('kafka')) return
-          crashing.add('kafka')
+          if (busy.kafka) return
+          busy.kafka = true
           try {
             report.kafka.kills++
             log(`kafka crash, down for ${fault.downMs} ms`)
             report.kafka.recoveryMs.push(await crashKafka(kafka, fault.downMs))
             log(`kafka back after ${report.kafka.recoveryMs.at(-1)} ms`)
           } finally {
-            crashing.delete('kafka')
+            busy.kafka = false
           }
         } else {
           report.toxics[fault.toxic]++
@@ -493,7 +493,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           settleStarted = now()
         }
       }
-      if (!checking && postgres.running && !crashing.has('postgres') && t - lastCheck >= options.checkEveryMs) {
+      if (!checking && postgres.running && !busy.postgres && t - lastCheck >= options.checkEveryMs) {
         lastCheck = t
         checking = true
         void periodicCheck()

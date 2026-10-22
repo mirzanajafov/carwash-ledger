@@ -90,20 +90,25 @@ async function inRollback<T>(work: (client: pg.PoolClient) => Promise<T>): Promi
   }
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
   dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  cleanup.defer(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
   server = createWitnessServer(new Witness(dir, 'carwash-ledger'), 'witness-token')
   witnessUrl = await listen(server)
+  cleanup.defer(() => {
+    server.close()
+  })
   stateFile = join(dir, 'verifier.json')
   sequencer = new Sequencer(stack.app.get(Database), { ...stack.config, witnessUrl, witnessToken: 'witness-token' })
 })
 
-afterAll(async () => {
-  await stack.close()
-  server.close()
-  if (dir) rmSync(dir, { recursive: true, force: true })
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('checkpoints and the witness', () => {
   it('reads a witness that has signed nothing as no checkpoint, and refuses a 404 from anywhere else', async () => {

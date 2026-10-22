@@ -19,13 +19,14 @@ async function clean() {
   expect(violations([await checkAgainstPsp(stack.admin, stack.pspSql)])).toEqual([])
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('resolving anomalies', () => {
   it('accepts the amount the bank captured, and the books agree with the bank again', async () => {

@@ -31,13 +31,14 @@ async function balance(code: string): Promise<number> {
   return reply.body.balance
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('payments API', () => {
   it('authorizes and captures a payment, and posts one balanced capture journal', async () => {

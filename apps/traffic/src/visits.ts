@@ -30,7 +30,7 @@ export function mulberry32(seed: number): () => number {
 
 export function pick<T>(random: () => number, items: readonly T[]): T {
   const item = items[Math.floor(random() * items.length)]
-  if (item === undefined) throw new Error('there is nothing to pick from')
+  if (item === undefined) throw new Error('cannot pick from an empty list')
   return item
 }
 

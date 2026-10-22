@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { insertAccount, postInTransaction, readBalance, sqlStateOf, UnknownAccountError } from '@carwash/ledger'
+import { insertAccount, postInTransaction, readBalance, sqlStateOf } from '@carwash/ledger'
 import { firstRow } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
@@ -71,9 +71,7 @@ export class PayoutsService {
     const { rows } = await this.#db.pool.query<MerchantRow>('SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1', [code])
     const merchant = rows[0]
     if (!merchant) throw notFound(`merchant ${code}`)
-    const accountId = BigInt(merchant.account_id)
-    const [account] = (await this.#chart.registry.resolve([accountId])).values()
-    if (!account) throw new UnknownAccountError([accountId])
+    const account = await this.#chart.registry.account(BigInt(merchant.account_id))
     return this.#merchantView(merchant, -(await readBalance(this.#db.pool, account)))
   }
 
@@ -94,7 +92,7 @@ export class PayoutsService {
           [[merchant.account_id, bank.id.toString()]],
         )
         const merchantBalance = locked.rows.find((row) => row.account_id === merchant.account_id)
-        if (!merchantBalance) throw new UnknownAccountError([BigInt(merchant.account_id)])
+        if (!merchantBalance) throw new Error(`merchant ${input.merchant} has no balance row`)
         const payable = -BigInt(merchantBalance.amount)
         if (input.amount === undefined && payable <= 0n) {
           throw new ApiError(409, 'nothing_to_pay_out', `merchant ${input.merchant} has nothing available for payout`)

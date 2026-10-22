@@ -55,14 +55,15 @@ async function laneOf(key: string): Promise<number> {
   return firstRow(await app.query<{ lane: number }>('SELECT lane FROM outbox WHERE key = $1 LIMIT 1', [key])).lane
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   db = await createTestDatabase()
+  cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 12)
 })
 
-afterAll(async () => {
-  await db.drop()
-})
+afterAll(() => cleanup.disposeAsync())
 
 beforeEach(async () => {
   await app.query('DELETE FROM outbox')

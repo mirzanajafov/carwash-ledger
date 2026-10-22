@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
-import evidence from '@/data/evidence.json'
+import data from '@/data/evidence.json'
 import { E1Explorer } from '@/components/e1-explorer'
+import type { Evidence } from '../../../scripts/collect-evidence.ts'
+
+const evidence: Evidence = data
 
 export const metadata: Metadata = { title: 'Evidence · Car Wash Ledger' }
 
@@ -196,20 +199,20 @@ export default function EvidencePage() {
                 {evidence.e4.steady.map((r) => (
                   <tr key={r.rate}>
                     <td className="px-4 py-2 font-mono tabular-nums">{r.rate.toLocaleString('en')}</td>
-                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50.median.toFixed(1)} ms</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50?.median.toFixed(1)} ms</td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.ackP99.median.toFixed(1)} ms{' '}
+                      {r.ackP99?.median.toFixed(1)} ms{' '}
                       <span className="text-xs text-muted">
-                        ({r.ackP99.min.toFixed(0)}–{r.ackP99.max.toFixed(0)})
+                        ({r.ackP99?.min.toFixed(0)}–{r.ackP99?.max.toFixed(0)})
                       </span>
                     </td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.consumedP99.median.toFixed(1)} ms{' '}
+                      {r.consumedP99?.median.toFixed(1)} ms{' '}
                       <span className="text-xs text-muted">
-                        ({r.consumedP99.min.toFixed(0)}–{r.consumedP99.max.toFixed(0)})
+                        ({r.consumedP99?.min.toFixed(0)}–{r.consumedP99?.max.toFixed(0)})
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent.median.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent?.median.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -266,7 +269,9 @@ export default function EvidencePage() {
             {evidence.e6.incremental.length > 0
               ? `Checking only what was added on top of a million: ${evidence.e6.incremental.map((r) => `${r.journals.toLocaleString('en')} journals in ${r.ms.toLocaleString('en')} ms`).join(', ')}. `
               : ''}
-            {`Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.`}
+            {evidence.e6.lag
+              ? `Under ${evidence.e6.lag.rate} payments a second, a journal waited ${evidence.e6.lag.p50.toLocaleString('en')} ms for the sequencer at the median and ${evidence.e6.lag.p99.toLocaleString('en')} ms at p99.`
+              : ''}
           </p>
           {evidence.e6.trials.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -363,7 +368,7 @@ export default function EvidencePage() {
                     <td className="px-4 py-2 font-mono tabular-nums">{r.perDay.toLocaleString('en')}</td>
                     <td className="px-2 py-2 text-muted">{r.fallback}</td>
                     {RECON_CLASSES.map(([key]) => {
-                      const rate = (r.detection as Record<string, number>)[key]
+                      const rate = r.detection[key]
                       return (
                         <td key={key} className={`px-2 py-2 text-right font-mono tabular-nums ${rate === 100 ? '' : 'text-warn'}`}>
                           {rate === undefined ? '—' : `${rate}%`}

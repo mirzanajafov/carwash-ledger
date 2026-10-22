@@ -104,10 +104,10 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
 
     if (path.startsWith('/admin/')) {
       if (!bearerMatches(request, options.adminKey)) throw new HttpError(401, 'unauthorized', 'the admin key is missing or wrong')
-      const close = CLOSE_DAY.exec(path)
-      if (close && method === 'PUT') {
-        await settlements.close(Number(close[1]))
-        return sendJson(response, 200, { day: Number(close[1]), closed: true })
+      const [, closeDay] = CLOSE_DAY.exec(path) ?? []
+      if (closeDay !== undefined && method === 'PUT') {
+        await settlements.close(Number(closeDay))
+        return sendJson(response, 200, { day: Number(closeDay), closed: true })
       }
       if (path === '/admin/weather') {
         if (method === 'PUT') {
@@ -147,12 +147,12 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
       const [, operationId] = OPERATION.exec(path) ?? []
       if (operationId !== undefined) return sendJson(response, 200, await psp.operation(decodeURIComponent(operationId)))
       if (path === '/v1/settlements') return sendJson(response, 200, settlements.calendar())
-      const settlement = SETTLEMENT.exec(path)
-      if (settlement) {
+      const [, settlementDay] = SETTLEMENT.exec(path) ?? []
+      if (settlementDay !== undefined) {
         const currency = new URL(request.url ?? '/', 'http://psp').searchParams.get('currency') ?? ''
         if (!/^[A-Z]{3}$/.test(currency)) throw badRequest('currency must be a three-letter code')
-        const file = await settlements.file(Number(settlement[1]), currency)
-        if (!file) throw new HttpError(404, 'settlement_not_ready', `day ${settlement[1]} is not closed yet`)
+        const file = await settlements.file(Number(settlementDay), currency)
+        if (!file) throw new HttpError(404, 'settlement_not_ready', `day ${settlementDay} is not closed yet`)
         return sendText(response, 200, 'text/csv', file.csv)
       }
       throw new HttpError(404, 'not_found', `no route GET ${path}`)

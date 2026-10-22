@@ -36,13 +36,14 @@ async function s7(corrupt: (client: pg.PoolClient) => Promise<unknown>): Promise
   }
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the audit log', () => {
   it('sequences every journal, and proves inclusion and consistency that the audit package accepts', async () => {

@@ -125,7 +125,9 @@ export class Journeys {
     if (journey.reuse) this.probes.push(this.#probe(created.request, { ...body, amount: journey.amount + 1 }))
 
     if (journey.capture === 'manual') {
-      await sleep(journey.pauses[0])
+      const pause = journey.pauses[0]
+      if (pause === undefined) throw new Error(`journey ${journey.index} has no pause before its capture`)
+      await sleep(pause)
       if (journey.settle === 'cancel') {
         const cancel = await this.#send(caller, 'cancel', `/v1/payments/${payment.id}/cancel`, {}, journey.duplicate)
         if (cancel.answer === undefined) return 'stopped'
@@ -159,7 +161,9 @@ export class Journeys {
     }
 
     for (const [i, amount] of journey.refunds.entries()) {
-      await sleep(journey.pauses[i + 1])
+      const pause = journey.pauses[i + 1]
+      if (pause === undefined) throw new Error(`journey ${journey.index} has no pause before refund ${i}`)
+      await sleep(pause)
       const refund = await this.#send(caller, 'refund', `/v1/payments/${payment.id}/refunds`, { amount }, journey.duplicate)
       if (refund.answer === undefined) return 'stopped'
       if (refund.answer.verdict === 'refused') return 'refused'

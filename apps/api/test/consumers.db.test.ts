@@ -22,8 +22,11 @@ async function forgetEverythingConsumed(): Promise<void> {
   await stack.admin.query('DELETE FROM inbox; DELETE FROM receipts; DELETE FROM receipt_counters; DELETE FROM statements')
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack()
+  cleanup.defer(() => stack.close())
   app = stack.app.get(Database).pool
   const call = stack.call
   for (const merchant of ['wash_1', 'wash_2', 'wash_1'] as const) {
@@ -40,9 +43,7 @@ beforeAll(async () => {
   await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_1', currency: 'EUR' } })
 })
 
-afterAll(async () => {
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('the consumers', () => {
   it('issue one receipt per capture, numbered per merchant from 1, and keep statements equal to the ledger', async () => {

@@ -326,7 +326,7 @@ async function lag(dir: string) {
     stop.abort()
     await sequencer
     const { rows } = await lab.admin.query<{ ms: number }>(
-      `SELECT extract(epoch FROM a.sequenced_at - j.created_at) * 1000 AS ms
+      `SELECT (extract(epoch FROM a.sequenced_at - j.created_at) * 1000)::float8 AS ms
        FROM audit_log a JOIN journals j ON j.id = a.journal_id
        WHERE j.created_at >= $1::timestamptz + make_interval(secs => $2::double precision / 1000)`,
       [startedAt, warmupMs],

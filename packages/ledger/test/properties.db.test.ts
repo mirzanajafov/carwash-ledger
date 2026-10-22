@@ -55,8 +55,11 @@ async function expectedBalances(): Promise<Map<bigint, bigint>> {
   return new Map(result.rows.map((r) => [BigInt(r.account_id), BigInt(r.total)]))
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   ledger = await openLedger(16)
+  cleanup.defer(() => ledger.close())
   audit = ledger.db.pool('ledger_audit', 2)
   const accountsIn = async (currency: string) => {
     const accounts: Account[] = []
@@ -76,9 +79,7 @@ beforeAll(async () => {
   }
 })
 
-afterAll(async () => {
-  await ledger.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('ledger properties', () => {
   it('random balanced journals keep every invariant and every balance mode exact', async () => {

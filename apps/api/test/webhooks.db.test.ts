@@ -70,16 +70,17 @@ async function attemptOf(paymentId: string, kind: string): Promise<string> {
   return firstRow(await stack.admin.query<{ id: string }>('SELECT id FROM attempts WHERE payment_id = $1 AND kind = $2::attempt_kind', [paymentId, kind])).id
 }
 
+const cleanup = new AsyncDisposableStack()
+
 beforeAll(async () => {
   stack = await startStack({ webhooks: true })
+  cleanup.defer(() => stack.close())
   worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 0 }), { logger: false })
+  cleanup.defer(() => worker.close())
   recovery = worker.get(Recovery)
 })
 
-afterAll(async () => {
-  await worker.close()
-  await stack.close()
-})
+afterAll(() => cleanup.disposeAsync())
 
 beforeEach(() => {
   stack.psp.faults.plan = NO_FAULTS
