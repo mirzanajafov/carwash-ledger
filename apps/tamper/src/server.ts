@@ -53,7 +53,7 @@ export function createTamperServer(service: TamperService, token: string): Serve
     const route = `${request.method} ${new URL(request.url ?? '/', 'http://tamper').pathname}`
     if (route === 'GET /health') return send(response, 200, { ok: true })
     if (!authorized(request, token)) return send(response, 401, { error: { code: 'unauthorized', message: 'the token is missing or wrong' } })
-    if (route === 'GET /v1/tamper') return send(response, 200, { tamper: service.current() })
+    if (route === 'GET /v1/tamper') return send(response, 200, { tamper: await service.current() })
     if (route === 'POST /v1/tamper') {
       const body = await readBody(request)
       if (body.class !== 1 && body.class !== 2 && body.class !== 3) {

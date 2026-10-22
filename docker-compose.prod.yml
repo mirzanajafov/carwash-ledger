@@ -189,10 +189,7 @@ services:
     environment:
       TAMPER_DATABASE_URL: postgresql://carwash:${POSTGRES_PASSWORD}@postgres:5432/ledger
       TAMPER_TOKEN: ${TAMPER_TOKEN:?set TAMPER_TOKEN}
-      TAMPER_DIR: /var/lib/tamper
       TAMPER_AUTO_RESTORE_SECONDS: "120"
-    volumes:
-      - tamper:/var/lib/tamper
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -274,7 +271,6 @@ services:
 volumes:
   pgdata:
   witness:
-  tamper:
 
 networks:
   edge:

@@ -13,7 +13,7 @@ export async function GET(): Promise<Response> {
     ])
     return Response.json({
       tamper: tamper?.status === 200 ? tamper.body.tamper : null,
-      tamperAvailable: tamper !== null && tamper.status !== 503,
+      tamperAvailable: tamper?.status === 200,
       checkpoint: checkpoint.status === 200 ? checkpoint.body : null,
       witnessKey: key,
       verification: verification.status === 200 ? verification.body : null,

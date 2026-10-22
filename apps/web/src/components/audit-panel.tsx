@@ -115,7 +115,7 @@ export function AuditPanel() {
             </button>
           </div>
         ) : null}
-        {server && !server.tamperAvailable ? <p className="text-sm text-muted">The tamper service is not running here.</p> : null}
+        {server && !server.tamperAvailable ? <p className="text-sm text-muted">The tamper service can't be reached right now.</p> : null}
         <div className="grid gap-2 sm:grid-cols-3">
           {CLASSES.map((c) => (
             <button

@@ -1,5 +1,4 @@
 import { once } from 'node:events'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { mkdtempSync, rmSync } from 'node:fs'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -11,14 +10,13 @@ import { withTransaction } from '@carwash/pg'
 import { createTestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createTamperServer, TamperService } from '../src/index.ts'
 
 let app: pg.Pool
 let admin: pg.Pool
 const cleanup = new AsyncDisposableStack()
 let witness: Witness
-let stateDir: string
 
 function anchor(): WitnessAnchor {
   return { origin: witness.origin, publicKey: witness.publicKey, latest: witness.latest() }
@@ -64,9 +62,8 @@ beforeAll(async () => {
   }
   await withTransaction(app, (client) => sequenceBatch(client, 1000))
   const witnessDir = mkdtempSync(join(tmpdir(), 'witness-'))
-  stateDir = mkdtempSync(join(tmpdir(), 'tamper-'))
   cleanup.defer(() => {
-    for (const dir of [witnessDir, stateDir]) rmSync(dir, { recursive: true, force: true })
+    rmSync(witnessDir, { recursive: true, force: true })
   })
   witness = new Witness(witnessDir, 'carwash-ledger')
   const witnessUrl = await serve(createWitnessServer(witness, 'w'))
@@ -75,9 +72,14 @@ beforeAll(async () => {
 
 afterAll(() => cleanup.disposeAsync())
 
+afterEach(async () => {
+  const service = new TamperService(admin)
+  if (await service.current()) await service.restore()
+})
+
 describe('the tamper service', () => {
   it('tampers with one witnessed journal at a time, survives a restart, and restores it so that verification is clean again', async () => {
-    const base = await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.5 }), 'tamper-token'))
+    const base = await serve(createTamperServer(new TamperService(admin, { random: () => 0.5 }), 'tamper-token'))
     const call = client(base)
     expect((await client(base, 'nope')('GET', '/v1/tamper')).status).toBe(401)
     expect(await call('GET', '/v1/tamper')).toEqual({ status: 200, body: { tamper: null } })
@@ -88,15 +90,24 @@ describe('the tamper service', () => {
     expect((await verifyLog(admin, { witness: anchor() })).examples).toEqual([{ kind: 'root', size: 30, after: 0 }])
     expect((await call('POST', '/v1/tamper', { class: 1 })).body.error.code).toBe('already_tampered')
 
-    const restarted = client(await serve(createTamperServer(new TamperService(admin, stateDir), 'tamper-token')))
+    const restarted = client(await serve(createTamperServer(new TamperService(admin), 'tamper-token')))
     expect((await restarted('GET', '/v1/tamper')).body.tamper).toMatchObject({ tamper_class: 2, seq: 15 })
     expect(await restarted('POST', '/v1/restore')).toMatchObject({ status: 200, body: { restored: { tamper_class: 2, seq: 15 } } })
     expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
     expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
   })
 
+  it('lets one of two tampers made at the same time through, and the other changes nothing', async () => {
+    const tampers = await Promise.allSettled([0.3, 0.6].map((at) => new TamperService(admin, { random: () => at }).tamper(1)))
+    const done = tampers.flatMap((tamper) => (tamper.status === 'fulfilled' ? [tamper.value] : []))
+    expect(done).toHaveLength(1)
+    expect(tampers.flatMap((tamper) => (tamper.status === 'rejected' ? [tamper.reason] : []))).toEqual([expect.objectContaining({ code: 'already_tampered' })])
+    const leaves = (await verifyLog(admin, { witness: anchor() })).examples.filter((example) => example.kind === 'leaf')
+    expect(leaves).toEqual(done.map((tamper) => ({ kind: 'leaf', seq: tamper.seq, journalId: tamper.journal_id })))
+  })
+
   it('answers every oversized body with 413 and tells a broken body from one that is not an object', async () => {
-    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir), 'tamper-token')))
+    const call = client(await serve(createTamperServer(new TamperService(admin), 'tamper-token')))
     for (let i = 0; i < 10; i++) {
       expect(await call('POST', '/v1/tamper', { class: 1, note: 'x'.repeat(2_000_000) })).toEqual({
         status: 413,
@@ -109,27 +120,23 @@ describe('the tamper service', () => {
   })
 
   it('restores on its own after the configured time, also after a restart', async () => {
-    const service = new TamperService(admin, stateDir, { random: () => 0.7, autoRestoreMs: 600 })
+    const tampered = await new TamperService(admin, { random: () => 0.7, autoRestoreMs: 600 }).tamper(1)
+    expect(tampered.restores_at).not.toBeNull()
+    expect((await verifyLog(admin, { witness: anchor() })).findings).toBeGreaterThan(0)
+    const restarted = new TamperService(admin, { autoRestoreMs: 600 })
+    const stop = new AbortController()
+    const restoring = restarted.restoreWhenDue(stop.signal)
     try {
-      const tampered = await service.tamper(1)
-      expect(tampered.restores_at).not.toBeNull()
-      expect((await verifyLog(admin, { witness: anchor() })).findings).toBeGreaterThan(0)
-      service.close()
-      const restarted = new TamperService(admin, stateDir, { autoRestoreMs: 600 })
-      try {
-        await sleep(1500)
-        expect(restarted.current()).toBeNull()
-        expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
-      } finally {
-        restarted.close()
-      }
+      await vi.waitFor(async () => expect(await restarted.current()).toBeNull(), { timeout: 5000, interval: 100 })
+      expect((await verifyLog(admin, { witness: anchor() })).findings).toBe(0)
     } finally {
-      service.close()
+      stop.abort()
+      await restoring
     }
   })
 
   it('puts a deleted journal back with its own ids', async () => {
-    const call = client(await serve(createTamperServer(new TamperService(admin, stateDir, { random: () => 0.1 }), 'tamper-token')))
+    const call = client(await serve(createTamperServer(new TamperService(admin, { random: () => 0.1 }), 'tamper-token')))
     const before = await admin.query(
       'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
     )
