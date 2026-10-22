@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { sequenceBatch, treeSize } from '@carwash/audit-pg'
 import type { WitnessView } from '@carwash/invariants'
 import { createAccount, type Account } from '@carwash/ledger'
-import { firstRow, type Transaction, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import { signCopies, withTriggersOff } from '@carwash/testkit'
 import type pg from 'pg'
 

@@ -1,7 +1,7 @@
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { withRetry } from '@carwash/ledger'
-import { createPool, type Transaction, withTransaction } from '@carwash/pg'
+import { createPool, withTransaction, type Transaction } from '@carwash/pg'
 import pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 

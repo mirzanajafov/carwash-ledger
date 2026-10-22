@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { KafkaJS } from '@confluentinc/kafka-javascript'
 import { failpoint } from '@carwash/failpoints'
-import { type Transaction, withTransaction } from '@carwash/pg'
+import { withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Envelope, Topic } from './events.ts'
 

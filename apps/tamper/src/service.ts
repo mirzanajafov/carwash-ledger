@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { restore, tamper, type TamperClass, type Tampered } from '@carwash/audit-pg'
-import { firstRow, withTransaction, type Queryable } from '@carwash/pg'
+import { firstRow, withTransaction, type Queryable, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 
 const CHECK_EVERY_MS = 5000
@@ -52,11 +52,11 @@ async function currentUndo(db: Queryable): Promise<Undo | undefined> {
   return fromRow((await db.query<UndoRow>(SELECT_UNDO)).rows[0])
 }
 
-async function lockCurrentUndo(client: pg.ClientBase): Promise<Undo | undefined> {
+async function lockCurrentUndo(client: Transaction): Promise<Undo | undefined> {
   return fromRow((await client.query<UndoRow>(`${SELECT_UNDO} FOR UPDATE`)).rows[0])
 }
 
-async function lockDueUndo(client: pg.ClientBase, afterMs: number): Promise<Undo | undefined> {
+async function lockDueUndo(client: Transaction, afterMs: number): Promise<Undo | undefined> {
   return fromRow((await client.query<UndoRow>(`${SELECT_UNDO} WHERE at <= now() - make_interval(secs => $1) FOR UPDATE`, [afterMs / 1000])).rows[0])
 }
 
@@ -115,7 +115,7 @@ export class TamperService {
     }
   }
 
-  async #tamper(client: pg.ClientBase, tamperClass: TamperClass): Promise<Undo> {
+  async #tamper(client: Transaction, tamperClass: TamperClass): Promise<Undo> {
     await client.query('LOCK TABLE tamper_undo IN SHARE ROW EXCLUSIVE MODE')
     const current = await currentUndo(client)
     if (current) throw new Conflict('already_tampered', `journal ${current.journalId} is tampered with already, so restore it first`)
@@ -131,7 +131,7 @@ export class TamperService {
     return { ...changed, witnessedSize, at }
   }
 
-  #restore(lock: (client: pg.ClientBase) => Promise<Undo | undefined>): Promise<Undo | undefined> {
+  #restore(lock: (client: Transaction) => Promise<Undo | undefined>): Promise<Undo | undefined> {
     return withTransaction(this.#pool, async (client) => {
       const current = await lock(client)
       if (!current) return undefined

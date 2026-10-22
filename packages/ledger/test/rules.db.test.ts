@@ -1,4 +1,4 @@
-import { firstRow, type Transaction, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { AlreadyReversedError, DuplicateJournalError, InvalidJournalError, readBalance, reversalOf } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'

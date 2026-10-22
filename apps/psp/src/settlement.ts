@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { firstRow, type Transaction, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Faults, SettlementFault } from './faults.ts'
 

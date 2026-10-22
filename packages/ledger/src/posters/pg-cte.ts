@@ -1,5 +1,5 @@
 import { failpoint } from '@carwash/failpoints'
-import { firstRow, type Transaction, withTransaction } from '@carwash/pg'
+import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { pgAccountLoader, type AccountRegistry } from '../accounts.ts'
 import { InvalidJournalError } from '../errors.ts'
