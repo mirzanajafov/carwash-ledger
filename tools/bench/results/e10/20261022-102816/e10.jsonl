@@ -1,0 +1,1 @@
+{"batch":5000,"journals":126510,"copies":51095,"runs":[{"totalMs":13385,"cpuMs":13729,"delayMs":{"p50":12.25,"p99":42.07,"max":71.24}},{"totalMs":10979,"cpuMs":11206,"delayMs":{"p50":11.85,"p99":34.01,"max":62.03}},{"totalMs":10991,"cpuMs":11297,"delayMs":{"p50":11.8,"p99":31.75,"max":59.24}}],"totalMsMedian":10991,"delayMaxMsMedian":62.03,"delayP99MsMedian":34.01}
