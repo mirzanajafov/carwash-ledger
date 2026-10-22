@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, readWitness, readWitnessHistory, violations, type WitnessView } from '@carwash/invariants'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -75,17 +75,6 @@ function answering(routes: Record<string, string>): Server {
     const body = routes[request.url ?? '']
     response.writeHead(body === undefined ? 404 : 200, { 'content-type': 'application/json' }).end(body ?? '{}')
   })
-}
-
-async function inRollback<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await stack.admin.connect()
-  try {
-    await client.query('BEGIN')
-    return await work(client)
-  } finally {
-    await client.query('ROLLBACK')
-    client.release()
-  }
 }
 
 const cleanup = new AsyncDisposableStack()
@@ -212,7 +201,7 @@ describe('checkpoints and the witness', () => {
     expect(violations([await checkAudit(stack.admin, { ...witness, latest: undefined })])).toEqual([])
 
     const forged = newest.size + 1
-    const unsigned = await inRollback(async (client) => {
+    const unsigned = await inRollback(stack.admin, async (client) => {
       await client.query(
         `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
          VALUES ($1, decode($2, 'hex'), decode($3, 'base64'), $4, now())`,
@@ -222,14 +211,14 @@ describe('checkpoints and the witness', () => {
     })
     expect(unsigned.examples).toEqual([`the copy in audit_checkpoints at size ${forged} does not carry the witness's signature`])
 
-    const truncated = await inRollback(async (client) => {
+    const truncated = await inRollback(stack.admin, async (client) => {
       await client.query('DELETE FROM audit_nodes WHERE level = 0 AND idx >= $1', [newest.size - 1])
       await client.query('DELETE FROM audit_log WHERE seq >= $1', [newest.size - 1])
       return checkAuditIn(client, stale)
     })
     expect(truncated.examples).toContain(`audit_checkpoints holds size ${newest.size} but the log has only ${newest.size - 1} leaves`)
 
-    const renamed = await inRollback(async (client) => {
+    const renamed = await inRollback(stack.admin, async (client) => {
       await client.query(`UPDATE audit_checkpoints SET witness_key = 'k' WHERE size = $1`, [newest.size])
       return checkAuditIn(client, witness)
     })
@@ -237,7 +226,7 @@ describe('checkpoints and the witness', () => {
       `the copy in audit_checkpoints at size ${newest.size} names the witness key k, the witness publishes ${witness.publicKey}`,
     ])
 
-    const rewritten = await inRollback(async (client) => {
+    const rewritten = await inRollback(stack.admin, async (client) => {
       await rewriteHistory(client)
       return checkAuditIn(client, stale)
     })
@@ -251,7 +240,7 @@ describe('checkpoints and the witness', () => {
     const latest = witness.latest
     if (!latest) throw new Error('the witness has signed nothing')
     const signed = latest.size
-    const [alone, witnessed] = await inRollback(async (client) => {
+    const [alone, witnessed] = await inRollback(stack.admin, async (client) => {
       await rewriteHistory(client)
       return [await checkAuditIn(client), await checkAuditIn(client, witness)]
     })
@@ -262,14 +251,7 @@ describe('checkpoints and the witness', () => {
     const forged: WitnessView = { ...witness, latest: { ...latest, root: latest.root.replace(/^./, (d) => (d === '0' ? '1' : '0')) } }
     expect((await checkAudit(stack.admin, forged)).examples).toEqual([`the checkpoint at size ${signed} does not carry the witness's signature`])
 
-    const client = await stack.admin.connect()
-    try {
-      await client.query('BEGIN')
-      await rewriteHistory(client)
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
+    await withTransaction(stack.admin, rewriteHistory)
     const incremental = await runVerify(['--state', stateFile])
     expect(incremental.code).toBe(1)
     expect(incremental.report.examples).toContainEqual({ kind: 'history', size: signed, what: 'chain' })

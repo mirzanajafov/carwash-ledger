@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { createTestDatabase, signCopies, type SignedCopies, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -48,36 +48,18 @@ async function post(count: number): Promise<void> {
       ],
     })
   }
-  const client = await app.connect()
-  try {
-    for (;;) {
-      await client.query('BEGIN')
-      const sequenced = await sequenceBatch(client, 7)
-      await client.query('COMMIT')
-      if (sequenced === 0) break
-    }
-  } finally {
-    client.release()
-  }
+  let sequenced: number
+  do {
+    sequenced = await withTransaction(app, (client) => sequenceBatch(client, 7))
+  } while (sequenced > 0)
 }
 
 function anchor(): WitnessAnchor {
   return { origin: witness.origin, publicKey: witness.publicKey, latest: witness.latest() }
 }
 
-async function inRollback<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await admin.connect()
-  try {
-    await client.query('BEGIN')
-    return await work(client)
-  } finally {
-    await client.query('ROLLBACK')
-    client.release()
-  }
-}
-
 function tampered(tamperClass: TamperClass, seq: number, options: { witness?: boolean; from?: VerifierState } = {}) {
-  return inRollback(async (client) => {
+  return inRollback(admin, async (client) => {
     const what = await tamper(client, tamperClass, seq)
     return { what, report: await verifyLog(client, { witness: options.witness === false ? undefined : witnessed, from: options.from, batch: 6 }) }
   })
@@ -180,20 +162,20 @@ describe('full verification', () => {
   })
 
   it('reports a dropped log record as a gap, a signature it cannot check, and a journal nobody sequenced', async () => {
-    const gap = await inRollback(async (client) => {
+    const gap = await inRollback(admin, async (client) => {
       await client.query('DELETE FROM audit_log WHERE seq = 10')
       return verifyLog(client, { witness: witnessed })
     })
     expect(gap.examples).toContainEqual({ kind: 'gap', seq: 10, missing: 1 })
     expect(gap.state).toBeNull()
 
-    const forged = await inRollback(async (client) => {
+    const forged = await inRollback(admin, async (client) => {
       await client.query('UPDATE audit_checkpoints SET size = 17 WHERE size = 16')
       return verifyLog(client, { witness: witnessed })
     })
     expect(forged.examples).toEqual([{ kind: 'signature', size: 17 }])
 
-    const last = await inRollback(async (client) => {
+    const last = await inRollback(admin, async (client) => {
       const { journal_id: journalId } = firstRow(await client.query<{ journal_id: string }>('DELETE FROM audit_log WHERE seq = 39 RETURNING journal_id::text'))
       return { journalId, report: await verifyLog(client, { witness: witnessed }) }
     })
@@ -203,7 +185,7 @@ describe('full verification', () => {
 
 describe('signed roots', () => {
   it("compares the copies in audit_checkpoints and the witness's latest checkpoint, each once", async () => {
-    const copies = await inRollback(async (client) => {
+    const copies = await inRollback(admin, async (client) => {
       await client.query('DELETE FROM audit_checkpoints WHERE size = 33')
       return verifyLog(client, { witness: witnessed })
     })
@@ -212,7 +194,7 @@ describe('signed roots', () => {
   })
 
   it('still catches a rewrite through the latest checkpoint when the copies are gone, in a wider range', async () => {
-    const report = await inRollback(async (client) => {
+    const report = await inRollback(admin, async (client) => {
       await tamper(client, 2, 20)
       await client.query('DELETE FROM audit_checkpoints')
       return verifyLog(client, { witness: witnessed })
@@ -221,7 +203,7 @@ describe('signed roots', () => {
   })
 
   it('leaves out copies made under another witness key, as if they had been deleted', async () => {
-    const report = await inRollback(async (client) => {
+    const report = await inRollback(admin, async (client) => {
       await client.query(`UPDATE audit_checkpoints SET witness_key = 'another' WHERE size = 16`)
       return verifyLog(client, { witness: witnessed })
     })
@@ -229,7 +211,7 @@ describe('signed roots', () => {
   })
 
   it('never compares a copy rewritten to agree with a rewritten history, because its signature fails', async () => {
-    const report = await inRollback(async (client) => {
+    const report = await inRollback(admin, async (client) => {
       await tamper(client, 2, 20)
       await client.query('UPDATE audit_checkpoints SET root = $1 WHERE size = 33', [Buffer.from(await rootAt(client, 33))])
       return verifyLog(client, { witness: witnessed })
@@ -241,7 +223,7 @@ describe('signed roots', () => {
   })
 
   it('reports signed sizes the log no longer reaches, as after a rollback', async () => {
-    const report = await inRollback(async (client) => {
+    const report = await inRollback(admin, async (client) => {
       await client.query('DELETE FROM audit_log WHERE seq >= 30')
       return verifyLog(client, { witness: witnessed })
     })
@@ -254,9 +236,7 @@ describe('restoring a tamper', () => {
   it('puts every class back so that the full verifier and the stored hashes agree with the witness again', async () => {
     const before = await head(app)
     for (const tamperClass of [1, 2, 3] as const) {
-      const client = await admin.connect()
-      try {
-        await client.query('BEGIN')
+      await inRollback(admin, async (client) => {
         const what = await tamper(client, tamperClass, 20)
         expect((await verifyLog(client, { witness: witnessed })).findings).toBeGreaterThan(0)
         await restore(client, what)
@@ -264,10 +244,7 @@ describe('restoring a tamper', () => {
         expect(report.findings).toBe(0)
         expect(report.state).toMatchObject({ root: toHex(before.root), chain: toHex(before.chain) })
         expect(toHex((await head(client)).root)).toBe(toHex(before.root))
-      } finally {
-        await client.query('ROLLBACK')
-        client.release()
-      }
+      })
     }
   })
 })

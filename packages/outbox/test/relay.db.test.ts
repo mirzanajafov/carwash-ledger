@@ -1,5 +1,5 @@
 import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, type Account } from '@carwash/ledger'
-import { checkout, firstRow, withTransaction } from '@carwash/pg'
+import { checkout, firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
@@ -69,24 +69,18 @@ describe('the outbox', () => {
     const receivable: Account = await createAccount(app, { code: 'ob:receivable', type: 'asset', currency: 'EUR', balanceMode: 'locked' })
     const payable: Account = await createAccount(app, { code: 'ob:payable', type: 'liability', currency: 'EUR', balanceMode: 'locked' })
     const registry = new AccountRegistry(pgAccountLoader(app))
-    const post = async (ref: string, commit: boolean) => {
-      const lease = await checkout(app)
-      try {
-        await lease.client.query('BEGIN')
-        const journalId = await postInTransaction(lease.client, registry, {
+    const post = (ref: string, commit: boolean) =>
+      (commit ? withTransaction : inRollback)(app, async (client) => {
+        const journalId = await postInTransaction(client, registry, {
           externalRef: ref,
           entries: [
             { accountId: receivable.id, amount: 1500n },
             { accountId: payable.id, amount: -1500n },
           ],
         })
-        expect(await writeJournalEvents(lease.client, journalId)).toBe(2)
-        await lease.client.query(commit ? 'COMMIT' : 'ROLLBACK')
+        expect(await writeJournalEvents(client, journalId)).toBe(2)
         return journalId
-      } finally {
-        lease.release()
-      }
-    }
+      })
     await post('ob:rolled-back', false)
     expect(await unpublished()).toBe(0)
     const journalId = await post('ob:kept', true)
@@ -105,14 +99,7 @@ describe('the outbox', () => {
   })
 
   it('writes an event on the client it is given, so rolling back the transaction takes the event back', async () => {
-    const lease = await checkout(app)
-    try {
-      await lease.client.query('BEGIN')
-      await writeEvent(lease.client, { topic: 'payments', key: 'rolled-back', type: 'test.event', payload: {} })
-      await lease.client.query('ROLLBACK')
-    } finally {
-      lease.release()
-    }
+    await inRollback(app, (client) => writeEvent(client, { topic: 'payments', key: 'rolled-back', type: 'test.event', payload: {} }))
     expect(await unpublished()).toBe(0)
   })
 

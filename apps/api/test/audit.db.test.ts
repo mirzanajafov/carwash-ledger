@@ -3,7 +3,7 @@ import { checkAudit, checkAuditIn, checkSequenced, violations } from '@carwash/i
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '@carwash/audit-pg'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inRollback } from '@carwash/pg'
 import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
 
@@ -23,17 +23,12 @@ async function sequenceAll(): Promise<number> {
   }
 }
 
-async function s7(corrupt: (client: pg.PoolClient) => Promise<unknown>): Promise<string[]> {
-  const client = await stack.admin.connect()
-  try {
-    await client.query('BEGIN')
+function s7(corrupt: (client: pg.ClientBase) => Promise<unknown>): Promise<string[]> {
+  return inRollback(stack.admin, async (client) => {
     await client.query('SET LOCAL session_replication_role = replica')
     await corrupt(client)
     return (await checkAuditIn(client)).examples
-  } finally {
-    await client.query('ROLLBACK')
-    client.release()
-  }
+  })
 }
 
 const cleanup = new AsyncDisposableStack()

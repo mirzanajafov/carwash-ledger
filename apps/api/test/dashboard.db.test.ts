@@ -3,7 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { NestFactory } from '@nestjs/core'
 import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
 import { PgCtePoster } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
 import { VerificationJob } from '../src/audit/verification-job.ts'
 import { VerificationRuns } from '../src/audit/verification-runs.ts'
@@ -122,17 +122,11 @@ describe('the live feed', () => {
   })
 
   it('finds the last minute of payments through the primary key, not by scanning them all', async () => {
-    const client = await stack.admin.connect()
-    let plan: string
-    try {
-      await client.query('BEGIN')
+    const plan = await inRollback(stack.admin, async (client) => {
       await client.query('SET LOCAL enable_seqscan = off')
       const { rows } = await client.query<{ 'QUERY PLAN': string }>(`EXPLAIN ${PAYMENTS}`)
-      plan = rows.map((r) => r['QUERY PLAN']).join('\n')
-    } finally {
-      await client.query('ROLLBACK')
-      client.release()
-    }
+      return rows.map((r) => r['QUERY PLAN']).join('\n')
+    })
     expect(plan).toMatch(/Index Scan (using|on) payments_pkey/)
     expect(plan).toMatch(/Index Cond: \(id >= /)
   })
@@ -254,23 +248,14 @@ describe('verification runs', () => {
 
   it('finds a tamper committed before the run, and nothing once it is restored', async () => {
     await sequenceAll()
-    const client = await stack.admin.connect()
-    try {
-      await client.query('BEGIN')
-      const tampered = await tamper(client, 1, 1)
-      await client.query('COMMIT')
-      await request()
-      await withWorker((job) => job.runNext())
-      expect((await latest()).body).toMatchObject({
-        status: 'done',
-        report: { firstSeq: 1, examples: [{ kind: 'leaf', seq: 1, journalId: tampered.journalId }] },
-      })
-      await client.query('BEGIN')
-      await restore(client, tampered)
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
+    const tampered = await withTransaction(stack.admin, (client) => tamper(client, 1, 1))
+    await request()
+    await withWorker((job) => job.runNext())
+    expect((await latest()).body).toMatchObject({
+      status: 'done',
+      report: { firstSeq: 1, examples: [{ kind: 'leaf', seq: 1, journalId: tampered.journalId }] },
+    })
+    await withTransaction(stack.admin, (client) => restore(client, tampered))
     await request()
     await withWorker((job) => job.runNext())
     expect((await latest()).body).toMatchObject({ status: 'done', report: { findings: 0 } })

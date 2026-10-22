@@ -1,4 +1,5 @@
-import { firstRow, withTransaction } from '@carwash/pg'
+import { firstRow } from '@carwash/pg'
+import { withTriggersOff } from '@carwash/testkit'
 import type pg from 'pg'
 
 export const MERCHANTS = 50
@@ -36,13 +37,6 @@ export function grossOf(journal: number): number {
   const gross = PRICES[journal % PRICES.length]
   if (gross === undefined) throw new Error(`no gross amount for journal ${journal}`)
   return gross
-}
-
-export function withTriggersOff(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
-  return withTransaction(admin, async (client) => {
-    await client.query('SET LOCAL session_replication_role = replica')
-    await work(client)
-  })
 }
 
 async function hasEntryCurrency(admin: pg.Pool): Promise<boolean> {

@@ -21,7 +21,7 @@ import {
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { checkout, firstRow, inSnapshot, withTransaction } from '@carwash/pg'
+import { firstRow, inRollback, inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -344,42 +344,29 @@ async function trials(dir: string) {
       for (let i = 0; i < perClass; i++) {
         const inside = random() < 0.9 || covered === size
         const seq = inside ? Math.floor(random() * covered) : covered + Math.floor(random() * (size - covered))
-        const lease = await checkout(lab.admin)
-        const { client } = lease
-        let broken = false
-        try {
-          await client.query('BEGIN')
+        const { withWitness, without, ms } = await inRollback(lab.admin, async (client) => {
           await tamper(client, tamperClass, seq)
           const started = performance.now()
-          const withWitness = await verifyLog(client, { witness: witnessed })
-          const ms = performance.now() - started
-          const without = await verifyLog(client, {})
-          await client.query('ROLLBACK')
-          const trial = {
-            tamperClass,
-            seq,
-            covered: inside,
-            caught: withWitness.findings > 0,
-            named: named(tamperClass, seq, withWitness),
-            caughtWithoutWitness: without.findings > 0,
-            ms: round(ms),
-          }
-          appendJsonLine(join(dir, 'trials.jsonl'), trial)
-          const key = `class ${tamperClass}, ${inside ? 'covered' : 'above the last checkpoint'}`
-          const row = (summary[key] ??= { trials: 0, caught: 0, named: 0, caughtWithoutWitness: 0, ms: [] })
-          row.trials++
-          row.caught += Number(trial.caught)
-          row.named += Number(trial.named)
-          row.caughtWithoutWitness += Number(trial.caughtWithoutWitness)
-          row.ms.push(ms)
-        } catch (error) {
-          await client.query('ROLLBACK').catch(() => {
-            broken = true
-          })
-          throw error
-        } finally {
-          lease.release(broken)
+          const report = await verifyLog(client, { witness: witnessed })
+          return { withWitness: report, ms: performance.now() - started, without: await verifyLog(client, {}) }
+        })
+        const trial = {
+          tamperClass,
+          seq,
+          covered: inside,
+          caught: withWitness.findings > 0,
+          named: named(tamperClass, seq, withWitness),
+          caughtWithoutWitness: without.findings > 0,
+          ms: round(ms),
         }
+        appendJsonLine(join(dir, 'trials.jsonl'), trial)
+        const key = `class ${tamperClass}, ${inside ? 'covered' : 'above the last checkpoint'}`
+        const row = (summary[key] ??= { trials: 0, caught: 0, named: 0, caughtWithoutWitness: 0, ms: [] })
+        row.trials++
+        row.caught += Number(trial.caught)
+        row.named += Number(trial.named)
+        row.caughtWithoutWitness += Number(trial.caughtWithoutWitness)
+        row.ms.push(ms)
       }
       console.log(`class ${tamperClass} done`)
     }

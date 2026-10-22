@@ -1,5 +1,5 @@
 import { checkLedger, violations } from '@carwash/invariants'
-import { firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import fc from 'fast-check'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
@@ -122,27 +122,18 @@ describe('ledger properties', () => {
         const before = await expectedBalances()
         await expect(ledger.poster.post({ externalRef: nextRef('unbalanced'), entries })).rejects.toBeInstanceOf(InvalidJournalError)
 
-        const client = await ledger.app.connect()
-        let state: string | undefined
-        try {
-          state = await sqlState(
-            (async () => {
-              await client.query('BEGIN')
-              const journal = firstRow(
-                await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [nextRef('raw-unbalanced')]),
-              )
-              await client.query(
-                `INSERT INTO entries (journal_id, account_id, amount)
-                 SELECT $1::bigint, t.a, t.m FROM unnest($2::bigint[], $3::bigint[]) AS t(a, m)`,
-                [journal.id, entries.map((e) => e.accountId.toString()), entries.map((e) => e.amount.toString())],
-              )
-              await client.query('COMMIT')
-            })(),
-          )
-        } finally {
-          await client.query('ROLLBACK').catch(() => undefined)
-          client.release()
-        }
+        const state = await sqlState(
+          withTransaction(ledger.app, async (client) => {
+            const journal = firstRow(
+              await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [nextRef('raw-unbalanced')]),
+            )
+            await client.query(
+              `INSERT INTO entries (journal_id, account_id, amount)
+               SELECT $1::bigint, t.a, t.m FROM unnest($2::bigint[], $3::bigint[]) AS t(a, m)`,
+              [journal.id, entries.map((e) => e.accountId.toString()), entries.map((e) => e.amount.toString())],
+            )
+          }),
+        )
         expect(state).toBe('LG002')
         expect(await expectedBalances()).toEqual(before)
       }),

@@ -5,7 +5,7 @@ const ignore = () => undefined
 export type Queryable = pg.Pool | pg.ClientBase
 
 const ISOLATION = {
-  'read committed': 'ISOLATION LEVEL READ COMMITTED',
+  'read committed': '',
   'repeatable read': 'ISOLATION LEVEL REPEATABLE READ',
   serializable: 'ISOLATION LEVEL SERIALIZABLE',
 } as const
@@ -58,15 +58,15 @@ export async function checkout(pool: pg.Pool): Promise<Checkout> {
   }
 }
 
-export async function withTransaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
+async function transaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions, end: 'COMMIT' | 'ROLLBACK'): Promise<T> {
   const lease = await checkout(pool)
   const { client } = lease
   let broken = false
   try {
     await client.query(begin(options))
     const value = await work(client)
-    const commit = await client.query('COMMIT')
-    if (commit.command === 'ROLLBACK') throw new Error('the transaction was rolled back at COMMIT because a statement in it had failed')
+    const ended = await client.query(end)
+    if (ended.command !== end) throw new Error('the transaction was rolled back at COMMIT because a statement in it had failed')
     return value
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {
@@ -76,6 +76,14 @@ export async function withTransaction<T>(pool: pg.Pool, work: (client: pg.Client
   } finally {
     lease.release(broken)
   }
+}
+
+export function withTransaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
+  return transaction(pool, work, options, 'COMMIT')
+}
+
+export function inRollback<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
+  return transaction(pool, work, options, 'ROLLBACK')
 }
 
 export function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {

@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import { checkout, firstRow, withTransaction, type Queryable, type TransactionOptions } from '@carwash/pg'
+import { checkout, createPool, firstRow, inRollback, withTransaction, type Queryable, type TransactionOptions } from '@carwash/pg'
+import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { capture, createModeAccounts, openLedger, type LedgerFixture } from './support.ts'
 
@@ -18,10 +19,6 @@ async function backendPid(db: Queryable): Promise<number> {
   return firstRow(await db.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).pid
 }
 
-async function journalCount(ref: string): Promise<number> {
-  return firstRow(await ledger.app.query<{ n: number }>('SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [ref])).n
-}
-
 describe('a checked-out connection that dies between statements', () => {
   it('is caught instead of crashing the process, dropped from the pool, and the next posting works', async () => {
     const accounts = await createModeAccounts(ledger.app, 'locked')
@@ -38,9 +35,21 @@ describe('a checked-out connection that dies between statements', () => {
   })
 })
 
-describe('a transaction run by withTransaction', () => {
+describe('a transaction run by withTransaction or inRollback', () => {
+  let single: pg.Pool
+
+  beforeAll(async () => {
+    await ledger.admin.query('CREATE TABLE tx_probe (note text NOT NULL)')
+    single = ledger.db.pool('admin', 1)
+  })
+
+  async function notes(): Promise<string[]> {
+    return (await single.query<{ note: string }>('SELECT note FROM tx_probe')).rows.map((row) => row.note)
+  }
+
   it.each<[TransactionOptions, string, string]>([
     [{}, 'read committed', 'off'],
+    [{ isolation: 'read committed' }, 'read committed', 'off'],
     [{ isolation: 'serializable' }, 'serializable', 'off'],
     [{ isolation: 'repeatable read', readOnly: true }, 'repeatable read', 'on'],
     [{ readOnly: true }, 'read committed', 'on'],
@@ -58,34 +67,56 @@ describe('a transaction run by withTransaction', () => {
     expect(settings).toEqual({ isolation, read_only: readOnly })
   })
 
-  it('rolls the work back and passes its error on', async () => {
-    const failing = withTransaction(ledger.app, async (client) => {
-      await client.query("INSERT INTO journals (external_ref) VALUES ('tx:work-failed')")
+  it('commits the work, or rolls it back and passes its error on', async () => {
+    await withTransaction(single, (client) => client.query("INSERT INTO tx_probe VALUES ('committed')"))
+    const failing = withTransaction(single, async (client) => {
+      await client.query("INSERT INTO tx_probe VALUES ('work-failed')")
       throw new Error('the work failed')
     })
     await expect(failing).rejects.toThrow('the work failed')
-    expect(await journalCount('tx:work-failed')).toBe(0)
+    expect(await notes()).toEqual(['committed'])
   })
 
   it('fails when a swallowed statement error made COMMIT roll back, instead of returning as if it committed', async () => {
-    const swallowed = withTransaction(ledger.app, async (client) => {
-      await client.query("INSERT INTO journals (external_ref) VALUES ('tx:swallowed')")
+    const swallowed = withTransaction(single, async (client) => {
+      await client.query("INSERT INTO tx_probe VALUES ('swallowed')")
       await client.query('SELECT 1 / 0').catch(() => undefined)
       return 'written'
     })
     await expect(swallowed).rejects.toThrow('rolled back at COMMIT')
-    expect(await journalCount('tx:swallowed')).toBe(0)
+    expect(await notes()).not.toContain('swallowed')
+  })
+
+  it('rolls back what inRollback did, and still returns the value', async () => {
+    const value = await inRollback(single, async (client) => {
+      await client.query("INSERT INTO tx_probe VALUES ('rolled-back')")
+      return (await client.query('SELECT note FROM tx_probe')).rowCount
+    })
+    expect(value).toBeGreaterThan(0)
+    expect(await notes()).not.toContain('rolled-back')
   })
 
   it('drops a connection that died inside the work, so the next transaction on a pool of one works', async () => {
-    const single = ledger.db.pool('ledger_app', 1)
     let killed = 0
     const dying = withTransaction(single, async (client) => {
       killed = await backendPid(client)
-      await ledger.admin.query('SELECT pg_terminate_backend($1)', [killed])
+      await ledger.admin.query('SELECT pg_terminate_backend($1, 5000)', [killed])
       throw new Error('the connection died')
     })
     await expect(dying).rejects.toThrow('the connection died')
     expect(await withTransaction(single, backendPid)).not.toBe(killed)
+  })
+
+  it('drops a connection whose ROLLBACK failed although it is still open', async () => {
+    const impatient = createPool({ connectionString: ledger.db.url('admin'), max: 1, query_timeout: 200 })
+    cleanup.defer(() => impatient.end())
+    let first = 0
+    const stuck = withTransaction(impatient, async (client) => {
+      first = await backendPid(client)
+      void client.query('SELECT pg_sleep(1)').catch(() => undefined)
+      throw new Error('the work gave up')
+    })
+    await expect(stuck).rejects.toThrow('the work gave up')
+    expect(await withTransaction(impatient, backendPid)).not.toBe(first)
   })
 })

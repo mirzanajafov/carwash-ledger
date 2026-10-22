@@ -3,9 +3,8 @@ import { sequenceBatch, treeSize } from '@carwash/audit-pg'
 import type { WitnessView } from '@carwash/invariants'
 import { createAccount, type Account } from '@carwash/ledger'
 import { firstRow, withTransaction } from '@carwash/pg'
-import { signCopies } from '@carwash/testkit'
+import { signCopies, withTriggersOff } from '@carwash/testkit'
 import type pg from 'pg'
-import { withTriggersOff } from './ledger-seed.ts'
 
 export interface Shape {
   days: number

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { createPool } from '@carwash/pg'
+import { createPool, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import { applyMigration, databaseUrl, migrationNames, quoteIdent, TEMPLATE_DATABASE, withAdmin, type Role } from './template.ts'
 
@@ -40,6 +40,13 @@ export async function createTestDatabase(options: { template?: string; through?:
       await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
     },
   }
+}
+
+export function withTriggersOff<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+  return withTransaction(pool, async (client) => {
+    await client.query('SET LOCAL session_replication_role = replica')
+    return work(client)
+  })
 }
 
 export interface ScratchDatabase {
