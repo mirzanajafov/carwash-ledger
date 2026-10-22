@@ -34,9 +34,9 @@ export function createPool(config: pg.PoolConfig): pg.Pool {
   return pool
 }
 
-export function firstRow<R extends pg.QueryResultRow>(result: pg.QueryResult<R>): R {
+export function firstRow<R extends pg.QueryResultRow>(result: pg.QueryResult<R>, missing = `expected a row from ${result.command}, got none`): R {
   const [row] = result.rows
-  if (row === undefined) throw new Error(`expected a row from ${result.command}, got none`)
+  if (row === undefined) throw new Error(missing)
   return row
 }
 

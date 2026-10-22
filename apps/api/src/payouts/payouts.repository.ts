@@ -1,5 +1,5 @@
 import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
-import { payoutId, type PayoutId } from '../ids.ts'
+import { asPayoutId, type PayoutId } from '../ids.ts'
 import type { Payout, PayoutStatus } from './payout.ts'
 
 interface PayoutRow {
@@ -23,7 +23,7 @@ WHERE o.id = $1`
 function toPayout(row: PayoutRow): Payout {
   if (row.journal_id === null) throw new Error(`payout ${row.id} has no journal`)
   return {
-    id: payoutId(row.id),
+    id: asPayoutId(row.id),
     merchantCode: row.merchant_code,
     merchantAccountId: BigInt(row.merchant_account_id),
     amount: BigInt(row.amount),
@@ -36,11 +36,11 @@ function toPayout(row: PayoutRow): Payout {
 }
 
 export async function loadPayout(db: Queryable, id: PayoutId): Promise<Payout> {
-  return toPayout(firstRow(await db.query<PayoutRow>(PAYOUT, [id])))
+  return toPayout(firstRow(await db.query<PayoutRow>(PAYOUT, [id]), `payout ${id} does not exist`))
 }
 
 export async function lockPayout(client: Transaction, id: PayoutId): Promise<Payout> {
-  return toPayout(firstRow(await client.query<PayoutRow>(`${PAYOUT} FOR UPDATE OF o`, [id])))
+  return toPayout(firstRow(await client.query<PayoutRow>(`${PAYOUT} FOR UPDATE OF o`, [id]), `payout ${id} does not exist`))
 }
 
 export async function lockPayoutBalances(client: Transaction, merchantAccountId: bigint, bankAccountId: bigint): Promise<bigint | undefined> {
@@ -52,8 +52,8 @@ export async function lockPayoutBalances(client: Transaction, merchantAccountId:
   return merchant.length === 0 ? undefined : merchant.reduce((sum, row) => sum + BigInt(row.amount), 0n)
 }
 
-export async function insertPayout(client: Transaction, merchantId: string, amount: bigint, currency: string): Promise<PayoutId> {
-  return payoutId(
+export async function insertPayout(client: Transaction, merchantId: bigint, amount: bigint, currency: string): Promise<PayoutId> {
+  return asPayoutId(
     firstRow(
       await client.query<{ id: string }>('INSERT INTO payouts (merchant_id, amount, currency) VALUES ($1, $2, $3) RETURNING id', [
         merchantId,

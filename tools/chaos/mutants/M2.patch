@@ -1,6 +1,6 @@
 --- a/apps/api/src/payments/attempts.repository.ts
 +++ b/apps/api/src/payments/attempts.repository.ts
-@@ -94,7 +94,7 @@
+@@ -92,7 +92,7 @@
  export async function resolveAttempt(client: Transaction, id: AttemptId, answer: PspAnswer): Promise<boolean> {
    const updated = await client.query(
      `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
@@ -22,7 +22,7 @@
    return moved.rowCount === 1
 --- a/apps/api/src/payments/payment-state.ts
 +++ b/apps/api/src/payments/payment-state.ts
-@@ -12,7 +12,6 @@
+@@ -11,7 +11,6 @@
  
  export function resolveCardAttempt(current: PaymentStatus, kind: CardAttemptKind, status: AnswerStatus, reason: string | null): Resolution {
    const from = EXPECTED_FROM[kind]

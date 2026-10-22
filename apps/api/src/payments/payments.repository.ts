@@ -1,10 +1,10 @@
 import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
-import { paymentId, refundId, type PaymentId, type RefundId } from '../ids.ts'
+import { asPaymentId, asRefundId, type PaymentId, type RefundId } from '../ids.ts'
 import type { CaptureMode, Payment, PaymentStatus, Refund, RefundStatus } from './payment.ts'
 
 export interface NewPayment {
   clientId: string
-  merchantId: string
+  merchantId: bigint
   amount: bigint
   currency: string
   capture: CaptureMode
@@ -59,7 +59,7 @@ const REFUND = 'SELECT id, payment_id, amount::text, status::text, fee_refund::t
 
 function toPayment(row: PaymentRow): Payment {
   return {
-    id: paymentId(row.id),
+    id: asPaymentId(row.id),
     clientId: row.client_id,
     merchantCode: row.merchant_code,
     merchantAccountId: BigInt(row.merchant_account_id),
@@ -79,8 +79,8 @@ function toPayment(row: PaymentRow): Payment {
 
 function toRefund(row: RefundRow): Refund {
   return {
-    id: refundId(row.id),
-    paymentId: paymentId(row.payment_id),
+    id: asRefundId(row.id),
+    paymentId: asPaymentId(row.payment_id),
     amount: BigInt(row.amount),
     status: row.status,
     feeRefund: BigInt(row.fee_refund),
@@ -100,11 +100,11 @@ export async function findPaymentForUpdate(client: Transaction, id: string): Pro
 }
 
 export async function loadPayment(db: Queryable, id: PaymentId): Promise<Payment> {
-  return toPayment(firstRow(await db.query<PaymentRow>(PAYMENT, [id])))
+  return toPayment(firstRow(await db.query<PaymentRow>(PAYMENT, [id]), `payment ${id} does not exist`))
 }
 
 export async function lockPayment(client: Transaction, id: PaymentId): Promise<Payment> {
-  return toPayment(firstRow(await client.query<PaymentRow>(`${PAYMENT} FOR UPDATE OF p`, [id])))
+  return toPayment(firstRow(await client.query<PaymentRow>(`${PAYMENT} FOR UPDATE OF p`, [id]), `payment ${id} does not exist`))
 }
 
 export async function insertPayment(client: Transaction, payment: NewPayment): Promise<PaymentId> {
@@ -113,7 +113,7 @@ export async function insertPayment(client: Transaction, payment: NewPayment): P
      VALUES ($1, $2, $3, $4, $5::capture_mode, $6) RETURNING id`,
     [payment.clientId, payment.merchantId, payment.amount, payment.currency, payment.capture, payment.token],
   )
-  return paymentId(firstRow(inserted).id)
+  return asPaymentId(firstRow(inserted).id)
 }
 
 export async function movePayment(client: Transaction, id: PaymentId, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<boolean> {
@@ -132,7 +132,7 @@ export async function setPaymentRefunded(client: Transaction, id: PaymentId, amo
 }
 
 export async function loadRefund(db: Queryable, id: RefundId): Promise<Refund> {
-  return toRefund(firstRow(await db.query<RefundRow>(REFUND, [id])))
+  return toRefund(firstRow(await db.query<RefundRow>(REFUND, [id]), `refund ${id} does not exist`))
 }
 
 export async function pendingRefundTotal(client: Transaction, paymentId: PaymentId): Promise<bigint> {
@@ -145,11 +145,13 @@ export async function pendingRefundTotal(client: Transaction, paymentId: Payment
 }
 
 export async function insertRefund(client: Transaction, paymentId: PaymentId, amount: bigint): Promise<RefundId> {
-  return refundId(firstRow(await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [paymentId, amount])).id)
+  return asRefundId(
+    firstRow(await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [paymentId, amount])).id,
+  )
 }
 
 export async function lockRefund(client: Transaction, id: RefundId): Promise<void> {
-  await client.query('SELECT 1 FROM refunds WHERE id = $1 FOR UPDATE', [id])
+  firstRow(await client.query('SELECT 1 FROM refunds WHERE id = $1 FOR UPDATE', [id]), `refund ${id} does not exist`)
 }
 
 export async function correctRefundAmount(client: Transaction, id: RefundId, amount: bigint): Promise<void> {

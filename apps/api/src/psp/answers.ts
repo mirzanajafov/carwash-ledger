@@ -1,5 +1,4 @@
-export type AttemptKind = 'authorize' | 'capture' | 'cancel' | 'refund' | 'payout'
-export type AnswerStatus = 'succeeded' | 'declined'
+import type { AnswerStatus, AttemptKind } from '../payments/attempt.ts'
 
 export interface ExpectedAnswer {
   attemptId: string

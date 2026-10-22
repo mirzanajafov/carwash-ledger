@@ -4,14 +4,13 @@ import { firstRow, type Transaction } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
-import { paymentId, payoutId, refundId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
+import { asPaymentId, asPayoutId, asRefundId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
 import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
   clientId: string
   key: string
   leaseId: string
-  recoveryPoint: string
   paymentId: PaymentId | null
   refundId: RefundId | null
   payoutId: PayoutId | null
@@ -45,7 +44,6 @@ export interface ResourceRefs {
 interface KeyRow {
   request_hash: Buffer
   state: 'started' | 'finished'
-  recovery_point: string
   payment_id: string | null
   refund_id: string | null
   payout_id: string | null
@@ -113,10 +111,10 @@ export class IdempotencyService {
       const [created] = inserted.rows
       if (created) {
         const leaseId = created.lease_id
-        return { kind: 'owned', owned: { clientId, key, leaseId, recoveryPoint: 'started', paymentId: null, refundId: null, payoutId: null } }
+        return { kind: 'owned', owned: { clientId, key, leaseId, paymentId: null, refundId: null, payoutId: null } }
       }
       const { rows } = await client.query<KeyRow>(
-        `SELECT request_hash, state, recovery_point, payment_id, refund_id, payout_id, locked_until > now() AS leased,
+        `SELECT request_hash, state, payment_id, refund_id, payout_id, locked_until > now() AS leased,
                 response_status, response_body
          FROM idempotency_keys WHERE client_id = $1 AND key = $2 FOR UPDATE`,
         keyParams,
@@ -142,10 +140,9 @@ export class IdempotencyService {
           clientId,
           key,
           leaseId: firstRow(taken).lease_id,
-          recoveryPoint: row.recovery_point,
-          paymentId: row.payment_id === null ? null : paymentId(row.payment_id),
-          refundId: row.refund_id === null ? null : refundId(row.refund_id),
-          payoutId: row.payout_id === null ? null : payoutId(row.payout_id),
+          paymentId: row.payment_id === null ? null : asPaymentId(row.payment_id),
+          refundId: row.refund_id === null ? null : asRefundId(row.refund_id),
+          payoutId: row.payout_id === null ? null : asPayoutId(row.payout_id),
         },
       }
     })

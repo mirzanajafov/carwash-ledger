@@ -5,7 +5,8 @@ import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
 import { Chart } from '../ledger/chart.service.ts'
-import { findMerchant, insertMerchant, type Merchant } from './merchants.repository.ts'
+import type { Merchant } from './merchant.ts'
+import { findMerchant, insertMerchant } from './merchants.repository.ts'
 
 export interface MerchantInput {
   code: string

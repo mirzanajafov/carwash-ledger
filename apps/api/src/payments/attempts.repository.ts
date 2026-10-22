@@ -1,11 +1,9 @@
 import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
-import { attemptId, paymentId, payoutId, refundId, type AttemptId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
-import type { AttemptKind, PspAnswer } from '../psp/answers.ts'
-import type { Attempt, AttemptStatus, CardAttemptKind } from './attempt.ts'
+import { asAttemptId, asPaymentId, asPayoutId, asRefundId, type AttemptId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
+import type { PspAnswer } from '../psp/answers.ts'
+import type { Attempt, AttemptKind, AttemptParent, AttemptStatus } from './attempt.ts'
 
-export type NewAttempt = { amount: bigint; currency: string } & (
-  { kind: CardAttemptKind; paymentId: PaymentId } | { kind: 'refund'; paymentId: PaymentId; refundId: RefundId } | { kind: 'payout'; payoutId: PayoutId }
-)
+export type NewAttempt = { amount: bigint; currency: string } & AttemptParent
 
 export type AttemptOwner = { paymentId: PaymentId } | { refundId: RefundId } | { payoutId: PayoutId }
 
@@ -26,7 +24,7 @@ const COLUMNS = `id, kind::text, status::text, payment_id, refund_id, payout_id,
 
 function toAttempt(row: AttemptRow): Attempt {
   const fields = {
-    id: attemptId(row.id),
+    id: asAttemptId(row.id),
     status: row.status,
     amount: BigInt(row.amount),
     currency: row.currency,
@@ -35,12 +33,12 @@ function toAttempt(row: AttemptRow): Attempt {
   }
   if (row.kind === 'payout') {
     if (row.payout_id === null) throw new Error(`payout attempt ${row.id} has no payout`)
-    return { ...fields, kind: row.kind, payoutId: payoutId(row.payout_id) }
+    return { ...fields, kind: row.kind, payoutId: asPayoutId(row.payout_id) }
   }
   if (row.payment_id === null) throw new Error(`${row.kind} attempt ${row.id} has no payment`)
-  if (row.kind !== 'refund') return { ...fields, kind: row.kind, paymentId: paymentId(row.payment_id) }
+  if (row.kind !== 'refund') return { ...fields, kind: row.kind, paymentId: asPaymentId(row.payment_id) }
   if (row.refund_id === null) throw new Error(`refund attempt ${row.id} has no refund`)
-  return { ...fields, kind: row.kind, paymentId: paymentId(row.payment_id), refundId: refundId(row.refund_id) }
+  return { ...fields, kind: row.kind, paymentId: asPaymentId(row.payment_id), refundId: asRefundId(row.refund_id) }
 }
 
 function ownerColumn(owner: AttemptOwner): [string, string] {
@@ -55,7 +53,7 @@ export async function findAttempt(db: Queryable, id: string): Promise<Attempt | 
 }
 
 export async function loadAttempt(db: Queryable, id: AttemptId): Promise<Attempt> {
-  return toAttempt(firstRow(await db.query<AttemptRow>(`SELECT ${COLUMNS} FROM attempts WHERE id = $1`, [id])))
+  return toAttempt(firstRow(await db.query<AttemptRow>(`SELECT ${COLUMNS} FROM attempts WHERE id = $1`, [id]), `attempt ${id} does not exist`))
 }
 
 export async function pendingAttempt(db: Queryable, owner: AttemptOwner, kinds: readonly AttemptKind[]): Promise<Attempt | undefined> {
@@ -103,6 +101,7 @@ export async function resolveAttempt(client: Transaction, id: AttemptId, answer:
 export async function attemptOutcome(db: Queryable, id: AttemptId): Promise<{ status: AttemptStatus; pspOperationId: string | null }> {
   const row = firstRow(
     await db.query<{ status: AttemptStatus; psp_operation_id: string | null }>('SELECT status::text, psp_operation_id FROM attempts WHERE id = $1', [id]),
+    `attempt ${id} does not exist`,
   )
   return { status: row.status, pspOperationId: row.psp_operation_id }
 }
