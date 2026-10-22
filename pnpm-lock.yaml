@@ -497,6 +497,9 @@ importers:
 
   packages/testkit:
     dependencies:
+      '@carwash/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@carwash/pg':
         specifier: workspace:*
         version: link:../pg

@@ -6,7 +6,7 @@ import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
 
 type Queryable = pg.ClientBase | pg.Pool
 
-const YIELD_EVERY = 100
+const TURN_MS = 10
 
 export interface SignedRoot {
   size: number
@@ -100,6 +100,7 @@ async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number
 export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Promise<VerifyReport> {
   const started = performance.now()
   const batch = options.batch ?? 5000
+  if (!Number.isSafeInteger(batch) || batch < 1) throw new RangeError(`the batch must be a positive integer, not ${batch}`)
   const limit = options.examples ?? 20
   const examples: Finding[] = []
   let findings = 0
@@ -111,14 +112,15 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if ('seq' in finding && (exact === null || finding.seq < exact)) exact = finding.seq
     if (finding.kind === 'root' && (ranged === null || finding.after < ranged)) ranged = finding.after
   }
-  let steps = 0
   let yielded = 0
-  const pause = async () => {
-    options.signal?.throwIfAborted()
+  let turnAt = performance.now()
+  const handBack = async (work: () => Promise<unknown>) => {
     const at = performance.now()
-    await yieldToLoop()
-    yielded += performance.now() - at
+    await work()
+    turnAt = performance.now()
+    yielded += turnAt - at
   }
+  const turn = () => handBack(() => yieldToLoop(undefined, { signal: options.signal }))
   let read = 0
   const timed = async <T>(work: () => Promise<T>): Promise<T> => {
     const at = performance.now()
@@ -152,7 +154,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (!witness) return []
     const good: SignedRoot[] = []
     for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
-      if (++steps % YIELD_EVERY === 0) await pause()
+      if (performance.now() - turnAt >= TURN_MS) await turn()
       if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
       else report({ kind: 'signature', size: root.size })
     }
@@ -169,7 +171,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     const roots = await signedRoots(from, to)
     let next = 0
     for (const row of rows) {
-      if (++steps % YIELD_EVERY === 0) await pause()
+      if (performance.now() - turnAt >= TURN_MS) await turn()
       const seq = Number(row.seq)
       if (seq !== position) {
         report({ kind: 'gap', seq: position, missing: seq - position })
@@ -198,7 +200,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
       }
     }
     options.signal?.throwIfAborted()
-    await options.onProgress?.(to, size)
+    await handBack(async () => options.onProgress?.(to, size))
   }
   if (position < size) {
     report({ kind: 'gap', seq: position, missing: size - position })

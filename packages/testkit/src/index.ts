@@ -4,6 +4,7 @@ import type pg from 'pg'
 import { applyMigration, databaseUrl, migrationNames, quoteIdent, TEMPLATE_DATABASE, withAdmin, type Role } from './template.ts'
 
 export { ADMIN_URL, applyMigration, databaseUrl, migrationNames, migrationSql, prepareTemplate, TEMPLATE_DATABASE, type Role } from './template.ts'
+export { signCopies, type SignedCopies } from './witness.ts'
 
 export interface TestDatabase {
   readonly name: string

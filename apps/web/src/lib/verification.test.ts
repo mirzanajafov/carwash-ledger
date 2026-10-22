@@ -20,7 +20,7 @@ function finished(startedAt: string, findings: number): VerificationRun {
     ...run('done'),
     started_at: startedAt,
     finished_at: startedAt,
-    report: { size: 40, journals: 40, witnessed: 16, findings, firstSeq: null, examples: [], ms: { read: 1, compute: 1, total: 2 } },
+    report: { size: 40, journals: 40, witnessed: 16, findings, firstSeq: null, examples: [], ms: { read: 1, compute: 1, yielded: 0, total: 2 } },
   }
 }
 
