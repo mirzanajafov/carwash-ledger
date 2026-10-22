@@ -1,8 +1,9 @@
 import { Body, Controller, Post, UseInterceptors } from '@nestjs/common'
 import { AdminOnly } from '../auth/access.guard.ts'
 import { PayoutBody } from '../http/dto.ts'
-import { Keyed, ReplyInterceptor } from '../idempotency/idempotency.interceptor.ts'
 import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
+import { Keyed } from '../idempotency/keyed.decorator.ts'
+import { ReplyInterceptor } from '../idempotency/reply.interceptor.ts'
 import { PayoutsService } from './payouts.service.ts'
 
 @AdminOnly()

@@ -1,8 +1,9 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseInterceptors } from '@nestjs/common'
 import type { AuthedRequest } from '../auth/access.guard.ts'
 import { CaptureBody, CreatePaymentBody, RefundBody } from '../http/dto.ts'
-import { Keyed, ReplyInterceptor } from '../idempotency/idempotency.interceptor.ts'
 import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
+import { Keyed } from '../idempotency/keyed.decorator.ts'
+import { ReplyInterceptor } from '../idempotency/reply.interceptor.ts'
 import { PaymentsService } from './payments.service.ts'
 
 @Controller('v1/payments')

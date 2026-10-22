@@ -1,7 +1,5 @@
 export type Failure = 'invalid' | 'not_found' | 'conflict' | 'unprocessable' | 'upstream' | 'unavailable'
 
-const REFUSALS: ReadonlySet<Failure> = new Set(['invalid', 'not_found', 'conflict', 'unprocessable'])
-
 export class DomainError extends Error {
   readonly failure: Failure
   readonly code: string
@@ -13,10 +11,6 @@ export class DomainError extends Error {
     this.failure = failure
     this.code = code
     this.retryAfterSeconds = retryAfterSeconds
-  }
-
-  get refusal(): boolean {
-    return REFUSALS.has(this.failure)
   }
 }
 

@@ -4,8 +4,7 @@ import { firstRow } from '@carwash/pg'
 import type pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { DomainError, invalidInput } from '../domain-errors.ts'
-import { ApiError } from '../http/api-error.ts'
+import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
 import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
@@ -65,8 +64,10 @@ function leaseLost(): DomainError {
 
 const OWNED = 'client_id = $1 AND key = $2 AND lease_id = $3'
 
+const REFUSALS: ReadonlySet<Failure> = new Set(['invalid', 'not_found', 'conflict', 'unprocessable'])
+
 function refused(error: unknown): boolean {
-  return error instanceof DomainError ? error.refusal : error instanceof ApiError && error.status < 500
+  return error instanceof DomainError && REFUSALS.has(error.failure)
 }
 
 @Injectable()
@@ -89,8 +90,7 @@ export class IdempotencyService {
     try {
       return { ...(await work(begun.owned)), replayed: false }
     } catch (error) {
-      if (refused(error)) await this.abandon(begun.owned)
-      else await this.release(begun.owned).catch(() => undefined)
+      await (refused(error) ? this.abandon(begun.owned) : this.release(begun.owned)).catch(() => undefined)
       throw error
     }
   }
