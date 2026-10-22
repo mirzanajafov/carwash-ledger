@@ -19,13 +19,13 @@ beforeAll(async () => {
   db = await createTestDatabase()
   cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 8)
-  expect(await ensureTopics(kafka, [{ topic, partitions: 4, retentionHours: 1 }])).toEqual([topic])
   cleanup.defer(async () => {
     const admin = kafka.admin()
     await admin.connect()
     await admin.deleteTopics({ topics: [topic] }).catch(() => undefined)
     await admin.disconnect()
   })
+  expect(await ensureTopics(kafka, [{ topic, partitions: 4, retentionHours: 1 }])).toEqual([topic])
 })
 
 afterAll(() => cleanup.disposeAsync())

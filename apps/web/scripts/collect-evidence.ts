@@ -193,7 +193,7 @@ function e5() {
     fallback: r.fallback,
     lines: r.lines,
     falseBreaks: r.falseBreaks,
-    detection: Object.fromEntries(Object.entries(r.faults).map(([name, f]) => [name, round((f.detectionRate ?? 0) * 100)])),
+    detection: Object.fromEntries(Object.entries(r.faults).flatMap(([name, f]) => (f.detectionRate === null ? [] : [[name, round(f.detectionRate * 100)]]))),
     dropped: { right: r.dropped.placedRight, wrong: r.dropped.placedWrong, unplaced: r.dropped.unplaced },
   }))
   return { source: dir, rows }

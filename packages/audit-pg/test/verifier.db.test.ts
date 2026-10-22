@@ -1,6 +1,5 @@
 import { once } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
-import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,8 +30,6 @@ let app: pg.Pool
 let admin: pg.Pool
 let poster: PgCtePoster
 let accounts: Record<'receivable' | 'merchant' | 'fees', bigint>
-let dir: string
-let server: Server
 let witnessed: WitnessAnchor
 let witness: Witness
 let checkpointer: Checkpointer
@@ -104,12 +101,12 @@ beforeAll(async () => {
   }
   accounts = { receivable: await account('receivable', 'asset'), merchant: await account('merchant', 'liability'), fees: await account('fees', 'revenue') }
   poster = new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app)))
-  dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  const dir = mkdtempSync(join(tmpdir(), 'witness-'))
   cleanup.defer(() => {
     rmSync(dir, { recursive: true, force: true })
   })
   witness = new Witness(dir, 'carwash-ledger')
-  server = createWitnessServer(witness, 'token')
+  const server = createWitnessServer(witness, 'token')
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   cleanup.defer(() => {
@@ -312,6 +309,7 @@ describe('incremental verification', () => {
 
 describe('sharing the process', () => {
   const BULK = 10_000
+  const scoped = new AsyncDisposableStack()
   let client: pg.PoolClient
   let stand: SignedCopies
 
@@ -331,7 +329,13 @@ describe('sharing the process', () => {
 
   beforeAll(async () => {
     client = await admin.connect()
+    scoped.defer(() => {
+      client.release()
+    })
     await client.query('BEGIN')
+    scoped.defer(async () => {
+      await client.query('ROLLBACK')
+    })
     await client.query(
       `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
        INSERT INTO entries (journal_id, account_id, amount)
@@ -346,10 +350,7 @@ describe('sharing the process', () => {
     stand = await signCopies(client, posted + BULK, 1)
   })
 
-  afterAll(async () => {
-    await client.query('ROLLBACK')
-    client.release()
-  })
+  afterAll(() => scoped.disposeAsync())
 
   it('lets other work run between journals instead of hashing the whole log in one go', async () => {
     const run = await measured(async () => {

@@ -18,8 +18,6 @@ import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
 
 let stack: Stack
-let dir: string
-let server: Server
 let witnessUrl: string
 let sequencer: Sequencer
 let stateFile: string
@@ -95,11 +93,11 @@ const cleanup = new AsyncDisposableStack()
 beforeAll(async () => {
   stack = await startStack()
   cleanup.defer(() => stack.close())
-  dir = mkdtempSync(join(tmpdir(), 'witness-'))
+  const dir = mkdtempSync(join(tmpdir(), 'witness-'))
   cleanup.defer(() => {
     rmSync(dir, { recursive: true, force: true })
   })
-  server = createWitnessServer(new Witness(dir, 'carwash-ledger'), 'witness-token')
+  const server = createWitnessServer(new Witness(dir, 'carwash-ledger'), 'witness-token')
   witnessUrl = await listen(server)
   cleanup.defer(() => {
     server.close()

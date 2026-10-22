@@ -5,6 +5,16 @@ import type { Evidence } from '../../../scripts/collect-evidence.ts'
 
 const evidence: Evidence = data
 
+type Range = Evidence['e4']['steady'][number]['ackP99']
+
+function median(range: Range, digits: number, unit = ''): string {
+  return range ? `${range.median.toFixed(digits)}${unit}` : '—'
+}
+
+function spread(range: Range): string {
+  return range ? `(${range.min.toFixed(0)}–${range.max.toFixed(0)})` : ''
+}
+
 export const metadata: Metadata = { title: 'Evidence · Car Wash Ledger' }
 
 const MUTANTS: Record<string, string> = {
@@ -199,20 +209,14 @@ export default function EvidencePage() {
                 {evidence.e4.steady.map((r) => (
                   <tr key={r.rate}>
                     <td className="px-4 py-2 font-mono tabular-nums">{r.rate.toLocaleString('en')}</td>
-                    <td className="px-2 py-2 text-right font-mono tabular-nums">{r.ackP50?.median.toFixed(1)} ms</td>
+                    <td className="px-2 py-2 text-right font-mono tabular-nums">{median(r.ackP50, 1, ' ms')}</td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.ackP99?.median.toFixed(1)} ms{' '}
-                      <span className="text-xs text-muted">
-                        ({r.ackP99?.min.toFixed(0)}–{r.ackP99?.max.toFixed(0)})
-                      </span>
+                      {median(r.ackP99, 1, ' ms')} <span className="text-xs text-muted">{spread(r.ackP99)}</span>
                     </td>
                     <td className="px-2 py-2 text-right font-mono tabular-nums">
-                      {r.consumedP99?.median.toFixed(1)} ms{' '}
-                      <span className="text-xs text-muted">
-                        ({r.consumedP99?.min.toFixed(0)}–{r.consumedP99?.max.toFixed(0)})
-                      </span>
+                      {median(r.consumedP99, 1, ' ms')} <span className="text-xs text-muted">{spread(r.consumedP99)}</span>
                     </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums">{r.transactionsPerEvent?.median.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{median(r.transactionsPerEvent, 2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -225,7 +229,10 @@ export default function EvidencePage() {
                   <p className="font-medium">Broker killed, run {i + 1}</p>
                   <p className="text-xs text-muted">
                     Back after {o.kafkaBackS} s, first publish {o.firstPublishS} s later. {o.peakBacklog.toLocaleString('en')} events waited and drained in{' '}
-                    {o.drainS} s at {o.drainPerSecond.toLocaleString('en')} a second, and latency was normal again {o.settledS} s after the broker came back.
+                    {o.drainS} s at {o.drainPerSecond.toLocaleString('en')} a second,{' '}
+                    {o.settledS === null
+                      ? 'and latency had not settled by the end of the run.'
+                      : `and latency was normal again ${o.settledS} s after the broker came back.`}
                   </p>
                 </li>
               ))}

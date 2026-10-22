@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { createServer, type Server } from 'node:http'
+import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { createScratchDatabase, type ScratchDatabase } from '@carwash/testkit'
+import { createScratchDatabase } from '@carwash/testkit'
 import pg from 'pg'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { startPsp, type RunningPsp } from '../src/app.ts'
@@ -19,10 +19,8 @@ interface Received {
   body: string
 }
 
-let db: ScratchDatabase
 let sql: pg.Pool
 let running: RunningPsp
-let receiver: Server
 let received: Received[]
 let answerWith: (body: string) => number
 
@@ -65,12 +63,12 @@ async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 10_000
 const cleanup = new AsyncDisposableStack()
 
 beforeAll(async () => {
-  db = await createScratchDatabase('psp')
+  const db = await createScratchDatabase('psp')
   cleanup.defer(() => db.drop())
   sql = new pg.Pool({ connectionString: db.url, max: 2 })
   cleanup.defer(() => sql.end())
   received = []
-  receiver = createServer(async (request, response) => {
+  const receiver = createServer(async (request, response) => {
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(chunk as Buffer)
     const body = Buffer.concat(chunks).toString('utf8')

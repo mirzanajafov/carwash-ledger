@@ -7,13 +7,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessAnchor } from '@carwash/audit-pg'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
+import { createTestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createTamperServer, TamperService } from '../src/index.ts'
 
-let db: TestDatabase
 let app: pg.Pool
 let admin: pg.Pool
 const cleanup = new AsyncDisposableStack()
@@ -45,7 +44,7 @@ function client(base: string, token = 'tamper-token') {
 }
 
 beforeAll(async () => {
-  db = await createTestDatabase()
+  const db = await createTestDatabase()
   cleanup.defer(() => db.drop())
   app = db.pool('ledger_app', 4)
   admin = db.pool('admin', 2)

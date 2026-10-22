@@ -1,23 +1,22 @@
 import { checkAudit, checkSequenced, violations } from '@carwash/invariants'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { applyMigration, createTestDatabase, migrationNames, type TestDatabase } from '@carwash/testkit'
+import { applyMigration, createTestDatabase, migrationNames } from '@carwash/testkit'
 import { afterAll, assert, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '../src/index.ts'
 
 const NAMES = migrationNames()
 const AUDIT = NAMES.findIndex((name) => name.endsWith('_audit_log'))
 
-let db: TestDatabase | undefined
+const cleanup = new AsyncDisposableStack()
 
-afterAll(async () => {
-  await db?.drop()
-})
+afterAll(() => cleanup.disposeAsync())
 
 describe('a ledger that existed before the audit log', () => {
   it('has its old journals queued by a later migration, so that they are sequenced like any other', async () => {
     const through = NAMES[AUDIT - 1]
     assert(through)
-    db = await createTestDatabase({ through })
+    const db = await createTestDatabase({ through })
+    cleanup.defer(() => db.drop())
     const app = db.pool('ledger_app', 2)
     const spec = { currency: 'EUR', balanceMode: 'derived' as const, shards: 1 }
     const receivable = await createAccount(app, { ...spec, code: 'receivable', type: 'asset' })
