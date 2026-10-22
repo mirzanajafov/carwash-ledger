@@ -19,6 +19,8 @@ const { values } = parseArgs({
 })
 
 const ms = (ns: number) => Math.round(ns / 1e4) / 100
+const batches = values.batches.split(',').map(Number)
+if (!batches.every((batch) => Number.isSafeInteger(batch) && batch > 0)) throw new Error('--batches must be positive integers separated by commas')
 
 await prepareTemplate()
 const dir = createResultsDir(values.out)
@@ -34,7 +36,7 @@ try {
   console.log(`seeded ${values.days} days: ${ledger.journals} journals, ${ledger.checkpoints} copies`)
   const pool = createPool({ connectionString: db.url('ledger_audit'), max: 2, options: '-c jit=off' })
   try {
-    for (const batch of values.batches.split(',').map(Number)) {
+    for (const batch of batches) {
       const runs = []
       for (let r = 0; r < Number(values.repeats); r++) {
         const delay = monitorEventLoopDelay({ resolution: 10 })

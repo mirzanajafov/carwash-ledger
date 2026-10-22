@@ -1,5 +1,5 @@
 import { createPublicKey, verify } from 'node:crypto'
-import { setImmediate } from 'node:timers/promises'
+import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import { chainHash, checkpointBody, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash } from '@carwash/audit'
 import type pg from 'pg'
 import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
@@ -41,6 +41,7 @@ export interface VerifyOptions {
   from?: VerifierState
   batch?: number
   examples?: number
+  signal?: AbortSignal
   onProgress?: (done: number, size: number) => Promise<void>
 }
 
@@ -54,7 +55,7 @@ export interface VerifyReport {
   examples: Finding[]
   firstSeq: number | null
   state: VerifierState | null
-  ms: { read: number; compute: number; total: number }
+  ms: { read: number; compute: number; yielded: number; total: number }
 }
 
 interface Row extends JournalRow {
@@ -111,8 +112,12 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (finding.kind === 'root' && (ranged === null || finding.after < ranged)) ranged = finding.after
   }
   let steps = 0
-  const step = async () => {
-    if (++steps % YIELD_EVERY === 0) await setImmediate()
+  let yielded = 0
+  const pause = async () => {
+    options.signal?.throwIfAborted()
+    const at = performance.now()
+    await yieldToLoop()
+    yielded += performance.now() - at
   }
   let read = 0
   const timed = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -147,7 +152,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     if (!witness) return []
     const good: SignedRoot[] = []
     for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
-      await step()
+      if (++steps % YIELD_EVERY === 0) await pause()
       if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
       else report({ kind: 'signature', size: root.size })
     }
@@ -164,7 +169,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     const roots = await signedRoots(from, to)
     let next = 0
     for (const row of rows) {
-      await step()
+      if (++steps % YIELD_EVERY === 0) await pause()
       const seq = Number(row.seq)
       if (seq !== position) {
         report({ kind: 'gap', seq: position, missing: seq - position })
@@ -192,6 +197,7 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
         else report({ kind: 'root', size: frontier.size, after: lastMatched })
       }
     }
+    options.signal?.throwIfAborted()
     await options.onProgress?.(to, size)
   }
   if (position < size) {
@@ -215,6 +221,6 @@ export async function verifyLog(db: Queryable, options: VerifyOptions = {}): Pro
     examples,
     firstSeq: exact ?? ranged,
     state: broken ? null : { ...frontier.toJSON(), chain: toHex(chain), root: toHex(frontier.root()) },
-    ms: { read: Math.round(read), compute: Math.round(total - read), total: Math.round(total) },
+    ms: { read: Math.round(read), compute: Math.round(total - read - yielded), yielded: Math.round(yielded), total: Math.round(total) },
   }
 }

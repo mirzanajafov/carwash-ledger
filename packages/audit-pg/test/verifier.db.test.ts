@@ -1,10 +1,11 @@
+import { createPrivateKey, sign } from 'node:crypto'
 import { once } from 'node:events'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { toHex } from '@carwash/audit'
+import { checkpointBody, Frontier, toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
@@ -306,14 +307,9 @@ describe('incremental verification', () => {
 })
 
 describe('sharing the process', () => {
-  it('lets other work run between journals instead of hashing a whole batch in one go', async () => {
-    await app.query(
-      `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, 10000) g RETURNING id)
-       INSERT INTO entries (journal_id, account_id, amount)
-       SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
-      [accounts[0], accounts[1]],
-    )
-    await sequence(1000)
+  const BULK = 10_000
+
+  async function longestStall(work: () => Promise<unknown>): Promise<{ longest: number; total: number }> {
     let last = performance.now()
     let longest = 0
     const ticker = setInterval(() => {
@@ -323,10 +319,53 @@ describe('sharing the process', () => {
     }, 1)
     const started = performance.now()
     try {
-      expect(await verifyLog(app, { batch: 5000 })).toMatchObject({ journals: 10075, findings: 0 })
+      await work()
     } finally {
       clearInterval(ticker)
     }
-    expect(longest).toBeLessThan((performance.now() - started) / 3)
+    return { longest, total: performance.now() - started }
+  }
+
+  beforeAll(async () => {
+    await app.query(
+      `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
+       INSERT INTO entries (journal_id, account_id, amount)
+       SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
+      [accounts[0], accounts[1], BULK],
+    )
+    await sequence(1000)
+  })
+
+  it('lets other work run between journals instead of hashing the whole log in one go', async () => {
+    const { longest, total } = await longestStall(async () => {
+      expect(await verifyLog(app, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
+    })
+    expect(longest).toBeLessThan(total / 3)
+  })
+
+  it('lets other work run between signatures too', async () => {
+    const key = createPrivateKey(readFileSync(join(dir, 'witness.key')))
+    const { rows: leaves } = await app.query<{ leaf: Buffer }>('SELECT leaf FROM audit_log ORDER BY seq')
+    const frontier = new Frontier()
+    const copies: { size: number; root: Buffer; signature: Buffer }[] = []
+    for (const { leaf } of leaves) {
+      frontier.push(new Uint8Array(leaf))
+      if (frontier.size <= posted || frontier.size % 4 !== 0) continue
+      const root = toHex(frontier.root())
+      copies.push({
+        size: frontier.size,
+        root: Buffer.from(root, 'hex'),
+        signature: sign(null, Buffer.from(checkpointBody({ size: frontier.size, root }, witness.origin)), key),
+      })
+    }
+    await app.query(
+      `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
+       SELECT size, root, signature, $4, now() FROM unnest($1::bigint[], $2::bytea[], $3::bytea[]) AS c(size, root, signature)`,
+      [copies.map((c) => c.size), copies.map((c) => c.root), copies.map((c) => c.signature), witness.publicKey],
+    )
+    const { longest, total } = await longestStall(async () => {
+      expect(await verifyLog(app, { witness: anchor(), batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: copies.length + 3, findings: 0 })
+    })
+    expect(longest).toBeLessThan(total / 3)
   })
 })
