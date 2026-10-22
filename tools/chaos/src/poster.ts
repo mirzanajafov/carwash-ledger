@@ -3,7 +3,6 @@ import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failp
 import {
   AccountRegistry,
   AlreadyReversedError,
-  createPool,
   DuplicateJournalError,
   InvalidJournalError,
   LedgerRuleError,
@@ -11,6 +10,7 @@ import {
   pgAccountLoader,
   UnknownAccountError,
 } from '@carwash/ledger'
+import { createPool } from '@carwash/pg'
 import { describeError, type FromWorker, type Outcome, type ToWorker } from './messages.ts'
 
 const pool = createPool({

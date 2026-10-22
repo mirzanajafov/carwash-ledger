@@ -151,7 +151,7 @@ export class AnomaliesController {
     return view(await this.#find(id))
   }
 
-  async #adjustPayout(client: pg.PoolClient, payoutId: string, amount: bigint): Promise<void> {
+  async #adjustPayout(client: pg.ClientBase, payoutId: string, amount: bigint): Promise<void> {
     const payout = (await loadPayout(client, payoutId, true))!
     if (payout.status !== 'pending') throw refuse('the payout is no longer pending')
     const difference = BigInt(payout.amount) - amount

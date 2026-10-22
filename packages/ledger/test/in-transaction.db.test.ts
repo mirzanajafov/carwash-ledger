@@ -1,8 +1,8 @@
 import { checkLedger, violations } from '@carwash/invariants'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { firstRow } from '@carwash/pg'
+import { checkout, firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { AccountRegistry, DuplicateJournalError, InvalidJournalError, checkout, pgAccountLoader, postInTransaction } from '../src/index.ts'
+import { AccountRegistry, DuplicateJournalError, InvalidJournalError, pgAccountLoader, postInTransaction } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
 let ledger: LedgerFixture
@@ -57,18 +57,13 @@ describe('postInTransaction', () => {
   it("looks unknown accounts up on the transaction's own connection, so a full pool cannot stall it", async () => {
     const single = ledger.db.pool('ledger_app', 1)
     const cold = new AccountRegistry(pgAccountLoader(single))
-    const lease = await checkout(single)
-    try {
-      await lease.client.query('BEGIN')
-      const posted = postInTransaction(lease.client, cold, { externalRef: 'tx:full-pool', entries: capture(locked, 1, 500n, 15n) })
+    await withTransaction(single, async (client) => {
+      const posted = postInTransaction(client, cold, { externalRef: 'tx:full-pool', entries: capture(locked, 1, 500n, 15n) })
       const stalled = sleep(5000, undefined, { ref: false }).then(() => {
         throw new Error('the posting waited for a second connection from its own full pool')
       })
       expect(await Promise.race([posted, stalled])).toBeGreaterThan(0n)
-      await lease.client.query('COMMIT')
-    } finally {
-      lease.release()
-    }
+    })
     expect(await journalCount('tx:full-pool')).toBe(1)
   })
 
@@ -93,24 +88,17 @@ describe('postInTransaction', () => {
   })
 
   it('reports a second journal with the same reference as a duplicate', async () => {
-    const lease = await checkout(ledger.app)
-    try {
-      await lease.client.query('BEGIN')
-      await expect(postInTransaction(lease.client, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) })).rejects.toBeInstanceOf(
+    await inRollback(ledger.app, async (client) => {
+      await expect(postInTransaction(client, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) })).rejects.toBeInstanceOf(
         DuplicateJournalError,
       )
-      await lease.client.query('ROLLBACK')
-    } finally {
-      lease.release()
-    }
+    })
   })
 
   it('rejects an unbalanced journal before sending anything, so the outer transaction can go on', async () => {
-    const lease = await checkout(ledger.app)
-    try {
-      await lease.client.query('BEGIN')
+    await withTransaction(ledger.app, async (client) => {
       await expect(
-        postInTransaction(lease.client, registry, {
+        postInTransaction(client, registry, {
           externalRef: 'tx:unbalanced',
           entries: [
             { accountId: sharded.receivable.id, amount: 100n },
@@ -118,26 +106,18 @@ describe('postInTransaction', () => {
           ],
         }),
       ).rejects.toBeInstanceOf(InvalidJournalError)
-      await postInTransaction(lease.client, registry, { externalRef: 'tx:after-unbalanced', entries: capture(sharded, 2, 100n, 1n) })
-      await lease.client.query('COMMIT')
-    } finally {
-      lease.release()
-    }
+      await postInTransaction(client, registry, { externalRef: 'tx:after-unbalanced', entries: capture(sharded, 2, 100n, 1n) })
+    })
     expect(await journalCount('tx:unbalanced')).toBe(0)
     expect(await journalCount('tx:after-unbalanced')).toBe(1)
   })
 
   it('refuses accounts that need a serializable transaction of their own', async () => {
     const serializable = await createModeAccounts(ledger.app, 'serializable', { prefix: 'tx:', merchants: 1 })
-    const lease = await checkout(ledger.app)
-    try {
-      await lease.client.query('BEGIN')
-      await expect(
-        postInTransaction(lease.client, registry, { externalRef: 'tx:serializable', entries: capture(serializable, 0, 100n, 1n) }),
-      ).rejects.toBeInstanceOf(InvalidJournalError)
-      await lease.client.query('ROLLBACK')
-    } finally {
-      lease.release()
-    }
+    await inRollback(ledger.app, async (client) => {
+      await expect(postInTransaction(client, registry, { externalRef: 'tx:serializable', entries: capture(serializable, 0, 100n, 1n) })).rejects.toBeInstanceOf(
+        InvalidJournalError,
+      )
+    })
   })
 })

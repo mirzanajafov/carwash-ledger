@@ -1,6 +1,6 @@
 import { createPublicKey, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 import { checkpointBody, Frontier, ORIGIN, toHex } from '@carwash/audit'
-import type pg from 'pg'
+import type { Queryable } from '@carwash/pg'
 
 export interface SignedCopies {
   origin: string
@@ -10,7 +10,7 @@ export interface SignedCopies {
   count: number
 }
 
-export async function signCopies(db: pg.Pool | pg.ClientBase, size: number, leavesPerCheckpoint: number): Promise<SignedCopies> {
+export async function signCopies(db: Queryable, size: number, leavesPerCheckpoint: number): Promise<SignedCopies> {
   const { privateKey } = generateKeyPairSync('ed25519')
   const publicKey = createPublicKey(privateKey)
   const { x } = publicKey.export({ format: 'jwk' })

@@ -1,6 +1,6 @@
 --- a/packages/outbox/src/consumer.ts
 +++ b/packages/outbox/src/consumer.ts
-@@ -36,7 +36,7 @@
+@@ -32,7 +32,7 @@
        [spec.name, unique.map((event) => event.id)],
      )
      const fresh = new Set(rows.map((row) => row.event_id))
@@ -8,4 +8,4 @@
 +    const apply = unique
      if (apply.length > 0) await spec.apply(client, apply)
      failpoint('consumer.before_commit')
-     await client.query('COMMIT')
+     return apply.length

@@ -1,5 +1,3 @@
-import type pg from 'pg'
-
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
 
 export type BalanceMode = 'locked' | 'serializable' | 'derived' | 'sharded'
@@ -36,5 +34,3 @@ export interface Poster {
   readonly name: string
   post(input: JournalInput): Promise<PostedJournal>
 }
-
-export type Queryable = pg.Pool | pg.ClientBase

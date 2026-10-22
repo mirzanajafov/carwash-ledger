@@ -1,5 +1,6 @@
 import { checkAudit, checkSequenced, violations } from '@carwash/invariants'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
+import { withTransaction } from '@carwash/pg'
 import { applyMigration, createTestDatabase, migrationNames } from '@carwash/testkit'
 import { afterAll, assert, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '../src/index.ts'
@@ -41,14 +42,7 @@ describe('a ledger that existed before the audit log', () => {
     const audit = db.pool('ledger_audit', 1)
     const { rows } = await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM audit_queue')
     expect(rows).toEqual([{ n: 6 }])
-    const client = await app.connect()
-    try {
-      await client.query('BEGIN')
-      expect(await sequenceBatch(client, 100)).toBe(6)
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
+    expect(await withTransaction(app, (client) => sequenceBatch(client, 100))).toBe(6)
     expect(violations([await checkAudit(audit), await checkSequenced(audit)])).toEqual([])
   })
 })

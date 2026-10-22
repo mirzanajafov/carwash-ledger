@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Faults, SettlementFault } from './faults.ts'
 
@@ -136,24 +136,11 @@ export class Settlements {
     await this.#pool.query('INSERT INTO settlement_closures (day) VALUES ($1) ON CONFLICT DO NOTHING', [day])
   }
 
-  async file(day: number, currency: string): Promise<SettlementFile | undefined> {
-    const lease = await checkout(this.#pool)
-    const { client } = lease
-    let broken = false
-    try {
-      await client.query('BEGIN')
+  file(day: number, currency: string): Promise<SettlementFile | undefined> {
+    return withTransaction(this.#pool, async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`settlement:${currency}`])
-      const file = (await this.#stored(client, day, currency)) ?? (await this.#generate(client, day, currency))
-      await client.query('COMMIT')
-      return file
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {
-        broken = true
-      })
-      throw error
-    } finally {
-      lease.release(broken)
-    }
+      return (await this.#stored(client, day, currency)) ?? (await this.#generate(client, day, currency))
+    })
   }
 
   async #stored(client: pg.ClientBase, day: number, currency: string): Promise<SettlementFile | undefined> {

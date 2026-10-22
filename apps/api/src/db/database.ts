@@ -1,7 +1,7 @@
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { withRetry } from '@carwash/ledger'
-import { checkout, createPool } from '@carwash/pg'
+import { createPool, withTransaction } from '@carwash/pg'
 import pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 
@@ -20,26 +20,15 @@ export class Database implements OnModuleDestroy {
     })
   }
 
-  async transaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  async transaction<T>(work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
     const { value } = await withRetry(async () => {
-      const lease = await checkout(this.pool)
-      const { client } = lease
-      let broken = false
-      try {
-        await client.query('BEGIN')
-        const result = await work(client)
+      const committed = await withTransaction(this.pool, async (client) => {
+        const written = await work(client)
         failpoint('transaction.before_commit')
-        await client.query('COMMIT')
-        failpoint('transaction.after_commit')
-        return result
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => {
-          broken = true
-        })
-        throw error
-      } finally {
-        lease.release(broken)
-      }
+        return written
+      })
+      failpoint('transaction.after_commit')
+      return committed
     })
     return value
   }

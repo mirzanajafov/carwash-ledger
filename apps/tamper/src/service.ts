@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { restore, tamper, type TamperClass, type Tampered } from '@carwash/audit-pg'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 
 export class Conflict extends Error {
@@ -77,7 +77,7 @@ export class TamperService {
       const witnessedSize = Number(firstRow(await this.#pool.query<{ size: string | null }>('SELECT max(size)::text AS size FROM audit_checkpoints')).size ?? 0)
       if (witnessedSize === 0) throw new Conflict('nothing_witnessed', 'the witness has not signed a checkpoint yet')
       const seq = Math.floor(this.#random() * witnessedSize)
-      const done = await this.#transaction((client) => tamper(client, tamperClass, seq))
+      const done = await withTransaction(this.#pool, (client) => tamper(client, tamperClass, seq))
       const saved = { ...done, witnessedSize, at: new Date().toISOString() }
       this.#save(saved)
       this.#schedule()
@@ -89,7 +89,7 @@ export class TamperService {
     return this.#serial(async () => {
       const current = this.#current
       if (!current) throw new Conflict('nothing_to_restore', 'nothing is tampered with')
-      await this.#transaction((client) => restore(client, current))
+      await withTransaction(this.#pool, (client) => restore(client, current))
       const restored = this.#view(current)
       this.#save(undefined)
       this.#schedule()
@@ -101,24 +101,6 @@ export class TamperService {
     const result = this.#queue.then(work)
     this.#queue = result.catch(() => undefined)
     return result
-  }
-
-  async #transaction<T>(work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
-    const lease = await checkout(this.#pool)
-    let broken = false
-    try {
-      await lease.client.query('BEGIN')
-      const value = await work(lease.client)
-      await lease.client.query('COMMIT')
-      return value
-    } catch (error) {
-      await lease.client.query('ROLLBACK').catch(() => {
-        broken = true
-      })
-      throw error
-    } finally {
-      lease.release(broken)
-    }
   }
 
   #save(current: Saved | undefined): void {

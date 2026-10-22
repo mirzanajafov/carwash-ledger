@@ -1,4 +1,4 @@
-import type pg from 'pg'
+import type { Queryable } from '@carwash/pg'
 import { ApiError } from '../http/api-error.ts'
 import type { Final } from '../idempotency/idempotency.service.ts'
 import type { AttemptKind } from '../psp/answers.ts'
@@ -72,17 +72,17 @@ WHERE o.id = $1`
 
 export const ATTEMPT_COLUMNS = `id, kind::text, status::text, payment_id, refund_id, payout_id, amount::text, currency, psp_operation_id, decline_reason`
 
-export async function loadPayment(db: pg.ClientBase | pg.Pool, id: string, lock = false): Promise<PaymentRecord | undefined> {
+export async function loadPayment(db: Queryable, id: string, lock = false): Promise<PaymentRecord | undefined> {
   const { rows } = await db.query<PaymentRecord>(`${PAYMENT}${lock ? ' FOR UPDATE OF p' : ''}`, [id])
   return rows[0]
 }
 
-export async function loadPayout(db: pg.ClientBase | pg.Pool, id: string, lock = false): Promise<PayoutRecord | undefined> {
+export async function loadPayout(db: Queryable, id: string, lock = false): Promise<PayoutRecord | undefined> {
   const { rows } = await db.query<PayoutRecord>(`${PAYOUT}${lock ? ' FOR UPDATE OF o' : ''}`, [id])
   return rows[0]
 }
 
-export async function loadRefund(db: pg.ClientBase | pg.Pool, id: string): Promise<RefundRecord | undefined> {
+export async function loadRefund(db: Queryable, id: string): Promise<RefundRecord | undefined> {
   const { rows } = await db.query<RefundRecord>(
     `SELECT id, payment_id, amount::text, status::text, fee_refund::text, failure_reason, created_at FROM refunds WHERE id = $1`,
     [id],
@@ -90,12 +90,12 @@ export async function loadRefund(db: pg.ClientBase | pg.Pool, id: string): Promi
   return rows[0]
 }
 
-export async function loadAttempt(db: pg.ClientBase | pg.Pool, id: string): Promise<AttemptRecord | undefined> {
+export async function loadAttempt(db: Queryable, id: string): Promise<AttemptRecord | undefined> {
   const { rows } = await db.query<AttemptRecord>(`SELECT ${ATTEMPT_COLUMNS} FROM attempts WHERE id = $1`, [id])
   return rows[0]
 }
 
-export async function pendingAttempt(db: pg.ClientBase | pg.Pool, column: 'payment_id' | 'refund_id' | 'payout_id', id: string, kinds: readonly AttemptKind[]) {
+export async function pendingAttempt(db: Queryable, column: 'payment_id' | 'refund_id' | 'payout_id', id: string, kinds: readonly AttemptKind[]) {
   const { rows } = await db.query<AttemptRecord>(
     `SELECT ${ATTEMPT_COLUMNS} FROM attempts WHERE ${column} = $1 AND kind = ANY($2::attempt_kind[]) AND status = 'pending' ORDER BY created_at LIMIT 1`,
     [id, kinds],

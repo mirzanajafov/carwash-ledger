@@ -25,7 +25,3 @@ export function expectApplied(applied: number, plan: JournalPlan): void {
     throw new LedgerRuleError('LG010', `expected ${plan.deltas.length} balance rows, updated ${applied}`)
   }
 }
-
-export function beginStatement(plan: JournalPlan): string {
-  return plan.isolation === 'serializable' ? 'BEGIN ISOLATION LEVEL SERIALIZABLE' : 'BEGIN'
-}

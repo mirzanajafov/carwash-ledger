@@ -1,7 +1,8 @@
 import { writeSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
-import { createPool, takeSnapshots } from '@carwash/ledger'
+import { takeSnapshots } from '@carwash/ledger'
+import { createPool } from '@carwash/pg'
 import { describeError, type FromWorker, type ToWorker } from './messages.ts'
 
 const pool = createPool({

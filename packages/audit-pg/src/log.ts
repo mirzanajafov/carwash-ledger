@@ -12,12 +12,10 @@ import {
   type Node,
   type SubtreeSource,
 } from '@carwash/audit'
-import { firstRow } from '@carwash/pg'
+import { firstRow, type Queryable } from '@carwash/pg'
 import type pg from 'pg'
 
 export const SEQUENCER_LOCK = 7_240_300
-
-type Queryable = pg.ClientBase | pg.Pool
 
 export interface Head {
   size: number

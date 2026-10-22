@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util'
-import { backfillEntryCurrency, createPool } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
+import { backfillEntryCurrency } from '@carwash/ledger'
+import { createPool, firstRow } from '@carwash/pg'
 
 const { values } = parseArgs({
   options: {

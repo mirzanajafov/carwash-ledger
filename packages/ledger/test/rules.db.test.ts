@@ -1,4 +1,4 @@
-import { firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { AlreadyReversedError, DuplicateJournalError, InvalidJournalError, readBalance, reversalOf } from '../src/index.ts'
@@ -8,25 +8,11 @@ let ledger: LedgerFixture
 let eur: ModeAccounts
 let usd: ModeAccounts
 
-async function inTransaction(pool: pg.Pool, run: (client: pg.PoolClient) => Promise<void>): Promise<void> {
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    await run(client)
-    await client.query('COMMIT')
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined)
-    throw error
-  } finally {
-    client.release()
-  }
-}
-
-async function insertJournal(client: pg.PoolClient, ref: string): Promise<string> {
+async function insertJournal(client: pg.ClientBase, ref: string): Promise<string> {
   return firstRow(await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [ref])).id
 }
 
-async function insertEntry(client: pg.PoolClient, journalId: string, accountId: bigint, amount: bigint): Promise<void> {
+async function insertEntry(client: pg.ClientBase, journalId: string, accountId: bigint, amount: bigint): Promise<void> {
   await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [journalId, accountId.toString(), amount.toString()])
 }
 
@@ -44,7 +30,7 @@ afterAll(() => cleanup.disposeAsync())
 describe('what the database enforces', () => {
   it('rejects an unbalanced journal at commit', async () => {
     const state = await sqlState(
-      inTransaction(ledger.app, async (c) => {
+      withTransaction(ledger.app, async (c) => {
         const id = await insertJournal(c, 'raw-unbalanced')
         await insertEntry(c, id, eur.receivable.id, 100n)
         await insertEntry(c, id, eur.fees.id, -99n)
@@ -55,7 +41,7 @@ describe('what the database enforces', () => {
 
   it('rejects a journal balanced across currencies but not within each', async () => {
     const state = await sqlState(
-      inTransaction(ledger.app, async (c) => {
+      withTransaction(ledger.app, async (c) => {
         const id = await insertJournal(c, 'raw-cross-currency')
         await insertEntry(c, id, eur.receivable.id, 100n)
         await insertEntry(c, id, usd.receivable.id, -100n)
@@ -66,7 +52,7 @@ describe('what the database enforces', () => {
 
   it('rejects a journal without entries', async () => {
     const state = await sqlState(
-      inTransaction(ledger.app, async (c) => {
+      withTransaction(ledger.app, async (c) => {
         await insertJournal(c, 'raw-empty')
       }),
     )
@@ -76,7 +62,7 @@ describe('what the database enforces', () => {
   it('rejects entries added to a journal from an earlier transaction', async () => {
     const posted = await ledger.poster.post({ externalRef: 'closed', entries: capture(eur, 0, 1000n, 30n) })
     const state = await sqlState(
-      inTransaction(ledger.app, async (c) => {
+      withTransaction(ledger.app, async (c) => {
         await insertEntry(c, posted.id.toString(), eur.receivable.id, 5n)
         await insertEntry(c, posted.id.toString(), eur.fees.id, -5n)
       }),
@@ -85,7 +71,7 @@ describe('what the database enforces', () => {
   })
 
   it('stamps the transaction id itself, whatever the client sends', async () => {
-    await inTransaction(ledger.app, async (c) => {
+    await withTransaction(ledger.app, async (c) => {
       const { id, ours } = firstRow(
         await c.query<{ id: string; ours: boolean }>(
           `INSERT INTO journals (external_ref, created_xid) VALUES ('forged', '3'::xid8)

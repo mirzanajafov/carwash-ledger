@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto'
 import { sequenceBatch, treeSize } from '@carwash/audit-pg'
 import type { WitnessView } from '@carwash/invariants'
 import { createAccount, type Account } from '@carwash/ledger'
-import { checkout, firstRow } from '@carwash/pg'
-import { signCopies } from '@carwash/testkit'
+import { firstRow, withTransaction } from '@carwash/pg'
+import { signCopies, withTriggersOff } from '@carwash/testkit'
 import type pg from 'pg'
 
 export interface Shape {
@@ -154,30 +154,6 @@ const BALANCES = `
   FROM (SELECT account_id, sum(amount) AS total FROM entries GROUP BY account_id) t
   WHERE b.account_id = t.account_id AND b.shard = 0`
 
-async function inTransaction(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
-  const lease = await checkout(pool)
-  let broken = false
-  try {
-    await lease.client.query('BEGIN')
-    await work(lease.client)
-    await lease.client.query('COMMIT')
-  } catch (error) {
-    await lease.client.query('ROLLBACK').catch(() => {
-      broken = true
-    })
-    throw error
-  } finally {
-    lease.release(broken)
-  }
-}
-
-function withTriggersOff(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
-  return inTransaction(admin, async (client) => {
-    await client.query('SET LOCAL session_replication_role = replica')
-    await work(client)
-  })
-}
-
 interface Chart {
   receivable: Account
   fees: Account
@@ -199,13 +175,10 @@ async function chart(app: pg.Pool): Promise<Chart> {
 }
 
 async function sequenceEverything(app: pg.Pool): Promise<void> {
-  for (;;) {
-    let sequenced = 0
-    await inTransaction(app, async (client) => {
-      sequenced = await sequenceBatch(client, 1000)
-    })
-    if (sequenced === 0) return
-  }
+  let sequenced: number
+  do {
+    sequenced = await withTransaction(app, (client) => sequenceBatch(client, 1000))
+  } while (sequenced > 0)
 }
 
 async function addPayments(client: pg.ClientBase, traffic: Traffic, count: number, start: Date): Promise<void> {

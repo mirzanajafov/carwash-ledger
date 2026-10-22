@@ -1,8 +1,8 @@
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction, type Queryable } from '@carwash/pg'
 import type pg from 'pg'
 import { UnknownAccountError } from './errors.ts'
 import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS, SELECT_ACCOUNTS_BY_CODE } from './sql.ts'
-import type { Account, AccountType, BalanceMode, Queryable } from './types.ts'
+import type { Account, AccountType, BalanceMode } from './types.ts'
 
 export type AccountLoader = (ids: readonly bigint[]) => Promise<Account[]>
 
@@ -86,18 +86,6 @@ export async function insertAccount(client: pg.ClientBase, spec: NewAccount): Pr
   return { id, code: spec.code, type: spec.type, currency: spec.currency, balanceMode: spec.balanceMode, shards }
 }
 
-export async function createAccount(pool: pg.Pool, spec: NewAccount): Promise<Account> {
-  const lease = await checkout(pool)
-  const { client } = lease
-  try {
-    await client.query('BEGIN')
-    const account = await insertAccount(client, spec)
-    await client.query('COMMIT')
-    return account
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined)
-    throw error
-  } finally {
-    lease.release()
-  }
+export function createAccount(pool: pg.Pool, spec: NewAccount): Promise<Account> {
+  return withTransaction(pool, (client) => insertAccount(client, spec))
 }

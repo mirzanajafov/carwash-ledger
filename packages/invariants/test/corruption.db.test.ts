@@ -1,5 +1,5 @@
-import { firstRow } from '@carwash/pg'
-import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
+import { firstRow, withTransaction } from '@carwash/pg'
+import { createTestDatabase, withTriggersOff, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkLedger, type InvariantId } from '../src/index.ts'
@@ -24,16 +24,10 @@ async function counts(): Promise<Record<InvariantId, number>> {
   return Object.fromEntries(results.map((r) => [r.id, r.count])) as Record<InvariantId, number>
 }
 
-async function asSuperuser(...statements: string[]): Promise<void> {
-  const client = await fixture.admin.connect()
-  try {
-    await client.query('BEGIN')
-    await client.query('SET LOCAL session_replication_role = replica')
+function asSuperuser(...statements: string[]): Promise<void> {
+  return withTriggersOff(fixture.admin, async (client) => {
     for (const sql of statements) await client.query(sql)
-    await client.query('COMMIT')
-  } finally {
-    client.release()
-  }
+  })
 }
 
 function id(account: Account): string {
@@ -56,9 +50,7 @@ async function createAccount(app: pg.Pool, code: string, type: string, mode: Mod
 }
 
 async function postCapture(app: pg.Pool, ref: string, set: { receivable: Account; fees: Account; merchant: Account }, mode: Mode) {
-  const client = await app.connect()
-  try {
-    await client.query('BEGIN')
+  await withTransaction(app, async (client) => {
     const journal = firstRow(await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [ref]))
     const moves: [Account, number][] = [
       [set.receivable, 1000],
@@ -75,10 +67,7 @@ async function postCapture(app: pg.Pool, ref: string, set: { receivable: Account
         [account.id.toString(), amount],
       )
     }
-    await client.query('COMMIT')
-  } finally {
-    client.release()
-  }
+  })
 }
 
 beforeEach(async () => {

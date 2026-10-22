@@ -16,6 +16,7 @@ import {
   type PaymentBase,
 } from '@carwash/invariants'
 import { firstRow, inSnapshot } from '@carwash/pg'
+import { inRollbackWithTriggersOff } from '@carwash/testkit'
 import { NO_FAULTS } from '@carwash/psp'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
@@ -48,51 +49,39 @@ function counts(results: readonly InvariantResult[]): Partial<Record<InvariantId
   return Object.fromEntries(results.map((r) => [r.id, r.count]))
 }
 
-async function corrupted(
+function corrupted(
   pool: pg.Pool,
-  corrupt: (client: pg.PoolClient) => Promise<unknown>,
-  check: (client: pg.PoolClient) => Promise<InvariantResult[]>,
+  corrupt: (client: pg.ClientBase) => Promise<unknown>,
+  check: (client: pg.ClientBase) => Promise<InvariantResult[]>,
 ): Promise<Partial<Record<InvariantId, number>>> {
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    await client.query('SET LOCAL session_replication_role = replica')
+  return inRollbackWithTriggersOff(pool, async (client) => {
     await corrupt(client)
     return counts(await check(client))
-  } finally {
-    await client.query('ROLLBACK')
-    client.release()
-  }
+  })
 }
 
-function inLedger(corrupt: (client: pg.PoolClient) => Promise<unknown>, since?: PaymentBase) {
+function inLedger(corrupt: (client: pg.ClientBase) => Promise<unknown>, since?: PaymentBase) {
   return corrupted(stack.admin, corrupt, async (client) => [...(await checkPaymentsIn(client, { since })).results, await checkSettledIn(client)])
 }
 
-function inEvents(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
+function inEvents(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
   return corrupted(stack.admin, corrupt, checkEventsIn)
 }
 
-function inSettlement(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
+function inSettlement(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
   return corrupted(stack.admin, corrupt, async (client) => [
     await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay }),
   ])
 }
 
-async function settlementExamples(corrupt: (client: pg.PoolClient) => Promise<unknown>): Promise<string[]> {
-  const client = await stack.admin.connect()
-  try {
-    await client.query('BEGIN')
-    await client.query('SET LOCAL session_replication_role = replica')
+function settlementExamples(corrupt: (client: pg.ClientBase) => Promise<unknown>): Promise<string[]> {
+  return inRollbackWithTriggersOff(stack.admin, async (client) => {
     await corrupt(client)
     return (await checkSettlementIn(client, { daySeconds: 86_400, feeBps: 120, feeFixed: 8, completeThrough: settledDay })).examples
-  } finally {
-    await client.query('ROLLBACK')
-    client.release()
-  }
+  })
 }
 
-function atPsp(corrupt: (client: pg.PoolClient) => Promise<unknown>) {
+function atPsp(corrupt: (client: pg.ClientBase) => Promise<unknown>) {
   return corrupted(stack.pspSql, corrupt, async (client) => [await checkAgainstPsp(stack.admin, client)])
 }
 
@@ -138,7 +127,7 @@ const corruptions = {
       ],
       -1,
     ),
-} satisfies Record<string, (client: pg.PoolClient) => Promise<unknown>>
+} satisfies Record<string, (client: pg.ClientBase) => Promise<unknown>>
 
 async function postJournal(client: pg.ClientBase, ref: string, entries: [string, number][], id?: number): Promise<string> {
   const { id: journalId } = firstRow(
@@ -266,7 +255,7 @@ describe('the event invariants', () => {
   })
 
   it('catch a second receipt, a missing one, a gap in the numbers, a receipt for nothing, and a statement off by a cent (L3)', async () => {
-    const issue = (paymentId: string) => (client: pg.PoolClient) =>
+    const issue = (paymentId: string) => (client: pg.ClientBase) =>
       client.query(
         `WITH counter AS (UPDATE receipt_counters SET last_number = last_number + 1 WHERE merchant = 'wash_1' RETURNING last_number)
          INSERT INTO receipts (merchant, number, payment_id, amount, fee, currency, captured_at, event_id)

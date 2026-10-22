@@ -21,7 +21,7 @@ import {
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inRollback, inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -72,7 +72,7 @@ function round(x: number): number {
   return Math.round(x * 10) / 10
 }
 
-function timed(client: pg.PoolClient, clock: Timing): pg.ClientBase {
+function timed(client: pg.ClientBase, clock: Timing): pg.ClientBase {
   return new Proxy(client, {
     get(target, property, receiver) {
       if (property === 'query') {
@@ -137,15 +137,7 @@ async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoin
   let nextCheckpoint = Math.floor((await treeSize(lab.app)) / checkpointEvery + 1) * checkpointEvery
   const started = performance.now()
   for (;;) {
-    const client = await lab.app.connect()
-    let sequenced: number
-    try {
-      await client.query('BEGIN')
-      sequenced = await sequenceBatch(timed(client, clock), batch)
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
+    const sequenced = await withTransaction(lab.app, (client) => sequenceBatch(timed(client, clock), batch))
     journals += sequenced
     const size = await treeSize(lab.app)
     const closing = closeWithCheckpoint && sequenced === 0 && size > 0 && lab.witness.latest()?.size !== size
@@ -172,16 +164,9 @@ async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoin
 
 async function verifyInSnapshot(lab: Lab, from?: VerifierState): Promise<VerifyReport> {
   const witness = anchor(lab)
-  const client = await lab.audit.connect()
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-    const report = await verifyLog(client, { witness, from })
-    await client.query('COMMIT')
-    if (report.findings > 0) throw new Error(`the verifier found ${report.findings} problems in an honest log: ${JSON.stringify(report.examples)}`)
-    return report
-  } finally {
-    client.release()
-  }
+  const report = await inSnapshot(lab.audit, (client) => verifyLog(client, { witness, from }))
+  if (report.findings > 0) throw new Error(`the verifier found ${report.findings} problems in an honest log: ${JSON.stringify(report.examples)}`)
+  return report
 }
 
 async function sizes(lab: Lab) {
@@ -280,17 +265,10 @@ async function lag(dir: string) {
   const sequencer = (async () => {
     let lastCheckpoint = performance.now()
     while (!stop.signal.aborted) {
-      for (;;) {
-        const client = await lab.app.connect()
-        try {
-          await client.query('BEGIN')
-          const n = await sequenceBatch(client, 1000)
-          await client.query('COMMIT')
-          if (n < 1000) break
-        } finally {
-          client.release()
-        }
-      }
+      let sequenced: number
+      do {
+        sequenced = await withTransaction(lab.app, (client) => sequenceBatch(client, 1000))
+      } while (sequenced === 1000)
       if (performance.now() - lastCheckpoint >= 10_000) {
         lastCheckpoint = performance.now()
         const outcome = await lab.checkpointer.run()
@@ -366,38 +344,31 @@ async function trials(dir: string) {
       for (let i = 0; i < perClass; i++) {
         const inside = random() < 0.9 || covered === size
         const seq = inside ? Math.floor(random() * covered) : covered + Math.floor(random() * (size - covered))
-        const client = await lab.admin.connect()
-        try {
-          await client.query('BEGIN')
+        const { withWitness, without, ms } = await inRollback(lab.admin, async (client) => {
           await tamper(client, tamperClass, seq)
           const started = performance.now()
           const withWitness = await verifyLog(client, { witness: witnessed })
           const ms = performance.now() - started
           const without = await verifyLog(client, {})
-          await client.query('ROLLBACK')
-          const trial = {
-            tamperClass,
-            seq,
-            covered: inside,
-            caught: withWitness.findings > 0,
-            named: named(tamperClass, seq, withWitness),
-            caughtWithoutWitness: without.findings > 0,
-            ms: round(ms),
-          }
-          appendJsonLine(join(dir, 'trials.jsonl'), trial)
-          const key = `class ${tamperClass}, ${inside ? 'covered' : 'above the last checkpoint'}`
-          const row = (summary[key] ??= { trials: 0, caught: 0, named: 0, caughtWithoutWitness: 0, ms: [] })
-          row.trials++
-          row.caught += Number(trial.caught)
-          row.named += Number(trial.named)
-          row.caughtWithoutWitness += Number(trial.caughtWithoutWitness)
-          row.ms.push(ms)
-        } catch (error) {
-          await client.query('ROLLBACK').catch(() => undefined)
-          throw error
-        } finally {
-          client.release()
+          return { withWitness, ms, without }
+        })
+        const trial = {
+          tamperClass,
+          seq,
+          covered: inside,
+          caught: withWitness.findings > 0,
+          named: named(tamperClass, seq, withWitness),
+          caughtWithoutWitness: without.findings > 0,
+          ms: round(ms),
         }
+        appendJsonLine(join(dir, 'trials.jsonl'), trial)
+        const key = `class ${tamperClass}, ${inside ? 'covered' : 'above the last checkpoint'}`
+        const row = (summary[key] ??= { trials: 0, caught: 0, named: 0, caughtWithoutWitness: 0, ms: [] })
+        row.trials++
+        row.caught += Number(trial.caught)
+        row.named += Number(trial.named)
+        row.caughtWithoutWitness += Number(trial.caughtWithoutWitness)
+        row.ms.push(ms)
       }
       console.log(`class ${tamperClass} done`)
     }

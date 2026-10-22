@@ -1,5 +1,5 @@
 import { checkLedger, violations } from '@carwash/invariants'
-import { firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import { applyMigration, createTestDatabase, migrationNames, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterEach, assert, describe, expect, it } from 'vitest'
@@ -74,19 +74,18 @@ describe('the entries currency change', () => {
     expect(rows).toHaveLength(18)
     expect(rows.every((r) => r.currency === r.account)).toBe(true)
     expect(await sqlState(owner.query(`UPDATE entries SET currency = 'GBP' WHERE id = (SELECT min(id) FROM entries)`))).toBe('LG001')
-    const client = await app.connect()
-    try {
-      await client.query('BEGIN')
+    let inserted = false
+    const mixed = withTransaction(app, async (client) => {
       const journal = firstRow(await client.query<{ id: string }>(`INSERT INTO journals (external_ref) VALUES ('short') RETURNING id::text`))
       const [eur, usd] = (
         await client.query<{ id: string }>(`SELECT id::text FROM accounts WHERE code IN ('receivable:EUR', 'merchant:USD') ORDER BY code DESC`)
       ).rows
       assert(eur && usd)
       await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, 100), ($1, $3, -100)', [journal.id, eur.id, usd.id])
-      expect(await sqlState(client.query('COMMIT'))).toBe('LG002')
-    } finally {
-      client.release()
-    }
+      inserted = true
+    })
+    expect(await sqlState(mixed)).toBe('LG002')
+    expect(inserted).toBe(true)
     expect(violations(await checkLedger(db.pool('ledger_audit', 1)))).toEqual([])
   })
 
