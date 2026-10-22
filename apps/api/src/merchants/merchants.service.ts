@@ -1,24 +1,16 @@
 import { Injectable } from '@nestjs/common'
 import { insertAccount, readBalance, sqlStateOf } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { ApiError, notFound } from '../http/api-error.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
 import { Chart } from '../ledger/chart.service.ts'
+import { findMerchant, insertMerchant, type MerchantRow } from './merchants.repository.ts'
 
 export interface MerchantInput {
   code: string
   name: string
   currency: string
-}
-
-export interface MerchantRow {
-  id: string
-  code: string
-  name: string
-  currency: string
-  account_id: string
 }
 
 @Injectable()
@@ -43,11 +35,8 @@ export class MerchantsService {
           currency: input.currency,
           balanceMode: 'locked',
         })
-        const inserted = await client.query<MerchantRow>(
-          'INSERT INTO merchants (code, name, currency, account_id) VALUES ($1, $2, $3, $4) RETURNING id::text, code, name, currency, account_id::text',
-          [input.code, input.name, input.currency, account.id],
-        )
-        return this.#idempotency.finish(client, owned, { status: 200, body: this.#view(firstRow(inserted), 0n) })
+        const merchant = await insertMerchant(client, { code: input.code, name: input.name, currency: input.currency, accountId: account.id })
+        return this.#idempotency.finish(client, owned, { status: 200, body: this.#view(merchant, 0n) })
       })
     } catch (error) {
       if (sqlStateOf(error) === '23505') throw new ApiError(409, 'merchant_exists', `merchant ${input.code} already exists`)
@@ -56,8 +45,7 @@ export class MerchantsService {
   }
 
   async get(code: string) {
-    const { rows } = await this.#db.pool.query<MerchantRow>('SELECT id::text, code, name, currency, account_id::text FROM merchants WHERE code = $1', [code])
-    const merchant = rows[0]
+    const merchant = await findMerchant(this.#db.pool, code)
     if (!merchant) throw notFound(`merchant ${code}`)
     const account = await this.#chart.registry.account(BigInt(merchant.account_id))
     return this.#view(merchant, -(await readBalance(this.#db.pool, account)))

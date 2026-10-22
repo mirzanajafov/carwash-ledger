@@ -7,7 +7,7 @@ import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
 import { IdempotencyService } from '../idempotency/idempotency.service.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
-import { ATTEMPT_COLUMNS, type AttemptRecord } from '../payments/records.ts'
+import { attemptsToRecover, type AttemptRecord } from '../payments/attempts.repository.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
 import { EventConsumers } from '../consumers/event-consumers.service.ts'
@@ -73,19 +73,13 @@ export class Recovery implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async recoverPending(olderThanSeconds = this.#config.recoveryAfterSeconds, batch = 50): Promise<Map<RecoveryOutcome, number>> {
-    const { rows } = await this.#db.pool.query<AttemptRecord>(
-      `SELECT ${ATTEMPT_COLUMNS} FROM attempts
-       WHERE status = 'pending' AND created_at <= now() - make_interval(secs => $1)
-         AND NOT EXISTS (SELECT 1 FROM anomalies WHERE anomalies.attempt_id = attempts.id)
-       ORDER BY created_at LIMIT $2`,
-      [olderThanSeconds, batch],
-    )
+    const attempts = await attemptsToRecover(this.#db.pool, olderThanSeconds, batch)
     const counts = new Map<RecoveryOutcome, number>()
-    for (const attempt of rows) {
+    for (const attempt of attempts) {
       const outcome = await this.recover(attempt)
       counts.set(outcome, (counts.get(outcome) ?? 0) + 1)
     }
-    if (rows.length > 0) this.#logger.log(`checked ${rows.length} pending attempts: ${JSON.stringify(Object.fromEntries(counts))}`)
+    if (attempts.length > 0) this.#logger.log(`checked ${attempts.length} pending attempts: ${JSON.stringify(Object.fromEntries(counts))}`)
     return counts
   }
 

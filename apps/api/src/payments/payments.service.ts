@@ -1,15 +1,17 @@
 import { Injectable } from '@nestjs/common'
 import { sqlStateOf } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
 import type { ApiClientIdentity } from '../auth/api-keys.ts'
 import { Database } from '../db/database.ts'
 import { ApiError, notFound } from '../http/api-error.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { Chart } from '../ledger/chart.service.ts'
+import { findMerchant } from '../merchants/merchants.repository.ts'
+import { insertAttempt, pendingAttempt } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { platformFee } from './fees.ts'
 import type { PaymentStatus } from './payment-state.ts'
-import { loadPayment, loadRefund, paymentFinal, paymentView, pendingAttempt, refundView, type PaymentRecord } from './records.ts'
+import { insertPayment, insertRefund, loadPayment, loadRefund, lockPayment, pendingRefundTotal, type PaymentRecord } from './payments.repository.ts'
+import { paymentView, refundView } from './payments.views.ts'
 
 export interface CreatePaymentInput {
   amount: number
@@ -21,6 +23,17 @@ export interface CreatePaymentInput {
 
 const CARD_KINDS = ['authorize', 'capture', 'cancel'] as const
 const MAX_ROUNDS = 5
+
+function paymentFinal(payment: PaymentRecord, expected: readonly PaymentStatus[]): Final {
+  if (payment.status === 'failed' && expected.includes('failed')) {
+    const code = payment.failure_reason ?? 'payment_failed'
+    return { status: 402, body: { error: { code, message: `the payment failed: ${code}` }, payment: paymentView(payment) } }
+  }
+  if (!expected.includes(payment.status)) {
+    throw new ApiError(502, 'psp_disagreement', `the PSP's answer left the payment ${payment.status}, and the disagreement is recorded as an anomaly`)
+  }
+  return { status: 200, body: paymentView(payment) }
+}
 
 function notCapturable(payment: PaymentRecord): ApiError {
   return new ApiError(409, 'payment_not_capturable', `payment ${payment.id} is ${payment.status}`)
@@ -44,25 +57,22 @@ export class PaymentsService {
     const capture = input.capture ?? 'auto'
     if (owned.paymentId === null) {
       await this.#db.transaction(async (client) => {
-        const { rows } = await client.query<{ id: string; currency: string }>('SELECT id::text, currency FROM merchants WHERE code = $1', [input.merchant])
-        const merchant = rows[0]
+        const merchant = await findMerchant(client, input.merchant)
         if (!merchant) throw notFound(`merchant ${input.merchant}`)
         if (merchant.currency !== input.currency) {
           throw new ApiError(400, 'currency_mismatch', `merchant ${input.merchant} takes ${merchant.currency}, not ${input.currency}`)
         }
         this.#chart.accounts(input.currency)
         this.#checkAmount(BigInt(input.amount))
-        const inserted = await client.query<{ id: string }>(
-          `INSERT INTO payments (client_id, merchant_id, amount, currency, capture_mode, token)
-           VALUES ($1, $2, $3, $4, $5::capture_mode, $6) RETURNING id`,
-          [owned.clientId, merchant.id, input.amount, input.currency, capture, input.token],
-        )
-        const paymentId = firstRow(inserted).id
-        await client.query(`INSERT INTO attempts (kind, payment_id, amount, currency) VALUES ('authorize', $1, $2, $3)`, [
-          paymentId,
-          input.amount,
-          input.currency,
-        ])
+        const paymentId = await insertPayment(client, {
+          clientId: owned.clientId,
+          merchantId: merchant.id,
+          amount: BigInt(input.amount),
+          currency: input.currency,
+          capture,
+          token: input.token,
+        })
+        await insertAttempt(client, { kind: 'authorize', paymentId, amount: BigInt(input.amount), currency: input.currency })
         await this.#idempotency.recordPoint(client, owned, 'payment_created', { paymentId })
       })
     }
@@ -92,26 +102,14 @@ export class PaymentsService {
   async refund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<Final> {
     if (owned.refundId === null) {
       await this.#db.transaction(async (client) => {
-        const payment = this.#visible(await loadPayment(client, paymentId, true), caller, paymentId)
+        const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
         if (payment.status !== 'captured') throw new ApiError(409, 'payment_not_refundable', `payment ${payment.id} is ${payment.status}`)
-        const { pending } = firstRow(
-          await client.query<{ pending: string }>(
-            `SELECT coalesce(sum(amount), 0)::text AS pending FROM refunds WHERE payment_id = $1 AND status = 'pending'`,
-            [payment.id],
-          ),
-        )
-        const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - BigInt(pending)
+        const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - (await pendingRefundTotal(client, payment.id))
         if (BigInt(amount) > available) {
           throw new ApiError(409, 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
         }
-        const inserted = await client.query<{ id: string }>('INSERT INTO refunds (payment_id, amount) VALUES ($1, $2) RETURNING id', [payment.id, amount])
-        const refundId = firstRow(inserted).id
-        await client.query(`INSERT INTO attempts (kind, payment_id, refund_id, amount, currency) VALUES ('refund', $1, $2, $3, $4)`, [
-          payment.id,
-          refundId,
-          amount,
-          payment.currency,
-        ])
+        const refundId = await insertRefund(client, payment.id, BigInt(amount))
+        await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount: BigInt(amount), currency: payment.currency })
         await this.#idempotency.recordPoint(client, owned, 'refund_created', { paymentId: payment.id, refundId })
       })
     }
@@ -141,15 +139,10 @@ export class PaymentsService {
   ): Promise<void> {
     try {
       await this.#db.transaction(async (client) => {
-        const payment = this.#visible(await loadPayment(client, paymentId, true), caller, paymentId)
+        const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
         if (payment.status !== 'authorized') throw notCapturable(payment)
         const amount = amountFor(payment)
-        await client.query(`INSERT INTO attempts (kind, payment_id, amount, currency) VALUES ($1::attempt_kind, $2, $3, $4)`, [
-          kind,
-          payment.id,
-          amount,
-          payment.currency,
-        ])
+        await insertAttempt(client, { kind, paymentId: payment.id, amount, currency: payment.currency })
         await this.#idempotency.recordPoint(client, owned, `${kind}_created`, { paymentId: payment.id })
       })
     } catch (error) {
