@@ -3,14 +3,14 @@ import { postInTransaction } from '@carwash/ledger'
 import type pg from 'pg'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
-import { ApiError } from '../http/api-error.ts'
+import { DomainError, pspUnavailable } from '../domain-errors.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
 import { checkAnswer } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
 import { loadAttempt, setAttemptAmount } from './attempts.repository.ts'
-import { AttemptsService, pspUnavailable } from './attempts.service.ts'
+import { AttemptsService } from './attempts.service.ts'
 import { correctRefundAmount } from './payments.repository.ts'
 
 const ACCEPTABLE = new Set(['capture', 'refund', 'payout'])
@@ -19,8 +19,8 @@ export function acceptable(row: AnomalyRow): boolean {
   return row.kind === 'answer_mismatch' && row.resolved_at === null && row.attempt_status === 'pending' && ACCEPTABLE.has(row.attempt_kind ?? '')
 }
 
-function refuse(message: string): ApiError {
-  return new ApiError(409, 'not_acceptable', message)
+function refuse(message: string): DomainError {
+  return new DomainError('conflict', 'not_acceptable', message)
 }
 
 @Injectable()
@@ -100,7 +100,7 @@ export class AnomaliesService {
 
   async #find(id: number): Promise<AnomalyRow> {
     const row = await findAnomaly(this.#db.pool, id)
-    if (!row) throw new ApiError(404, 'not_found', `no anomaly ${id}`)
+    if (!row) throw new DomainError('not_found', 'not_found', `no anomaly ${id}`)
     return row
   }
 }

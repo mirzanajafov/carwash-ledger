@@ -1,6 +1,6 @@
 import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
-import { ApiError } from '../http/api-error.ts'
+import { invalidInput } from '../domain-errors.ts'
 import type { AnomalyRow } from './anomalies.repository.ts'
 import { AnomaliesService, acceptable } from './anomalies.service.ts'
 
@@ -40,7 +40,7 @@ export class AnomaliesController {
 
   @Get()
   async list(@Query('state') state = 'open', @Query('limit') limit = '50') {
-    if (state !== 'open' && state !== 'resolved') throw new ApiError(400, 'invalid_request', 'state must be open or resolved')
+    if (state !== 'open' && state !== 'resolved') throw invalidInput('state must be open or resolved')
     const n = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 200)
     const rows = await this.#anomalies.list(state === 'open', n)
     return { object: 'list', data: rows.map(view) }

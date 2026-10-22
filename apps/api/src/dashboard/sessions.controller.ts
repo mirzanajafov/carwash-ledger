@@ -39,7 +39,8 @@ export class SessionsController {
   @Delete('current')
   async close(@Req() request: AuthedRequest) {
     const session = await this.#find(request)
-    return { ...view(await revokeSession(this.#db.pool, session.id)), revoked: true }
+    await revokeSession(this.#db.pool, session.id)
+    return { ...view(session), revoked: true }
   }
 
   async #find(request: AuthedRequest): Promise<SessionRow> {

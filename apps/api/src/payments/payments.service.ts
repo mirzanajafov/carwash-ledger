@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { sqlStateOf } from '@carwash/ledger'
 import type { ApiClientIdentity } from '../auth/api-keys.ts'
 import { Database } from '../db/database.ts'
-import { ApiError, notFound } from '../http/api-error.ts'
+import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
@@ -30,13 +30,13 @@ function paymentFinal(payment: PaymentRecord, expected: readonly PaymentStatus[]
     return { status: 402, body: { error: { code, message: `the payment failed: ${code}` }, payment: paymentView(payment) } }
   }
   if (!expected.includes(payment.status)) {
-    throw new ApiError(502, 'psp_disagreement', `the PSP's answer left the payment ${payment.status}, and the disagreement is recorded as an anomaly`)
+    throw new DomainError('upstream', 'psp_disagreement', `the PSP's answer left the payment ${payment.status}, and the disagreement is recorded as an anomaly`)
   }
   return { status: 200, body: paymentView(payment) }
 }
 
-function notCapturable(payment: PaymentRecord): ApiError {
-  return new ApiError(409, 'payment_not_capturable', `payment ${payment.id} is ${payment.status}`)
+function notCapturable(payment: PaymentRecord): DomainError {
+  return new DomainError('conflict', 'payment_not_capturable', `payment ${payment.id} is ${payment.status}`)
 }
 
 @Injectable()
@@ -55,36 +55,16 @@ export class PaymentsService {
 
   async create(owned: OwnedKey, input: CreatePaymentInput): Promise<Final> {
     const capture = input.capture ?? 'auto'
-    if (owned.paymentId === null) {
-      await this.#db.transaction(async (client) => {
-        const merchant = await findMerchant(client, input.merchant)
-        if (!merchant) throw notFound(`merchant ${input.merchant}`)
-        if (merchant.currency !== input.currency) {
-          throw new ApiError(400, 'currency_mismatch', `merchant ${input.merchant} takes ${merchant.currency}, not ${input.currency}`)
-        }
-        this.#chart.accounts(input.currency)
-        this.#checkAmount(BigInt(input.amount))
-        const paymentId = await insertPayment(client, {
-          clientId: owned.clientId,
-          merchantId: merchant.id,
-          amount: BigInt(input.amount),
-          currency: input.currency,
-          capture,
-          token: input.token,
-        })
-        await insertAttempt(client, { kind: 'authorize', paymentId, amount: BigInt(input.amount), currency: input.currency })
-        await this.#idempotency.recordPoint(client, owned, 'payment_created', { paymentId })
-      })
-    }
+    const paymentId = owned.paymentId ?? (await this.#startPayment(owned, input, capture))
     const expected: PaymentStatus[] = capture === 'auto' ? ['captured', 'failed'] : ['authorized', 'failed']
-    return this.#drive(owned, owned.paymentId!, expected)
+    return this.#drive(owned, paymentId, expected)
   }
 
   async capture(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number | undefined): Promise<Final> {
     if (owned.recoveryPoint === 'started') {
       await this.#startSettlement(owned, caller, paymentId, 'capture', (payment) => {
         const value = amount === undefined ? BigInt(payment.amount) : BigInt(amount)
-        if (value > BigInt(payment.amount)) throw new ApiError(400, 'amount_too_large', 'a capture cannot exceed the authorized amount')
+        if (value > BigInt(payment.amount)) throw new DomainError('invalid', 'amount_too_large', 'a capture cannot exceed the authorized amount')
         this.#checkAmount(value)
         return value
       })
@@ -100,20 +80,7 @@ export class PaymentsService {
   }
 
   async refund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<Final> {
-    if (owned.refundId === null) {
-      await this.#db.transaction(async (client) => {
-        const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
-        if (payment.status !== 'captured') throw new ApiError(409, 'payment_not_refundable', `payment ${payment.id} is ${payment.status}`)
-        const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - (await pendingRefundTotal(client, payment.id))
-        if (BigInt(amount) > available) {
-          throw new ApiError(409, 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
-        }
-        const refundId = await insertRefund(client, payment.id, BigInt(amount))
-        await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount: BigInt(amount), currency: payment.currency })
-        await this.#idempotency.recordPoint(client, owned, 'refund_created', { paymentId: payment.id, refundId })
-      })
-    }
-    const refundId = owned.refundId!
+    const refundId = owned.refundId ?? (await this.#startRefund(owned, caller, paymentId, amount))
     for (let round = 0; ; round++) {
       const attempt = await pendingAttempt(this.#db.pool, 'refund_id', refundId, ['refund'])
       if (!attempt) break
@@ -128,6 +95,44 @@ export class PaymentsService {
 
   async get(caller: ApiClientIdentity, paymentId: string) {
     return paymentView(this.#visible(await loadPayment(this.#db.pool, paymentId), caller, paymentId))
+  }
+
+  #startPayment(owned: OwnedKey, input: CreatePaymentInput, capture: 'auto' | 'manual'): Promise<string> {
+    return this.#db.transaction(async (client) => {
+      const merchant = await findMerchant(client, input.merchant)
+      if (!merchant) throw notFound(`merchant ${input.merchant}`)
+      if (merchant.currency !== input.currency) {
+        throw new DomainError('invalid', 'currency_mismatch', `merchant ${input.merchant} takes ${merchant.currency}, not ${input.currency}`)
+      }
+      this.#chart.accounts(input.currency)
+      this.#checkAmount(BigInt(input.amount))
+      const paymentId = await insertPayment(client, {
+        clientId: owned.clientId,
+        merchantId: merchant.id,
+        amount: BigInt(input.amount),
+        currency: input.currency,
+        capture,
+        token: input.token,
+      })
+      await insertAttempt(client, { kind: 'authorize', paymentId, amount: BigInt(input.amount), currency: input.currency })
+      await this.#idempotency.recordPoint(client, owned, 'payment_created', { paymentId })
+      return paymentId
+    })
+  }
+
+  #startRefund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<string> {
+    return this.#db.transaction(async (client) => {
+      const payment = this.#visible(await lockPayment(client, paymentId), caller, paymentId)
+      if (payment.status !== 'captured') throw new DomainError('conflict', 'payment_not_refundable', `payment ${payment.id} is ${payment.status}`)
+      const available = BigInt(payment.captured_amount) - BigInt(payment.refunded_amount) - (await pendingRefundTotal(client, payment.id))
+      if (BigInt(amount) > available) {
+        throw new DomainError('conflict', 'refund_exceeds_available', `at most ${available} can still be refunded on payment ${payment.id}`)
+      }
+      const refundId = await insertRefund(client, payment.id, BigInt(amount))
+      await insertAttempt(client, { kind: 'refund', paymentId: payment.id, refundId, amount: BigInt(amount), currency: payment.currency })
+      await this.#idempotency.recordPoint(client, owned, 'refund_created', { paymentId: payment.id, refundId })
+      return refundId
+    })
   }
 
   async #startSettlement(
@@ -147,7 +152,7 @@ export class PaymentsService {
       })
     } catch (error) {
       if (sqlStateOf(error) === '23505') {
-        throw new ApiError(409, 'payment_not_capturable', `payment ${paymentId} already has a capture or cancel in progress or done`)
+        throw new DomainError('conflict', 'payment_not_capturable', `payment ${paymentId} already has a capture or cancel in progress or done`)
       }
       throw error
     }
@@ -168,7 +173,7 @@ export class PaymentsService {
 
   #checkAmount(amount: bigint): void {
     if (platformFee(amount, this.#chart.feeSchedule) >= amount) {
-      throw new ApiError(400, 'amount_too_small', 'the amount does not cover the platform fee')
+      throw new DomainError('invalid', 'amount_too_small', 'the amount does not cover the platform fee')
     }
   }
 

@@ -3,7 +3,7 @@ import { APP_FILTER } from '@nestjs/core'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { AuditDatabase } from '../db/audit-database.ts'
 import { Database } from '../db/database.ts'
-import { ErrorFilter } from '../http/api-error.ts'
+import { ErrorFilter } from '../http/error.filter.ts'
 
 @Global()
 @Module({})

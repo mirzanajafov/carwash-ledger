@@ -1,7 +1,7 @@
 import { Controller, Get, Param } from '@nestjs/common'
 import { findAccounts, readBalance } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
-import { notFound } from '../http/api-error.ts'
+import { notFound } from '../domain-errors.ts'
 
 @Controller('v1/accounts')
 export class AccountsController {

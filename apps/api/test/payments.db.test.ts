@@ -141,7 +141,7 @@ describe('payments API', () => {
     const slow = owned(await idempotency.begin(stack.clientIds.alice, key, 'POST', '/v1/payments', body))
     await stack.owner.query(`UPDATE idempotency_keys SET locked_until = now() - interval '1 second' WHERE key = $1`, [key])
     const retry = owned(await idempotency.begin(stack.clientIds.alice, key, 'POST', '/v1/payments', body))
-    await expect(payments.create(slow, body)).rejects.toMatchObject({ status: 409, code: 'request_in_progress' })
+    await expect(payments.create(slow, body)).rejects.toMatchObject({ failure: 'conflict', code: 'request_in_progress' })
     expect((await payments.create(retry, body)).body).toMatchObject({ amount: 813, status: 'captured' })
     await idempotency.abandon(slow)
     const { rows } = await stack.admin.query<{ id: string }>(`SELECT p.id FROM payments p JOIN idempotency_keys k ON k.key = $1 WHERE p.amount = 813`, [key])

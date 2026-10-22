@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common'
 import { AccountRegistry, createAccount, findAccounts, pgAccountLoader, sqlStateOf, type Account, type AccountType, type BalanceMode } from '@carwash/ledger'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { ApiError } from '../http/api-error.ts'
+import { DomainError } from '../domain-errors.ts'
 import type { FeeSchedule } from '../payments/fees.ts'
 
 export interface CurrencyAccounts {
@@ -49,7 +49,7 @@ export class Chart implements OnModuleInit {
 
   accounts(currency: string): CurrencyAccounts {
     const accounts = this.#byCurrency.get(currency)
-    if (!accounts) throw new ApiError(400, 'unsupported_currency', `${currency} is not a supported currency`)
+    if (!accounts) throw new DomainError('invalid', 'unsupported_currency', `${currency} is not a supported currency`)
     return accounts
   }
 

@@ -2,10 +2,10 @@ import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { ApiError } from '../http/api-error.ts'
+import { DomainError, PspAnswerRejectedError, pspUnavailable } from '../domain-errors.ts'
 import { recordAnomaly } from '../payments/anomalies.repository.ts'
 import { loadAttempt } from '../payments/attempts.repository.ts'
-import { AttemptsService, pspUnavailable } from '../payments/attempts.service.ts'
+import { AttemptsService } from '../payments/attempts.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { markWebhookChecked, recordWebhook, unmatchedWebhooks, webhookOutcome } from './webhooks.repository.ts'
 
@@ -26,7 +26,7 @@ export function parseEvent(body: unknown): PspEvent {
   const type = event?.type
   const key = event?.data?.object?.idempotency_key
   if (typeof id !== 'string' || id.length === 0 || id.length > 255 || typeof type !== 'string' || typeof key !== 'string') {
-    throw new ApiError(400, 'invalid_event', 'the event needs an id, a type and data.object.idempotency_key')
+    throw new DomainError('invalid', 'invalid_event', 'the event needs an id, a type and data.object.idempotency_key')
   }
   return { id, type, attemptKey: key, payload: body }
 }
@@ -71,7 +71,7 @@ export class WebhooksService {
     try {
       return await this.#attempts.receive(await this.#attempts.callFor(attempt), reply.body)
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'psp_answer_rejected') return 'anomaly'
+      if (error instanceof PspAnswerRejectedError) return 'anomaly'
       throw error
     }
   }

@@ -1,12 +1,10 @@
 import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
 import { firstRow } from '@carwash/pg'
-import type { Response } from 'express'
 import type pg from 'pg'
-import type { AuthedRequest } from '../auth/access.guard.ts'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { ApiError } from '../http/api-error.ts'
+import { DomainError } from '../domain-errors.ts'
 import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
@@ -44,12 +42,12 @@ interface KeyRow {
   response_body: unknown
 }
 
-export function inProgress(): ApiError {
-  return new ApiError(409, 'request_in_progress', 'a request with this idempotency key is still being processed', { 'retry-after': '1' })
+function inProgress(): DomainError {
+  return new DomainError('conflict', 'request_in_progress', 'a request with this idempotency key is still being processed', 1)
 }
 
-function leaseLost(): ApiError {
-  return new ApiError(409, 'request_in_progress', 'another request with this idempotency key took it over', { 'retry-after': '1' })
+function leaseLost(): DomainError {
+  return new DomainError('conflict', 'request_in_progress', 'another request with this idempotency key took it over', 1)
 }
 
 const OWNED = 'client_id = $1 AND key = $2 AND lease_id = $3'
@@ -62,27 +60,6 @@ export class IdempotencyService {
   constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
     this.#db = db
     this.#config = config
-  }
-
-  async run(request: AuthedRequest, response: Response, work: (owned: OwnedKey) => Promise<Final>): Promise<void> {
-    const key = request.headers['idempotency-key']
-    if (typeof key !== 'string' || key.length === 0 || key.length > 255) {
-      throw new ApiError(400, 'invalid_request', 'every POST needs an Idempotency-Key header of 1 to 255 characters')
-    }
-    const begun = await this.begin(request.client.id, key, request.method, request.path, request.body ?? {})
-    if (begun.kind === 'replay') {
-      response.setHeader('idempotent-replayed', 'true')
-      response.status(begun.status).json(begun.body)
-      return
-    }
-    try {
-      const final = await work(begun.owned)
-      response.status(final.status).json(final.body)
-    } catch (error) {
-      if (error instanceof ApiError && error.status < 500) await this.abandon(begun.owned)
-      else await this.release(begun.owned).catch(() => undefined)
-      throw error
-    }
   }
 
   async begin(clientId: string, key: string, method: string, path: string, body: unknown): Promise<Begun> {
@@ -114,7 +91,7 @@ export class IdempotencyService {
       const row = rows[0]
       if (!row) throw inProgress()
       if (!row.request_hash.equals(hash)) {
-        throw new ApiError(422, 'idempotency_key_reused', 'this idempotency key was already used with a different request')
+        throw new DomainError('unprocessable', 'idempotency_key_reused', 'this idempotency key was already used with a different request')
       }
       if (row.state === 'finished') return { kind: 'replay', status: row.response_status!, body: row.response_body }
       if (row.leased) throw inProgress()
@@ -146,7 +123,6 @@ export class IdempotencyService {
       [owned.clientId, owned.key, owned.leaseId, point, refs.paymentId ?? null, refs.refundId ?? null, refs.payoutId ?? null],
     )
     if (recorded.rowCount !== 1) throw leaseLost()
-    Object.assign(owned, { recoveryPoint: point }, refs)
   }
 
   async finish(client: pg.ClientBase, owned: OwnedKey, final: Final): Promise<Final> {

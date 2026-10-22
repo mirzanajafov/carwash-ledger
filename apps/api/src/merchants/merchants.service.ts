@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { insertAccount, readBalance, sqlStateOf } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
-import { ApiError, notFound } from '../http/api-error.ts'
+import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
 import { Chart } from '../ledger/chart.service.ts'
@@ -39,7 +39,7 @@ export class MerchantsService {
         return this.#idempotency.finish(client, owned, { status: 200, body: this.#view(merchant, 0n) })
       })
     } catch (error) {
-      if (sqlStateOf(error) === '23505') throw new ApiError(409, 'merchant_exists', `merchant ${input.code} already exists`)
+      if (sqlStateOf(error) === '23505') throw new DomainError('conflict', 'merchant_exists', `merchant ${input.code} already exists`)
       throw error
     }
   }

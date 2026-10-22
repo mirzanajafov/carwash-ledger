@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { postInTransaction } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
-import { ApiError, notFound } from '../http/api-error.ts'
+import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
@@ -34,39 +34,7 @@ export class PayoutsService {
   }
 
   async create(owned: OwnedKey, input: PayoutInput): Promise<Final> {
-    if (owned.payoutId === null) {
-      await this.#db.transaction(async (client) => {
-        const merchant = await findMerchant(client, input.merchant)
-        if (!merchant) throw notFound(`merchant ${input.merchant}`)
-        if (merchant.currency !== input.currency) {
-          throw new ApiError(400, 'currency_mismatch', `merchant ${input.merchant} is paid in ${merchant.currency}`)
-        }
-        const bank = this.#chart.accounts(input.currency).bank
-        const balance = await lockPayoutBalances(client, merchant.account_id, bank.id.toString())
-        if (balance === undefined) throw new Error(`merchant ${input.merchant} has no balance row`)
-        const payable = -balance
-        if (input.amount === undefined && payable <= 0n) {
-          throw new ApiError(409, 'nothing_to_pay_out', `merchant ${input.merchant} has nothing available for payout`)
-        }
-        const amount = input.amount === undefined ? payable : BigInt(input.amount)
-        if (amount > payable) {
-          throw new ApiError(409, 'insufficient_funds', `merchant ${input.merchant} has ${payable} available for payout`)
-        }
-        const payoutId = await insertPayout(client, merchant.id, amount, input.currency)
-        const journalId = await postInTransaction(client, this.#chart.registry, {
-          externalRef: `payout:${payoutId}`,
-          entries: [
-            { accountId: BigInt(merchant.account_id), amount },
-            { accountId: bank.id, amount: -amount },
-          ],
-        })
-        await setPayoutJournal(client, payoutId, journalId)
-        await journalEvents(client, journalId)
-        await insertAttempt(client, { kind: 'payout', payoutId, amount, currency: input.currency })
-        await this.#idempotency.recordPoint(client, owned, 'payout_created', { payoutId })
-      })
-    }
-    const payoutId = owned.payoutId!
+    const payoutId = owned.payoutId ?? (await this.#startPayout(owned, input))
     for (let round = 0; ; round++) {
       const attempt = await pendingAttempt(this.#db.pool, 'payout_id', payoutId, ['payout'])
       if (!attempt) break
@@ -76,6 +44,40 @@ export class PayoutsService {
     return this.#db.transaction(async (client) => {
       const payout = (await loadPayout(client, payoutId))!
       return this.#idempotency.finish(client, owned, { status: 200, body: payoutView(payout) })
+    })
+  }
+
+  #startPayout(owned: OwnedKey, input: PayoutInput): Promise<string> {
+    return this.#db.transaction(async (client) => {
+      const merchant = await findMerchant(client, input.merchant)
+      if (!merchant) throw notFound(`merchant ${input.merchant}`)
+      if (merchant.currency !== input.currency) {
+        throw new DomainError('invalid', 'currency_mismatch', `merchant ${input.merchant} is paid in ${merchant.currency}`)
+      }
+      const bank = this.#chart.accounts(input.currency).bank
+      const balance = await lockPayoutBalances(client, merchant.account_id, bank.id.toString())
+      if (balance === undefined) throw new Error(`merchant ${input.merchant} has no balance row`)
+      const payable = -balance
+      if (input.amount === undefined && payable <= 0n) {
+        throw new DomainError('conflict', 'nothing_to_pay_out', `merchant ${input.merchant} has nothing available for payout`)
+      }
+      const amount = input.amount === undefined ? payable : BigInt(input.amount)
+      if (amount > payable) {
+        throw new DomainError('conflict', 'insufficient_funds', `merchant ${input.merchant} has ${payable} available for payout`)
+      }
+      const payoutId = await insertPayout(client, merchant.id, amount, input.currency)
+      const journalId = await postInTransaction(client, this.#chart.registry, {
+        externalRef: `payout:${payoutId}`,
+        entries: [
+          { accountId: BigInt(merchant.account_id), amount },
+          { accountId: bank.id, amount: -amount },
+        ],
+      })
+      await setPayoutJournal(client, payoutId, journalId)
+      await journalEvents(client, journalId)
+      await insertAttempt(client, { kind: 'payout', payoutId, amount, currency: input.currency })
+      await this.#idempotency.recordPoint(client, owned, 'payout_created', { payoutId })
+      return payoutId
     })
   }
 }

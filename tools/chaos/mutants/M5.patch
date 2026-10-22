@@ -1,11 +1,11 @@
 --- a/apps/api/src/idempotency/idempotency.service.ts
 +++ b/apps/api/src/idempotency/idempotency.service.ts
-@@ -111,9 +111,6 @@
+@@ -90,9 +90,6 @@
        )
        const row = rows[0]
        if (!row) throw inProgress()
 -      if (!row.request_hash.equals(hash)) {
--        throw new ApiError(422, 'idempotency_key_reused', 'this idempotency key was already used with a different request')
+-        throw new DomainError('unprocessable', 'idempotency_key_reused', 'this idempotency key was already used with a different request')
 -      }
        if (row.state === 'finished') return { kind: 'replay', status: row.response_status!, body: row.response_body }
        if (row.leased) throw inProgress()

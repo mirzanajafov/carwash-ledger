@@ -19,7 +19,7 @@ export class LiveController {
   @Get('live')
   live(@Req() request: Request, @Res() response: Response): void {
     if (this.#feed.listeners >= this.#config.liveMaxConnections) {
-      throw new ApiError(503, 'too_many_watchers', 'the live feed is full, so try again in a minute', { 'retry-after': '60' })
+      throw new ApiError(503, 'too_many_watchers', 'the live feed is full, so try again in a minute', 60)
     }
     response.writeHead(200, {
       'content-type': 'text/event-stream',
