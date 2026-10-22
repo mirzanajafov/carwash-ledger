@@ -1,10 +1,8 @@
 import { createPublicKey, verify } from 'node:crypto'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import { chainHash, checkpointBody, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash } from '@carwash/audit'
-import type pg from 'pg'
+import type { Queryable } from '@carwash/pg'
 import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
-
-type Queryable = pg.ClientBase | pg.Pool
 
 const TURN_MS = 10
 

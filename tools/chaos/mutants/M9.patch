@@ -1,11 +1,11 @@
 --- a/packages/ledger/src/balances.ts
 +++ b/packages/ledger/src/balances.ts
-@@ -28,7 +28,7 @@
-       await client.query('ROLLBACK')
-       return null
-     }
--    const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')).horizon
-+    const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon')).horizon
-     const written = await client.query(TAKE_SNAPSHOTS, [value])
-     failpoint('snapshot.before_commit')
-     await client.query('COMMIT')
+@@ -23,7 +23,7 @@
+     async (client) => {
+       const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SNAPSHOT_LOCK_KEY]))
+       if (!locked) return null
+-      const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')).horizon
++      const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS horizon')).horizon
+       const written = await client.query(TAKE_SNAPSHOTS, [value])
+       failpoint('snapshot.before_commit')
+       return { horizon: value, accounts: written.rowCount ?? 0 }

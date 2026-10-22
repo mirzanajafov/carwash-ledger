@@ -21,7 +21,7 @@ import {
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -137,15 +137,7 @@ async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoin
   let nextCheckpoint = Math.floor((await treeSize(lab.app)) / checkpointEvery + 1) * checkpointEvery
   const started = performance.now()
   for (;;) {
-    const client = await lab.app.connect()
-    let sequenced: number
-    try {
-      await client.query('BEGIN')
-      sequenced = await sequenceBatch(timed(client, clock), batch)
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
+    const sequenced = await withTransaction(lab.app, (client) => sequenceBatch(timed(client, clock), batch))
     journals += sequenced
     const size = await treeSize(lab.app)
     const closing = closeWithCheckpoint && sequenced === 0 && size > 0 && lab.witness.latest()?.size !== size
@@ -172,16 +164,9 @@ async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoin
 
 async function verifyInSnapshot(lab: Lab, from?: VerifierState): Promise<VerifyReport> {
   const witness = anchor(lab)
-  const client = await lab.audit.connect()
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-    const report = await verifyLog(client, { witness, from })
-    await client.query('COMMIT')
-    if (report.findings > 0) throw new Error(`the verifier found ${report.findings} problems in an honest log: ${JSON.stringify(report.examples)}`)
-    return report
-  } finally {
-    client.release()
-  }
+  const report = await inSnapshot(lab.audit, (client) => verifyLog(client, { witness, from }))
+  if (report.findings > 0) throw new Error(`the verifier found ${report.findings} problems in an honest log: ${JSON.stringify(report.examples)}`)
+  return report
 }
 
 async function sizes(lab: Lab) {
@@ -280,17 +265,10 @@ async function lag(dir: string) {
   const sequencer = (async () => {
     let lastCheckpoint = performance.now()
     while (!stop.signal.aborted) {
-      for (;;) {
-        const client = await lab.app.connect()
-        try {
-          await client.query('BEGIN')
-          const n = await sequenceBatch(client, 1000)
-          await client.query('COMMIT')
-          if (n < 1000) break
-        } finally {
-          client.release()
-        }
-      }
+      let sequenced: number
+      do {
+        sequenced = await withTransaction(lab.app, (client) => sequenceBatch(client, 1000))
+      } while (sequenced === 1000)
       if (performance.now() - lastCheckpoint >= 10_000) {
         lastCheckpoint = performance.now()
         const outcome = await lab.checkpointer.run()

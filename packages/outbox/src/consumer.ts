@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { KafkaJS } from '@confluentinc/kafka-javascript'
 import { failpoint } from '@carwash/failpoints'
-import { checkout } from '@carwash/pg'
+import { withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Envelope, Topic } from './events.ts'
 
@@ -26,11 +26,7 @@ export type ConsumerLog = (message: string) => void
 export async function applyOnce(pool: pg.Pool, spec: ConsumerSpec, events: readonly ConsumedEvent[]): Promise<number> {
   const unique = [...new Map(events.map((event) => [event.id, event])).values()]
   if (unique.length === 0) return 0
-  const lease = await checkout(pool)
-  const { client } = lease
-  let broken = false
-  try {
-    await client.query('BEGIN')
+  return withTransaction(pool, async (client) => {
     const { rows } = await client.query<{ event_id: string }>(
       `INSERT INTO inbox (consumer, event_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING RETURNING event_id::text`,
       [spec.name, unique.map((event) => event.id)],
@@ -39,16 +35,8 @@ export async function applyOnce(pool: pg.Pool, spec: ConsumerSpec, events: reado
     const apply = unique.filter((event) => fresh.has(event.id))
     if (apply.length > 0) await spec.apply(client, apply)
     failpoint('consumer.before_commit')
-    await client.query('COMMIT')
     return apply.length
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {
-      broken = true
-    })
-    throw error
-  } finally {
-    lease.release(broken)
-  }
+  })
 }
 
 export function parseMessage(key: Buffer | null, value: Buffer | null): ConsumedEvent | undefined {

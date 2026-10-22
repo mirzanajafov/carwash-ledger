@@ -1,4 +1,4 @@
-import { firstRow, inSnapshot } from '@carwash/pg'
+import { firstRow, inSnapshot, type Queryable } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, EXAMPLES, type Check, type Finding } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -366,7 +366,7 @@ const LEDGER_MONEY = `${MONEY}
 const JOURNAL_PREFIX: Record<LedgerAttempt['kind'], string> = { capture: 'capture:', refund: 'refund:', payout: 'payout:' }
 const DID: Record<'capture' | 'refund', string> = { capture: 'captured', refund: 'refunded' }
 
-async function readOperations(psp: pg.Pool | pg.ClientBase): Promise<Map<string, PspOperation>> {
+async function readOperations(psp: Queryable): Promise<Map<string, PspOperation>> {
   const { rows } = await psp.query<PspOperation>(PSP_OPERATIONS)
   return new Map(rows.map((row) => [row.key, row]))
 }
@@ -426,7 +426,7 @@ export function comparePsp(
   return { count: found.length, examples: found.slice(0, EXAMPLES) }
 }
 
-export async function checkAgainstPsp(ledger: pg.Pool, psp: pg.Pool | pg.ClientBase): Promise<InvariantResult> {
+export async function checkAgainstPsp(ledger: pg.Pool, psp: Queryable): Promise<InvariantResult> {
   const before = await readOperations(psp)
   const { attempts, money } = await inSnapshot(ledger, async (client) => {
     const attempts = (await client.query<LedgerAttempt>(LEDGER_ATTEMPTS)).rows

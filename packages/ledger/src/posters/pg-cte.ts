@@ -1,5 +1,5 @@
 import { failpoint } from '@carwash/failpoints'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import { pgAccountLoader, type AccountRegistry } from '../accounts.ts'
 import { InvalidJournalError } from '../errors.ts'
@@ -8,7 +8,24 @@ import type { RetryOptions } from '../retry.ts'
 import { LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'
 import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal, Poster } from '../types.ts'
-import { beginStatement, expectApplied, postWith } from './common.ts'
+import { expectApplied, postWith } from './common.ts'
+
+async function write(client: pg.ClientBase, plan: JournalPlan): Promise<bigint> {
+  if (plan.locks.length > 0) {
+    await client.query(LOCK_BALANCES, lockParams(plan))
+    failpoint('post.after_lock')
+  }
+  const row = firstRow(
+    await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
+      plan.externalRef,
+      plan.reversesId?.toString() ?? null,
+      ...entryParams(plan),
+      ...deltaParams(plan),
+    ]),
+  )
+  expectApplied(Number(row.balances), plan)
+  return BigInt(row.id)
+}
 
 export async function postInTransaction(client: pg.ClientBase, registry: AccountRegistry, input: JournalInput): Promise<bigint> {
   const accounts = await registry.resolve(
@@ -20,19 +37,7 @@ export async function postInTransaction(client: pg.ClientBase, registry: Account
     throw new InvalidJournalError('a journal touching serializable accounts needs its own transaction')
   }
   try {
-    if (plan.locks.length > 0) {
-      await client.query(LOCK_BALANCES, lockParams(plan))
-      failpoint('post.after_lock')
-    }
-    const result = await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
-      plan.externalRef,
-      plan.reversesId?.toString() ?? null,
-      ...entryParams(plan),
-      ...deltaParams(plan),
-    ])
-    const row = firstRow(result)
-    expectApplied(Number(row.balances), plan)
-    return BigInt(row.id)
+    return await write(client, plan)
   } catch (error) {
     throw translateError(error, plan)
   }
@@ -55,34 +60,16 @@ export class PgCtePoster implements Poster {
   }
 
   async #attempt(plan: JournalPlan): Promise<bigint> {
-    const lease = await checkout(this.#pool)
-    const { client } = lease
-    let broken = false
-    try {
-      await client.query(beginStatement(plan))
-      if (plan.locks.length > 0) {
-        await client.query(LOCK_BALANCES, lockParams(plan))
-        failpoint('post.after_lock')
-      }
-      const result = await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
-        plan.externalRef,
-        plan.reversesId?.toString() ?? null,
-        ...entryParams(plan),
-        ...deltaParams(plan),
-      ])
-      const row = firstRow(result)
-      expectApplied(Number(row.balances), plan)
-      failpoint('post.before_commit')
-      await client.query('COMMIT')
-      failpoint('post.after_commit')
-      return BigInt(row.id)
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {
-        broken = true
-      })
-      throw error
-    } finally {
-      lease.release(broken)
-    }
+    const id = await withTransaction(
+      this.#pool,
+      async (client) => {
+        const written = await write(client, plan)
+        failpoint('post.before_commit')
+        return written
+      },
+      { isolation: plan.isolation },
+    )
+    failpoint('post.after_commit')
+    return id
   }
 }

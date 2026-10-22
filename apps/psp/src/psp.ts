@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Behaviour, Faults, OperationKind, TokenEffect } from './faults.ts'
 import { HttpError } from './http.ts'
@@ -150,25 +150,15 @@ export class Psp {
   async execute(request: OperationRequest): Promise<Answer> {
     const behaviour = this.#faults.behaviour(request.key, request.kind, request.token)
     if (behaviour.slowMs > 0) await sleep(behaviour.slowMs)
-    const lease = await checkout(this.#pool)
-    const { client } = lease
-    let broken = false
-    try {
-      await client.query('BEGIN')
+    const done = await withTransaction(this.#pool, async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [request.key])
       const stored = await client.query<{ request_hash: Buffer; http_status: number; response: unknown }>(
         `SELECT request_hash, http_status, response FROM idempotency_keys
          WHERE key = $1 AND created_at > now() - make_interval(secs => $2)`,
         [request.key, this.#settings.idempotencyWindowSeconds],
       )
-      const previous = stored.rows[0]
-      if (previous) {
-        await client.query('COMMIT')
-        if (!previous.request_hash.equals(request.hash)) {
-          throw new HttpError(422, 'idempotency_key_reused', 'this idempotency key was used with a different request')
-        }
-        return { status: previous.http_status, body: previous.response, replayed: true, afterCommit: 'answer' }
-      }
+      const [previous] = stored.rows
+      if (previous) return { kind: 'stored', previous } as const
       if (behaviour.fail) throw new HttpError(500, 'processing_error', 'the PSP failed before doing anything')
 
       const outcome = await request.apply(client, behaviour)
@@ -197,16 +187,13 @@ export class Psp {
         [request.key, request.hash, operationId, outcome.httpStatus, body],
       )
       await this.#enqueueWebhook(client, operationId, outcome.status, body, behaviour)
-      await client.query('COMMIT')
-      return { status: outcome.httpStatus, body, replayed: false, afterCommit: behaviour.afterCommit }
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {
-        broken = true
-      })
-      throw error
-    } finally {
-      lease.release(broken)
+      return { kind: 'done', answer: { status: outcome.httpStatus, body, replayed: false, afterCommit: behaviour.afterCommit } } as const
+    })
+    if (done.kind === 'done') return done.answer
+    if (!done.previous.request_hash.equals(request.hash)) {
+      throw new HttpError(422, 'idempotency_key_reused', 'this idempotency key was used with a different request')
     }
+    return { status: done.previous.http_status, body: done.previous.response, replayed: true, afterCommit: 'answer' }
   }
 
   async chargeToken(chargeId: string): Promise<string> {

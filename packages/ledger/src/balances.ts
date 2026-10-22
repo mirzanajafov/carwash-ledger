@@ -1,9 +1,9 @@
 import { failpoint } from '@carwash/failpoints'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction, type Queryable } from '@carwash/pg'
 import type pg from 'pg'
 import { DERIVED_BALANCE, SELECT_JOURNAL_ENTRIES, STORED_BALANCE, TAKE_SNAPSHOTS } from './sql.ts'
 import { InvalidJournalError } from './errors.ts'
-import type { Account, JournalInput, Queryable } from './types.ts'
+import type { Account, JournalInput } from './types.ts'
 
 export const SNAPSHOT_LOCK_KEY = 7_240_001
 
@@ -17,30 +17,19 @@ export interface SnapshotRun {
   accounts: number
 }
 
-export async function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null> {
-  const lease = await checkout(pool)
-  const { client } = lease
-  let broken = false
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
-    const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SNAPSHOT_LOCK_KEY]))
-    if (!locked) {
-      await client.query('ROLLBACK')
-      return null
-    }
-    const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')).horizon
-    const written = await client.query(TAKE_SNAPSHOTS, [value])
-    failpoint('snapshot.before_commit')
-    await client.query('COMMIT')
-    return { horizon: value, accounts: written.rowCount ?? 0 }
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {
-      broken = true
-    })
-    throw error
-  } finally {
-    lease.release(broken)
-  }
+export function takeSnapshots(pool: pg.Pool): Promise<SnapshotRun | null> {
+  return withTransaction(
+    pool,
+    async (client) => {
+      const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SNAPSHOT_LOCK_KEY]))
+      if (!locked) return null
+      const value = firstRow(await client.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon')).horizon
+      const written = await client.query(TAKE_SNAPSHOTS, [value])
+      failpoint('snapshot.before_commit')
+      return { horizon: value, accounts: written.rowCount ?? 0 }
+    },
+    { isolation: 'repeatable read' },
+  )
 }
 
 export async function reversalOf(db: Queryable, journalId: bigint, externalRef: string): Promise<JournalInput> {

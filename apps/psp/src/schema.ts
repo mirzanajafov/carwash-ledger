@@ -1,4 +1,4 @@
-import { checkout } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 
 const MIGRATION_LOCK_KEY = 7_240_100
@@ -107,28 +107,15 @@ CREATE INDEX settlement_lines_by_operation ON settlement_lines (operation_id);
 `,
 ]
 
-export async function migrate(pool: pg.Pool): Promise<number> {
-  const lease = await checkout(pool)
-  const { client } = lease
-  let broken = false
-  try {
-    await client.query('BEGIN')
+export function migrate(pool: pg.Pool): Promise<number> {
+  return withTransaction(pool, async (client) => {
     await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK_KEY])
     await client.query('CREATE TABLE IF NOT EXISTS psp_migrations (version int PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())')
-    const { rows } = await client.query<{ version: number | null }>('SELECT max(version) AS version FROM psp_migrations')
-    const current = rows[0]?.version ?? 0
+    const current = firstRow(await client.query<{ version: number | null }>('SELECT max(version) AS version FROM psp_migrations')).version ?? 0
     for (const [offset, migration] of MIGRATIONS.slice(current).entries()) {
       await client.query(migration)
       await client.query('INSERT INTO psp_migrations (version) VALUES ($1)', [current + offset + 1])
     }
-    await client.query('COMMIT')
     return MIGRATIONS.length - current
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {
-      broken = true
-    })
-    throw error
-  } finally {
-    lease.release(broken)
-  }
+  })
 }

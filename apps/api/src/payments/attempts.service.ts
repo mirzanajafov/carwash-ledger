@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
-import { firstRow } from '@carwash/pg'
+import { firstRow, type Queryable } from '@carwash/pg'
 import type pg from 'pg'
 import { Database } from '../db/database.ts'
 import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
@@ -21,7 +21,7 @@ export function pspUnavailable(reason: string): ApiError {
   })
 }
 
-export async function recordAnomaly(db: pg.ClientBase | pg.Pool, attemptId: string | null, kind: string, details: unknown): Promise<void> {
+export async function recordAnomaly(db: Queryable, attemptId: string | null, kind: string, details: unknown): Promise<void> {
   await db.query('INSERT INTO anomalies (attempt_id, kind, details) VALUES ($1, $2, $3) ON CONFLICT (attempt_id, kind) DO NOTHING', [
     attemptId,
     kind,

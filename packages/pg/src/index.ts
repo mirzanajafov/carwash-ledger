@@ -2,6 +2,15 @@ import pg from 'pg'
 
 const ignore = () => undefined
 
+export type Queryable = pg.Pool | pg.ClientBase
+
+export type Isolation = 'read committed' | 'repeatable read' | 'serializable'
+
+export interface TransactionOptions {
+  isolation?: Isolation
+  readOnly?: boolean
+}
+
 export function createPool(config: pg.PoolConfig): pg.Pool {
   const pool = new pg.Pool(config)
   pool.on('error', ignore)
@@ -41,13 +50,13 @@ export async function checkout(pool: pg.Pool): Promise<Checkout> {
   }
 }
 
-export async function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+export async function withTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
   const lease = await checkout(pool)
   const { client } = lease
   let broken = false
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-    const value = await read(client)
+    await client.query(`BEGIN${options.isolation ? ` ISOLATION LEVEL ${options.isolation.toUpperCase()}` : ''}${options.readOnly ? ' READ ONLY' : ''}`)
+    const value = await work(client)
     await client.query('COMMIT')
     return value
   } catch (error) {
@@ -58,4 +67,8 @@ export async function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase)
   } finally {
     lease.release(broken)
   }
+}
+
+export function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+  return withTransaction(pool, read, { isolation: 'repeatable read', readOnly: true })
 }

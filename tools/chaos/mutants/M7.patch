@@ -1,19 +1,20 @@
 --- a/packages/ledger/src/posters/pg-cte.ts
 +++ b/packages/ledger/src/posters/pg-cte.ts
-@@ -20,15 +20,18 @@
-     throw new InvalidJournalError('a journal touching serializable accounts needs its own transaction')
-   }
-   try {
--    if (plan.locks.length > 0) {
--      await client.query(LOCK_BALANCES, lockParams(plan))
--      failpoint('post.after_lock')
--    }
-+    const [ids, shards, deltas] = deltaParams(plan)
-+    const read = await client.query<{ account_id: string; shard: number; amount: string }>(LOCK_BALANCES, [ids, shards])
-+    failpoint('post.after_lock')
-+    const current = new Map(read.rows.map((r) => [`${r.account_id}:${r.shard}`, BigInt(r.amount)]))
-+    const amounts = deltas.map((delta, n) => (current.get(`${ids[n]}:${shards[n]}`)! + BigInt(delta)).toString())
-     const result = await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
+@@ -11,16 +11,19 @@
+ import { expectApplied, postWith } from './common.ts'
+ 
+ async function write(client: pg.ClientBase, plan: JournalPlan): Promise<bigint> {
+-  if (plan.locks.length > 0) {
+-    await client.query(LOCK_BALANCES, lockParams(plan))
+-    failpoint('post.after_lock')
+-  }
++  const [ids, shards, deltas] = deltaParams(plan)
++  const read = await client.query<{ account_id: string; shard: number; amount: string }>(LOCK_BALANCES, [ids, shards])
++  failpoint('post.after_lock')
++  const current = new Map(read.rows.map((r) => [`${r.account_id}:${r.shard}`, BigInt(r.amount)]))
++  const amounts = deltas.map((delta, n) => (current.get(`${ids[n]}:${shards[n]}`)! + BigInt(delta)).toString())
+   const row = firstRow(
+     await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
        plan.externalRef,
        plan.reversesId?.toString() ?? null,
        ...entryParams(plan),
@@ -21,33 +22,9 @@
 +      ids,
 +      shards,
 +      amounts,
-     ])
-     const row = firstRow(result)
-     expectApplied(Number(row.balances), plan)
-@@ -60,15 +63,18 @@
-     let broken = false
-     try {
-       await client.query(beginStatement(plan))
--      if (plan.locks.length > 0) {
--        await client.query(LOCK_BALANCES, lockParams(plan))
--        failpoint('post.after_lock')
--      }
-+      const [ids, shards, deltas] = deltaParams(plan)
-+      const read = await client.query<{ account_id: string; shard: number; amount: string }>(LOCK_BALANCES, [ids, shards])
-+      failpoint('post.after_lock')
-+      const current = new Map(read.rows.map((r) => [`${r.account_id}:${r.shard}`, BigInt(r.amount)]))
-+      const amounts = deltas.map((delta, n) => (current.get(`${ids[n]}:${shards[n]}`)! + BigInt(delta)).toString())
-       const result = await client.query<{ id: string; balances: string }>(POST_JOURNAL, [
-         plan.externalRef,
-         plan.reversesId?.toString() ?? null,
-         ...entryParams(plan),
--        ...deltaParams(plan),
-+        ids,
-+        shards,
-+        amounts,
-       ])
-       const row = firstRow(result)
-       expectApplied(Number(row.balances), plan)
+     ]),
+   )
+   expectApplied(Number(row.balances), plan)
 --- a/packages/ledger/src/sql.ts
 +++ b/packages/ledger/src/sql.ts
 @@ -1,10 +1,9 @@

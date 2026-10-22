@@ -1,4 +1,4 @@
-import { firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 
 export const MERCHANTS = 50
@@ -52,9 +52,7 @@ export async function seedJournals(admin: pg.Pool, accounts: SeedAccounts, from:
   const currency = await hasEntryCurrency(admin)
   for (let start = from; start < to; start += BATCH) {
     const end = Math.min(start + BATCH, to) - 1
-    const client = await admin.connect()
-    try {
-      await client.query('BEGIN')
+    await withTransaction(admin, async (client) => {
       await client.query('SET LOCAL session_replication_role = replica')
       await client.query(
         `WITH j AS (
@@ -73,10 +71,7 @@ export async function seedJournals(admin: pg.Pool, accounts: SeedAccounts, from:
          WHERE x.account_id IS NOT NULL`,
         [start, end, accounts.receivable, accounts.fees, accounts.pspFees, accounts.merchants],
       )
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
+    })
   }
   await admin.query(`ANALYZE journals, entries${options.queueAudit ? ', audit_queue' : ''}`)
   return performance.now() - started

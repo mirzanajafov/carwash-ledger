@@ -2,7 +2,7 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { verifyLog, type VerifierState } from '@carwash/audit-pg'
 import { readWitness } from '@carwash/invariants'
-import pg from 'pg'
+import { createPool, inSnapshot } from '@carwash/pg'
 
 const { values } = parseArgs({
   options: {
@@ -30,13 +30,9 @@ function loadState(file: string | undefined): VerifierState | undefined {
 }
 
 const witness = witnessUrl ? await readWitness(witnessUrl) : undefined
-const client = new pg.Client({ connectionString })
-client.on('error', () => undefined)
-await client.connect()
+const pool = createPool({ connectionString, max: 1 })
 try {
-  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
-  const report = await verifyLog(client, { witness, from: loadState(values.state), batch: Number(values.batch) })
-  await client.query('COMMIT')
+  const report = await inSnapshot(pool, (client) => verifyLog(client, { witness, from: loadState(values.state), batch: Number(values.batch) }))
   process.stdout.write(`${JSON.stringify({ ...report, state: undefined }, null, 2)}\n`)
   if (values.state && report.findings === 0 && report.state) {
     writeFileSync(`${values.state}.next`, JSON.stringify(report.state), { mode: 0o600 })
@@ -44,5 +40,5 @@ try {
   }
   process.exitCode = report.findings === 0 ? 0 : 1
 } finally {
-  await client.end()
+  await pool.end()
 }
