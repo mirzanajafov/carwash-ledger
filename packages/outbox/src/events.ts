@@ -1,4 +1,5 @@
 import type { Transaction } from '@carwash/pg'
+import type { PaymentEventType, PaymentPayload, RefundEventType, RefundPayload } from './payloads.ts'
 
 export const LANES = 16
 
@@ -13,13 +14,6 @@ export interface NewEvent {
   payload: unknown
 }
 
-export interface Envelope {
-  id: string
-  type: string
-  occurred_at: string
-  data: unknown
-}
-
 export function laneSql(key: string): string {
   return `(hashtextextended(${key}, 0) & ${LANES - 1})::smallint`
 }
@@ -31,6 +25,14 @@ export async function writeEvent(client: Transaction, event: NewEvent): Promise<
     event.type,
     JSON.stringify(event.payload),
   ])
+}
+
+export async function writePaymentEvent(client: Transaction, type: PaymentEventType, payment: PaymentPayload): Promise<void> {
+  await writeEvent(client, { topic: TOPICS.payments, key: payment.id, type, payload: payment })
+}
+
+export async function writeRefundEvent(client: Transaction, type: RefundEventType, refund: RefundPayload): Promise<void> {
+  await writeEvent(client, { topic: TOPICS.payments, key: refund.payment, type, payload: refund })
 }
 
 export async function writeJournalEvents(client: Transaction, journalId: bigint): Promise<number> {

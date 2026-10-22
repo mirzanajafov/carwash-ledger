@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { KafkaJS } from '@confluentinc/kafka-javascript'
-import type { Envelope } from './events.ts'
+import type { Envelope } from './payloads.ts'
 import type { OutboxRow, Publisher } from './relay.ts'
 
 export interface TopicSpec {

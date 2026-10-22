@@ -1,4 +1,5 @@
 import { checkEvents, checkLedger, violations } from '@carwash/invariants'
+import { EntryPosted, PaymentPayload, RefundPayload } from '@carwash/outbox'
 import fc from 'fast-check'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -59,6 +60,15 @@ describe('the consumers', () => {
     expect(issued.find((r) => r.payment_id === captured.wash_1[2])).toMatchObject({ amount: '900' })
     expect(violations(await checkEvents(stack.admin))).toEqual([])
     expect(violations(await checkLedger(stack.admin))).toEqual([])
+  })
+
+  it('receive payloads that match the schemas the outbox publishes', async () => {
+    const events = await outboxEvents(app, 'all')
+    const schemaOf = (type: string) => (type === 'entry.posted' ? EntryPosted : type.startsWith('refund.') ? RefundPayload : PaymentPayload)
+    for (const event of events) expect(schemaOf(event.type).safeParse(event.data).success, event.type).toBe(true)
+    expect([...new Set(events.map((event) => event.type))]).toEqual(
+      expect.arrayContaining(['payment.authorized', 'payment.captured', 'payment.canceled', 'payment.failed', 'refund.succeeded', 'entry.posted']),
+    )
   })
 
   it('do each event once, whatever the order, the batches and the redeliveries', async () => {

@@ -3,7 +3,7 @@ import { firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { ensureTopics, kafkaClient, KafkaPublisher, Relay, TOPICS, writeEvent, type Envelope } from '../src/index.ts'
+import { Envelope, ensureTopics, kafkaClient, KafkaPublisher, Relay, TOPICS, writeEvent } from '../src/index.ts'
 
 const BROKERS = (process.env.KAFKA_BROKERS ?? '127.0.0.1:9194').split(',')
 
@@ -52,7 +52,7 @@ describe('the relay against Kafka', () => {
           eachMessage: async ({ message }) => {
             const headers = Object.fromEntries(Object.entries(message.headers ?? {}).map(([name, value]) => [name, String(value)]))
             assert(message.key && message.value)
-            received.push({ key: message.key.toString(), envelope: JSON.parse(message.value.toString()), headers })
+            received.push({ key: message.key.toString(), envelope: Envelope.parse(JSON.parse(message.value.toString())), headers })
             if (received.length === keys.length * 20) {
               clearTimeout(timer)
               resolve()

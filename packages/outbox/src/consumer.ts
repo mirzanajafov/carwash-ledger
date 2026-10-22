@@ -3,7 +3,8 @@ import type { KafkaJS } from '@confluentinc/kafka-javascript'
 import { failpoint } from '@carwash/failpoints'
 import { withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
-import type { Envelope, Topic } from './events.ts'
+import type { Topic } from './events.ts'
+import { Envelope } from './payloads.ts'
 
 export interface ConsumedEvent {
   id: string
@@ -41,13 +42,16 @@ export async function applyOnce(pool: pg.Pool, spec: ConsumerSpec, events: reado
 
 export function parseMessage(key: Buffer | null, value: Buffer | null): ConsumedEvent | undefined {
   if (!value) return undefined
+  let json: unknown
   try {
-    const envelope = JSON.parse(value.toString()) as Envelope
-    if (typeof envelope.id !== 'string' || typeof envelope.type !== 'string') return undefined
-    return { id: envelope.id, type: envelope.type, key: key?.toString() ?? '', occurredAt: envelope.occurred_at, data: envelope.data }
+    json = JSON.parse(value.toString())
   } catch {
     return undefined
   }
+  const envelope = Envelope.safeParse(json)
+  if (!envelope.success) return undefined
+  const { id, type, occurred_at: occurredAt, data } = envelope.data
+  return { id, type, key: key?.toString() ?? '', occurredAt, data }
 }
 
 export interface ConsumerSettings {

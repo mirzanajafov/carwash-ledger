@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { checkEvents, violations } from '@carwash/invariants'
-import { kafkaClient, type Envelope } from '@carwash/outbox'
+import { Envelope, kafkaClient } from '@carwash/outbox'
 import type { INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
@@ -59,7 +59,7 @@ describe('the worker relay', () => {
           eachMessage: async ({ message }) => {
             if (message.key?.toString() !== payment.id) return
             assert(message.value)
-            types.push((JSON.parse(message.value.toString()) as Envelope).type)
+            types.push(Envelope.parse(JSON.parse(message.value.toString())).type)
             if (types.length === 4) {
               clearTimeout(timer)
               resolve()
