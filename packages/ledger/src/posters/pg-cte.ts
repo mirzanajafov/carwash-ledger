@@ -10,7 +10,7 @@ import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal, Poster } from '../types.ts'
 import { expectApplied, postWith } from './common.ts'
 
-async function write(client: pg.ClientBase, plan: JournalPlan): Promise<bigint> {
+async function writeJournal(client: pg.ClientBase, plan: JournalPlan): Promise<bigint> {
   if (plan.locks.length > 0) {
     await client.query(LOCK_BALANCES, lockParams(plan))
     failpoint('post.after_lock')
@@ -37,7 +37,7 @@ export async function postInTransaction(client: pg.ClientBase, registry: Account
     throw new InvalidJournalError('a journal touching serializable accounts needs its own transaction')
   }
   try {
-    return await write(client, plan)
+    return await writeJournal(client, plan)
   } catch (error) {
     throw translateError(error, plan)
   }
@@ -60,16 +60,16 @@ export class PgCtePoster implements Poster {
   }
 
   async #attempt(plan: JournalPlan): Promise<bigint> {
-    const id = await withTransaction(
+    const committed = await withTransaction(
       this.#pool,
       async (client) => {
-        const written = await write(client, plan)
+        const written = await writeJournal(client, plan)
         failpoint('post.before_commit')
         return written
       },
       { isolation: plan.isolation },
     )
     failpoint('post.after_commit')
-    return id
+    return committed
   }
 }

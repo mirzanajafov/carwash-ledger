@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessAnchor } from '@carwash/audit-pg'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
+import { withTransaction } from '@carwash/pg'
 import { createTestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -61,14 +62,7 @@ beforeAll(async () => {
       ],
     })
   }
-  const lease = await app.connect()
-  try {
-    await lease.query('BEGIN')
-    await sequenceBatch(lease, 1000)
-    await lease.query('COMMIT')
-  } finally {
-    lease.release()
-  }
+  await withTransaction(app, (client) => sequenceBatch(client, 1000))
   const witnessDir = mkdtempSync(join(tmpdir(), 'witness-'))
   stateDir = mkdtempSync(join(tmpdir(), 'tamper-'))
   cleanup.defer(() => {

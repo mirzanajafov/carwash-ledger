@@ -5,6 +5,7 @@ import { createAccount, type Account } from '@carwash/ledger'
 import { firstRow, withTransaction } from '@carwash/pg'
 import { signCopies } from '@carwash/testkit'
 import type pg from 'pg'
+import { withTriggersOff } from './ledger-seed.ts'
 
 export interface Shape {
   days: number
@@ -153,13 +154,6 @@ const BALANCES = `
   UPDATE balances b SET amount = t.total
   FROM (SELECT account_id, sum(amount) AS total FROM entries GROUP BY account_id) t
   WHERE b.account_id = t.account_id AND b.shard = 0`
-
-function withTriggersOff(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
-  return withTransaction(admin, async (client) => {
-    await client.query('SET LOCAL session_replication_role = replica')
-    await work(client)
-  })
-}
 
 interface Chart {
   receivable: Account

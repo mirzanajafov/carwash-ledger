@@ -4,11 +4,19 @@ const ignore = () => undefined
 
 export type Queryable = pg.Pool | pg.ClientBase
 
-export type Isolation = 'read committed' | 'repeatable read' | 'serializable'
+const ISOLATION = {
+  'read committed': 'ISOLATION LEVEL READ COMMITTED',
+  'repeatable read': 'ISOLATION LEVEL REPEATABLE READ',
+  serializable: 'ISOLATION LEVEL SERIALIZABLE',
+} as const
 
 export interface TransactionOptions {
-  isolation?: Isolation
+  isolation?: keyof typeof ISOLATION
   readOnly?: boolean
+}
+
+function begin({ isolation, readOnly }: TransactionOptions): string {
+  return ['BEGIN', isolation && ISOLATION[isolation], readOnly && 'READ ONLY'].filter(Boolean).join(' ')
 }
 
 export function createPool(config: pg.PoolConfig): pg.Pool {
@@ -50,14 +58,15 @@ export async function checkout(pool: pg.Pool): Promise<Checkout> {
   }
 }
 
-export async function withTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
+export async function withTransaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
   const lease = await checkout(pool)
   const { client } = lease
   let broken = false
   try {
-    await client.query(`BEGIN${options.isolation ? ` ISOLATION LEVEL ${options.isolation.toUpperCase()}` : ''}${options.readOnly ? ' READ ONLY' : ''}`)
+    await client.query(begin(options))
     const value = await work(client)
-    await client.query('COMMIT')
+    const commit = await client.query('COMMIT')
+    if (commit.command === 'ROLLBACK') throw new Error('the transaction was rolled back at COMMIT because a statement in it had failed')
     return value
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {

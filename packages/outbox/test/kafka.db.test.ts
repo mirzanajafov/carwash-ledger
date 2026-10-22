@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { checkout, firstRow } from '@carwash/pg'
+import { firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
@@ -33,16 +33,11 @@ afterAll(() => cleanup.disposeAsync())
 describe('the relay against Kafka', () => {
   it('delivers every event with its id and type, in order per key', async () => {
     const keys = ['wash-1', 'wash-2', 'wash-3', 'wash-4', 'wash-5', 'wash-6']
-    const lease = await checkout(app)
-    try {
-      await lease.client.query('BEGIN')
+    await withTransaction(app, async (client) => {
       for (let n = 0; n < 20; n++) {
-        for (const key of keys) await writeEvent(lease.client, { topic: TOPICS.payments, key, type: 'test.step', payload: { n } })
+        for (const key of keys) await writeEvent(client, { topic: TOPICS.payments, key, type: 'test.step', payload: { n } })
       }
-      await lease.client.query('COMMIT')
-    } finally {
-      lease.release()
-    }
+    })
     const publisher = await KafkaPublisher.connect({ brokers: BROKERS, clientId: 'outbox-test', deliveryTimeoutMs: 10_000, topicPrefix: prefix })
     const relay = new Relay(app, publisher, { workers: 3, batch: 16, pollMs: 10 })
     relay.start()

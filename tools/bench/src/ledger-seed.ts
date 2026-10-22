@@ -38,6 +38,13 @@ export function grossOf(journal: number): number {
   return gross
 }
 
+export function withTriggersOff(admin: pg.Pool, work: (client: pg.ClientBase) => Promise<void>): Promise<void> {
+  return withTransaction(admin, async (client) => {
+    await client.query('SET LOCAL session_replication_role = replica')
+    await work(client)
+  })
+}
+
 async function hasEntryCurrency(admin: pg.Pool): Promise<boolean> {
   const { present } = firstRow(
     await admin.query<{ present: boolean }>(
@@ -52,8 +59,7 @@ export async function seedJournals(admin: pg.Pool, accounts: SeedAccounts, from:
   const currency = await hasEntryCurrency(admin)
   for (let start = from; start < to; start += BATCH) {
     const end = Math.min(start + BATCH, to) - 1
-    await withTransaction(admin, async (client) => {
-      await client.query('SET LOCAL session_replication_role = replica')
+    await withTriggersOff(admin, async (client) => {
       await client.query(
         `WITH j AS (
            INSERT INTO journals (external_ref) SELECT 'seed:' || g FROM generate_series($1::bigint, $2::bigint) g RETURNING id, external_ref

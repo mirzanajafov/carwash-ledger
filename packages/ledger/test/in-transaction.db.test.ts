@@ -1,8 +1,8 @@
 import { checkLedger, violations } from '@carwash/invariants'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { firstRow } from '@carwash/pg'
+import { checkout, firstRow } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { AccountRegistry, DuplicateJournalError, InvalidJournalError, checkout, pgAccountLoader, postInTransaction } from '../src/index.ts'
+import { AccountRegistry, DuplicateJournalError, InvalidJournalError, pgAccountLoader, postInTransaction } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
 let ledger: LedgerFixture

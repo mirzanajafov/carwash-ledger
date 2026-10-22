@@ -21,7 +21,7 @@ import {
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { firstRow, inSnapshot, withTransaction } from '@carwash/pg'
+import { checkout, firstRow, inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -72,7 +72,7 @@ function round(x: number): number {
   return Math.round(x * 10) / 10
 }
 
-function timed(client: pg.PoolClient, clock: Timing): pg.ClientBase {
+function timed(client: pg.ClientBase, clock: Timing): pg.ClientBase {
   return new Proxy(client, {
     get(target, property, receiver) {
       if (property === 'query') {
@@ -344,7 +344,9 @@ async function trials(dir: string) {
       for (let i = 0; i < perClass; i++) {
         const inside = random() < 0.9 || covered === size
         const seq = inside ? Math.floor(random() * covered) : covered + Math.floor(random() * (size - covered))
-        const client = await lab.admin.connect()
+        const lease = await checkout(lab.admin)
+        const { client } = lease
+        let broken = false
         try {
           await client.query('BEGIN')
           await tamper(client, tamperClass, seq)
@@ -371,10 +373,12 @@ async function trials(dir: string) {
           row.caughtWithoutWitness += Number(trial.caughtWithoutWitness)
           row.ms.push(ms)
         } catch (error) {
-          await client.query('ROLLBACK').catch(() => undefined)
+          await client.query('ROLLBACK').catch(() => {
+            broken = true
+          })
           throw error
         } finally {
-          client.release()
+          lease.release(broken)
         }
       }
       console.log(`class ${tamperClass} done`)

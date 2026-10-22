@@ -26,7 +26,7 @@ export interface OperationRequest {
   kind: OperationKind
   hash: Buffer
   token: TokenEffect
-  apply(client: pg.PoolClient, behaviour: Behaviour): Promise<Outcome>
+  apply(client: pg.ClientBase, behaviour: Behaviour): Promise<Outcome>
 }
 
 export interface Answer {
@@ -150,7 +150,7 @@ export class Psp {
   async execute(request: OperationRequest): Promise<Answer> {
     const behaviour = this.#faults.behaviour(request.key, request.kind, request.token)
     if (behaviour.slowMs > 0) await sleep(behaviour.slowMs)
-    const done = await withTransaction(this.#pool, async (client) => {
+    return withTransaction(this.#pool, async (client): Promise<Answer> => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [request.key])
       const stored = await client.query<{ request_hash: Buffer; http_status: number; response: unknown }>(
         `SELECT request_hash, http_status, response FROM idempotency_keys
@@ -158,7 +158,12 @@ export class Psp {
         [request.key, this.#settings.idempotencyWindowSeconds],
       )
       const [previous] = stored.rows
-      if (previous) return { kind: 'stored', previous } as const
+      if (previous) {
+        if (!previous.request_hash.equals(request.hash)) {
+          throw new HttpError(422, 'idempotency_key_reused', 'this idempotency key was used with a different request')
+        }
+        return { status: previous.http_status, body: previous.response, replayed: true, afterCommit: 'answer' }
+      }
       if (behaviour.fail) throw new HttpError(500, 'processing_error', 'the PSP failed before doing anything')
 
       const outcome = await request.apply(client, behaviour)
@@ -187,13 +192,8 @@ export class Psp {
         [request.key, request.hash, operationId, outcome.httpStatus, body],
       )
       await this.#enqueueWebhook(client, operationId, outcome.status, body, behaviour)
-      return { kind: 'done', answer: { status: outcome.httpStatus, body, replayed: false, afterCommit: behaviour.afterCommit } } as const
+      return { status: outcome.httpStatus, body, replayed: false, afterCommit: behaviour.afterCommit }
     })
-    if (done.kind === 'done') return done.answer
-    if (!done.previous.request_hash.equals(request.hash)) {
-      throw new HttpError(422, 'idempotency_key_reused', 'this idempotency key was used with a different request')
-    }
-    return { status: done.previous.http_status, body: done.previous.response, replayed: true, afterCommit: 'answer' }
   }
 
   async chargeToken(chargeId: string): Promise<string> {
@@ -227,7 +227,7 @@ export class Psp {
     }
   }
 
-  async authorize(client: pg.PoolClient, behaviour: Behaviour, input: AuthorizeInput): Promise<Outcome> {
+  async authorize(client: pg.ClientBase, behaviour: Behaviour, input: AuthorizeInput): Promise<Outcome> {
     const { amount, currency } = input
     if (behaviour.decline) return { status: 'declined', httpStatus: 402, reason: 'card_declined', amount, currency }
     const chargeId = `ch_${randomUUID()}`
@@ -240,7 +240,7 @@ export class Psp {
     return { status: 'succeeded', httpStatus: 200, chargeId, amount, currency }
   }
 
-  async capture(client: pg.PoolClient, behaviour: Behaviour, chargeId: string, amount: number | undefined): Promise<Outcome> {
+  async capture(client: pg.ClientBase, behaviour: Behaviour, chargeId: string, amount: number | undefined): Promise<Outcome> {
     const charge = await this.#lockCharge(client, chargeId)
     const captured = misstated(behaviour, amount ?? Number(charge.authorized_amount))
     const declined = (httpStatus: number, reason: string): Outcome => ({
@@ -259,7 +259,7 @@ export class Psp {
     return { status: 'succeeded', httpStatus: 200, chargeId, amount: captured, currency: charge.currency }
   }
 
-  async cancel(client: pg.PoolClient, chargeId: string): Promise<Outcome> {
+  async cancel(client: pg.ClientBase, chargeId: string): Promise<Outcome> {
     const charge = await this.#lockCharge(client, chargeId)
     const amount = Number(charge.authorized_amount)
     if (charge.status !== 'authorized') {
@@ -270,7 +270,7 @@ export class Psp {
     return { status: 'succeeded', httpStatus: 200, chargeId, amount, currency: charge.currency }
   }
 
-  async refund(client: pg.PoolClient, behaviour: Behaviour, chargeId: string, requested: number): Promise<Outcome> {
+  async refund(client: pg.ClientBase, behaviour: Behaviour, chargeId: string, requested: number): Promise<Outcome> {
     const amount = misstated(behaviour, requested)
     const charge = await this.#lockCharge(client, chargeId)
     const declined = (reason: string): Outcome => ({ status: 'declined', httpStatus: 409, reason, chargeId, amount, currency: charge.currency })
@@ -288,17 +288,17 @@ export class Psp {
     return { status: 'succeeded', httpStatus: 200, amount: misstated(behaviour, input.amount), currency, destination }
   }
 
-  async #lockCharge(client: pg.PoolClient, chargeId: string): Promise<ChargeRow> {
+  async #lockCharge(client: pg.ClientBase, chargeId: string): Promise<ChargeRow> {
     const { rows } = await client.query<ChargeRow>(`SELECT ${CHARGE_COLUMNS} FROM charges c WHERE c.id = $1 FOR UPDATE`, [chargeId])
     if (!rows[0]) throw new HttpError(404, 'charge_not_found', `no charge ${chargeId}`)
     return rows[0]
   }
 
-  async #render(client: pg.PoolClient, operationId: string): Promise<unknown> {
+  async #render(client: pg.ClientBase, operationId: string): Promise<unknown> {
     return operationJson(firstRow(await client.query<OperationRow>(`${SELECT_OPERATION} WHERE o.id = $1`, [operationId])))
   }
 
-  async #enqueueWebhook(client: pg.PoolClient, operationId: string, status: Outcome['status'], body: unknown, behaviour: Behaviour): Promise<void> {
+  async #enqueueWebhook(client: pg.ClientBase, operationId: string, status: Outcome['status'], body: unknown, behaviour: Behaviour): Promise<void> {
     if (!this.#settings.webhooks) return
     const eventId = `evt_${randomUUID()}`
     const type = `operation.${status}`

@@ -20,15 +20,15 @@ export class Database implements OnModuleDestroy {
     })
   }
 
-  async transaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  async transaction<T>(work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
     const { value } = await withRetry(async () => {
-      const result = await withTransaction(this.pool, async (client) => {
-        const done = await work(client)
+      const committed = await withTransaction(this.pool, async (client) => {
+        const written = await work(client)
         failpoint('transaction.before_commit')
-        return done
+        return written
       })
       failpoint('transaction.after_commit')
-      return result
+      return committed
     })
     return value
   }

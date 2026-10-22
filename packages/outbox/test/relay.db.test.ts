@@ -1,5 +1,5 @@
 import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, type Account } from '@carwash/ledger'
-import { checkout, firstRow } from '@carwash/pg'
+import { checkout, firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
@@ -24,14 +24,9 @@ class Recorder implements Publisher {
 }
 
 async function commit(events: readonly NewEvent[]): Promise<void> {
-  const lease = await checkout(app)
-  try {
-    await lease.client.query('BEGIN')
-    for (const event of events) await writeEvent(lease.client, event)
-    await lease.client.query('COMMIT')
-  } finally {
-    lease.release()
-  }
+  await withTransaction(app, async (client) => {
+    for (const event of events) await writeEvent(client, event)
+  })
 }
 
 async function addEvents(keys: readonly string[]): Promise<void> {
