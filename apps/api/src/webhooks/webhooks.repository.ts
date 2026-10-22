@@ -1,15 +1,17 @@
 import type { Queryable } from '@carwash/pg'
 
+export type WebhookOutcome = 'applied' | 'already' | 'anomaly' | 'not_at_psp' | 'unmatched' | 'reported'
+
 export interface WebhookEvent {
   id: string
   type: string
   attemptId: string | null
-  outcome: string
+  outcome: WebhookOutcome
   payload: unknown
 }
 
-export async function webhookOutcome(db: Queryable, id: string): Promise<string | undefined> {
-  const { rows } = await db.query<{ outcome: string }>('SELECT outcome FROM webhook_events WHERE id = $1', [id])
+export async function webhookOutcome(db: Queryable, id: string): Promise<WebhookOutcome | undefined> {
+  const { rows } = await db.query<{ outcome: WebhookOutcome }>('SELECT outcome FROM webhook_events WHERE id = $1', [id])
   return rows[0]?.outcome
 }
 
@@ -33,6 +35,6 @@ export async function unmatchedWebhooks(db: Queryable, reportAfterSeconds: numbe
   return rows
 }
 
-export async function markWebhookChecked(db: Queryable, id: string, outcome: string, attemptId: string | null): Promise<void> {
+export async function markWebhookChecked(db: Queryable, id: string, outcome: WebhookOutcome, attemptId: string | null): Promise<void> {
   await db.query(`UPDATE webhook_events SET outcome = $2, attempt_id = $3, checks = checks + 1, checked_at = now() WHERE id = $1`, [id, outcome, attemptId])
 }

@@ -6,7 +6,7 @@ import { dayTotals } from '../src/consumers/statements.ts'
 import { databaseUnavailable } from '../src/db/unavailable.ts'
 import { canonicalJson, requestHash } from '../src/idempotency/request-hash.ts'
 import { feeRefund, platformFee } from '../src/payments/fees.ts'
-import { canMove, isFinal, resolveCardAttempt } from '../src/payments/payment-state.ts'
+import { resolveCardAttempt } from '../src/payments/payment-state.ts'
 import { checkAnswer, type ExpectedAnswer } from '../src/psp/answers.ts'
 import { verifySignature } from '../src/webhooks/signature.ts'
 
@@ -48,16 +48,6 @@ describe('fees', () => {
 })
 
 describe('payment state', () => {
-  it('only moves forward along the documented edges', () => {
-    expect(canMove('created', 'authorized')).toBe(true)
-    expect(canMove('authorized', 'captured')).toBe(true)
-    expect(canMove('captured', 'refunded')).toBe(true)
-    expect(canMove('captured', 'authorized')).toBe(false)
-    expect(canMove('created', 'captured')).toBe(false)
-    expect(canMove('failed', 'authorized')).toBe(false)
-    expect(['refunded', 'canceled', 'failed'].every((s) => isFinal(s as never))).toBe(true)
-  })
-
   it('turns a PSP answer into a move, or into an anomaly when it does not fit', () => {
     expect(resolveCardAttempt('created', 'authorize', 'succeeded', null)).toEqual({ kind: 'move', from: 'created', to: 'authorized' })
     expect(resolveCardAttempt('created', 'authorize', 'declined', 'card_declined')).toEqual({ kind: 'move', from: 'created', to: 'failed' })

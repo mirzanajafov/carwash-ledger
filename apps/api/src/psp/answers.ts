@@ -1,4 +1,8 @@
-export type AttemptKind = 'authorize' | 'capture' | 'cancel' | 'refund' | 'payout'
+export const CARD_ATTEMPT_KINDS = ['authorize', 'capture', 'cancel'] as const
+
+export type CardAttemptKind = (typeof CARD_ATTEMPT_KINDS)[number]
+export type AttemptKind = CardAttemptKind | 'refund' | 'payout'
+export type AnswerStatus = 'succeeded' | 'declined'
 
 export interface ExpectedAnswer {
   attemptId: string
@@ -10,7 +14,7 @@ export interface ExpectedAnswer {
 
 export interface PspAnswer {
   operationId: string
-  status: 'succeeded' | 'declined'
+  status: AnswerStatus
   reason: string | null
   chargeId: string | null
 }
@@ -23,6 +27,11 @@ function minorUnits(value: unknown): unknown {
 
 function field(source: unknown, name: string): unknown {
   return typeof source === 'object' && source !== null ? (source as Record<string, unknown>)[name] : undefined
+}
+
+export function answeredAmount(body: unknown): bigint | undefined {
+  const amount = minorUnits(field(body, 'amount'))
+  return typeof amount === 'bigint' && amount > 0n ? amount : undefined
 }
 
 export function checkAnswer(expected: ExpectedAnswer, body: unknown): AnswerCheck {

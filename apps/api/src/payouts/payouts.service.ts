@@ -4,9 +4,10 @@ import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
+import type { PayoutId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
-import { insertAttempt, pendingAttempt } from '../payments/attempts.repository.ts'
+import { insertAttempt, pendingPayoutAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { insertPayout, loadPayout, lockPayoutBalances, setPayoutJournal } from './payouts.repository.ts'
 import { payoutView } from './payouts.views.ts'
@@ -36,18 +37,18 @@ export class PayoutsService {
   async create(owned: OwnedKey, input: PayoutInput): Promise<Final> {
     const payoutId = owned.payoutId ?? (await this.#startPayout(owned, input))
     for (let round = 0; ; round++) {
-      const attempt = await pendingAttempt(this.#db.pool, 'payout_id', payoutId, ['payout'])
+      const attempt = await pendingPayoutAttempt(this.#db.pool, payoutId)
       if (!attempt) break
       if (round >= MAX_ROUNDS) throw new Error(`payout ${payoutId} is still pending after ${round} rounds`)
       await this.#attempts.settle(attempt)
     }
     return this.#db.transaction(async (client) => {
-      const payout = (await loadPayout(client, payoutId))!
+      const payout = await loadPayout(client, payoutId)
       return this.#idempotency.finish(client, owned, { status: 200, body: payoutView(payout) })
     })
   }
 
-  #startPayout(owned: OwnedKey, input: PayoutInput): Promise<string> {
+  #startPayout(owned: OwnedKey, input: PayoutInput): Promise<PayoutId> {
     return this.#db.transaction(async (client) => {
       const merchant = await findMerchant(client, input.merchant)
       if (!merchant) throw notFound(`merchant ${input.merchant}`)
@@ -55,7 +56,7 @@ export class PayoutsService {
         throw new DomainError('invalid', 'currency_mismatch', `merchant ${input.merchant} is paid in ${merchant.currency}`)
       }
       const bank = this.#chart.accounts(input.currency).bank
-      const balance = await lockPayoutBalances(client, merchant.account_id, bank.id.toString())
+      const balance = await lockPayoutBalances(client, merchant.accountId, bank.id)
       if (balance === undefined) throw new Error(`merchant ${input.merchant} has no balance row`)
       const payable = -balance
       if (input.amount === undefined && payable <= 0n) {
@@ -65,11 +66,11 @@ export class PayoutsService {
       if (amount > payable) {
         throw new DomainError('conflict', 'insufficient_funds', `merchant ${input.merchant} has ${payable} available for payout`)
       }
-      const payoutId = await insertPayout(client, merchant.id, amount, input.currency)
+      const payoutId = await insertPayout(client, { merchantId: merchant.id, amount, currency: input.currency })
       const journalId = await postInTransaction(client, this.#chart.registry, {
         externalRef: `payout:${payoutId}`,
         entries: [
-          { accountId: BigInt(merchant.account_id), amount },
+          { accountId: merchant.accountId, amount },
           { accountId: bank.id, amount: -amount },
         ],
       })

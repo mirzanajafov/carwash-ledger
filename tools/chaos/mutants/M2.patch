@@ -1,28 +1,28 @@
 --- a/apps/api/src/payments/attempts.repository.ts
 +++ b/apps/api/src/payments/attempts.repository.ts
-@@ -66,7 +66,7 @@
- export async function resolveAttempt(client: Transaction, id: string, outcome: AttemptOutcome): Promise<boolean> {
+@@ -100,7 +100,7 @@
+ export async function resolveAttempt(client: Transaction, id: AttemptId, answer: PspAnswer): Promise<boolean> {
    const updated = await client.query(
      `UPDATE attempts SET status = $2::attempt_status, psp_operation_id = $3, decline_reason = $4, resolved_at = now()
 -     WHERE id = $1 AND status = 'pending'`,
 +     WHERE id = $1`,
-     [id, outcome.status, outcome.operationId, outcome.reason],
+     [id, answer.status, answer.operationId, answer.reason],
    )
    return updated.rowCount === 1
 --- a/apps/api/src/payments/payments.repository.ts
 +++ b/apps/api/src/payments/payments.repository.ts
-@@ -78,7 +78,7 @@
-   const assignments = set.map(([column], index) => `, ${column} = $${index + 4}`).join('')
-   const moved = await client.query(
-     `UPDATE payments SET status = $3::payment_status, updated_at = now()${assignments}
+@@ -122,7 +122,7 @@
+        failure_reason = coalesce($4, failure_reason), psp_charge_id = coalesce($5, psp_charge_id),
+        captured_amount = coalesce($6, captured_amount), fee = coalesce($7, fee),
+        capture_journal_id = coalesce($8, capture_journal_id), refunded_amount = coalesce($9, refunded_amount)
 -     WHERE id = $1 AND status = $2::payment_status`,
 +     WHERE id = $1 AND $2::payment_status IS NOT NULL`,
-     [id, from, to, ...set.map(([, value]) => value)],
-   )
-   return moved.rowCount === 1
+     [
+       id,
+       from,
 --- a/apps/api/src/payments/payment-state.ts
 +++ b/apps/api/src/payments/payment-state.ts
-@@ -29,7 +29,6 @@
+@@ -11,7 +11,6 @@
  
  export function resolveCardAttempt(current: PaymentStatus, kind: CardAttemptKind, status: AnswerStatus, reason: string | null): Resolution {
    const from = EXPECTED_FROM[kind]

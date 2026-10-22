@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
+import type { AttemptId } from '../ids.ts'
 import type { AttemptKind } from './answers.ts'
 
 export interface PspCall {
-  attemptId: string
+  attemptId: AttemptId
   kind: AttemptKind
   amount: bigint
   currency: string

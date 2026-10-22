@@ -1,12 +1,12 @@
 --- a/apps/api/src/idempotency/idempotency.service.ts
 +++ b/apps/api/src/idempotency/idempotency.service.ts
-@@ -123,9 +123,6 @@
+@@ -121,9 +121,6 @@
        )
        const row = rows[0]
        if (!row) throw inProgress()
 -      if (!row.request_hash.equals(hash)) {
 -        throw new DomainError('unprocessable', 'idempotency_key_reused', 'this idempotency key was already used with a different request')
 -      }
-       if (row.state === 'finished') return { kind: 'replay', status: row.response_status!, body: row.response_body }
-       if (row.leased) throw inProgress()
-       const taken = await client.query<{ lease_id: string }>(
+       if (row.state === 'finished') {
+         if (row.response_status === null) throw new Error(`idempotency key ${key} is finished without a stored answer`)
+         return { kind: 'replay', status: row.response_status, body: row.response_body }

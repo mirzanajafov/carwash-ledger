@@ -4,16 +4,16 @@ import { firstRow, type Transaction } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
+import { asPaymentId, asPayoutId, asRefundId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
 import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
   clientId: string
   key: string
   leaseId: string
-  recoveryPoint: string
-  paymentId: string | null
-  refundId: string | null
-  payoutId: string | null
+  paymentId: PaymentId | null
+  refundId: RefundId | null
+  payoutId: PayoutId | null
 }
 
 export interface Final {
@@ -36,15 +36,14 @@ export interface KeyedRequest {
 export type Begun = { kind: 'owned'; owned: OwnedKey } | { kind: 'replay'; status: number; body: unknown }
 
 export interface ResourceRefs {
-  paymentId?: string
-  refundId?: string
-  payoutId?: string
+  paymentId?: PaymentId
+  refundId?: RefundId
+  payoutId?: PayoutId
 }
 
 interface KeyRow {
   request_hash: Buffer
   state: 'started' | 'finished'
-  recovery_point: string
   payment_id: string | null
   refund_id: string | null
   payout_id: string | null
@@ -112,10 +111,10 @@ export class IdempotencyService {
       const [created] = inserted.rows
       if (created) {
         const leaseId = created.lease_id
-        return { kind: 'owned', owned: { clientId, key, leaseId, recoveryPoint: 'started', paymentId: null, refundId: null, payoutId: null } }
+        return { kind: 'owned', owned: { clientId, key, leaseId, paymentId: null, refundId: null, payoutId: null } }
       }
       const { rows } = await client.query<KeyRow>(
-        `SELECT request_hash, state, recovery_point, payment_id, refund_id, payout_id, locked_until > now() AS leased,
+        `SELECT request_hash, state, payment_id, refund_id, payout_id, locked_until > now() AS leased,
                 response_status, response_body
          FROM idempotency_keys WHERE client_id = $1 AND key = $2 FOR UPDATE`,
         keyParams,
@@ -125,7 +124,10 @@ export class IdempotencyService {
       if (!row.request_hash.equals(hash)) {
         throw new DomainError('unprocessable', 'idempotency_key_reused', 'this idempotency key was already used with a different request')
       }
-      if (row.state === 'finished') return { kind: 'replay', status: row.response_status!, body: row.response_body }
+      if (row.state === 'finished') {
+        if (row.response_status === null) throw new Error(`idempotency key ${key} is finished without a stored answer`)
+        return { kind: 'replay', status: row.response_status, body: row.response_body }
+      }
       if (row.leased) throw inProgress()
       const taken = await client.query<{ lease_id: string }>(
         `UPDATE idempotency_keys SET locked_until = now() + make_interval(secs => $3), lease_id = gen_random_uuid()
@@ -138,10 +140,9 @@ export class IdempotencyService {
           clientId,
           key,
           leaseId: firstRow(taken).lease_id,
-          recoveryPoint: row.recovery_point,
-          paymentId: row.payment_id,
-          refundId: row.refund_id,
-          payoutId: row.payout_id,
+          paymentId: row.payment_id === null ? null : asPaymentId(row.payment_id),
+          refundId: row.refund_id === null ? null : asRefundId(row.refund_id),
+          payoutId: row.payout_id === null ? null : asPayoutId(row.payout_id),
         },
       }
     })

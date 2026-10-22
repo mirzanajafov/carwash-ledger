@@ -105,20 +105,24 @@ function operationJson(row: OperationRow) {
     currency: row.currency,
     destination: row.destination,
     created: seconds(row.created_at),
-    charge:
-      row.charge_id === null
-        ? null
-        : chargeJson({
-            id: row.charge_id,
-            status: row.charge_status!,
-            currency: row.charge_currency!,
-            authorized_amount: row.authorized_amount!,
-            captured_amount: row.captured_amount!,
-            refunded_amount: row.refunded_amount!,
-            expires_at: row.expires_at!,
-            expired: row.expired!,
-          }),
+    charge: row.charge_id === null ? null : chargeJson(operationCharge(row, row.charge_id)),
   }
+}
+
+function operationCharge(row: OperationRow, id: string): ChargeRow {
+  const { charge_status: status, charge_currency: currency, authorized_amount, captured_amount, refunded_amount, expires_at, expired } = row
+  if (
+    status === null ||
+    currency === null ||
+    authorized_amount === null ||
+    captured_amount === null ||
+    refunded_amount === null ||
+    expires_at === null ||
+    expired === null
+  ) {
+    throw new Error(`operation ${row.id} points at charge ${id}, which has no row`)
+  }
+  return { id, status, currency, authorized_amount, captured_amount, refunded_amount, expires_at, expired }
 }
 
 export function requestHash(method: string, path: string, body: unknown): Buffer {

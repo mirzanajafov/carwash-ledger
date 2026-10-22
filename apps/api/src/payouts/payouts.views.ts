@@ -1,15 +1,15 @@
 import { unixSeconds } from '../http/unix-time.ts'
-import type { PayoutRecord } from './payouts.repository.ts'
+import type { Payout } from './payout.ts'
 
-export function payoutView(o: PayoutRecord) {
+export function payoutView(o: Payout) {
   return {
     id: o.id,
     object: 'payout',
-    merchant: o.merchant_code,
+    merchant: o.merchantCode,
     amount: Number(o.amount),
     currency: o.currency,
     status: o.status,
-    failure_reason: o.failure_reason,
-    created: unixSeconds(o.created_at),
+    failure_reason: o.failureReason,
+    created: unixSeconds(o.createdAt),
   }
 }

@@ -1,23 +1,5 @@
-export type PaymentStatus = 'created' | 'authorized' | 'captured' | 'refunded' | 'canceled' | 'failed'
-export type CardAttemptKind = 'authorize' | 'capture' | 'cancel'
-export type AnswerStatus = 'succeeded' | 'declined'
-
-const NEXT: Record<PaymentStatus, readonly PaymentStatus[]> = {
-  created: ['authorized', 'failed'],
-  authorized: ['captured', 'canceled', 'failed'],
-  captured: ['refunded'],
-  refunded: [],
-  canceled: [],
-  failed: [],
-}
-
-export function canMove(from: PaymentStatus, to: PaymentStatus): boolean {
-  return NEXT[from].includes(to)
-}
-
-export function isFinal(status: PaymentStatus): boolean {
-  return NEXT[status].length === 0
-}
+import type { AnswerStatus, CardAttemptKind } from '../psp/answers.ts'
+import type { PaymentStatus } from './payment.ts'
 
 export type Resolution = { kind: 'move'; from: PaymentStatus; to: PaymentStatus } | { kind: 'anomaly'; reason: string }
 

@@ -1,4 +1,5 @@
 import { IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from 'class-validator'
+import { CAPTURE_MODES, type CaptureMode } from '../payments/payment.ts'
 
 const MAX_AMOUNT = 100_000_000_000
 const CURRENCY = /^[A-Z]{3}$/
@@ -21,8 +22,8 @@ export class CreatePaymentBody {
   token!: string
 
   @IsOptional()
-  @IsIn(['auto', 'manual'])
-  capture?: 'auto' | 'manual'
+  @IsIn(CAPTURE_MODES)
+  capture?: CaptureMode
 }
 
 export class CaptureBody {

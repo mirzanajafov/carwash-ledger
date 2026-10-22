@@ -5,7 +5,8 @@ import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
 import { Chart } from '../ledger/chart.service.ts'
-import { findMerchant, insertMerchant, type MerchantRow } from './merchants.repository.ts'
+import type { Merchant } from './merchant.ts'
+import { findMerchant, insertMerchant } from './merchants.repository.ts'
 
 export interface MerchantInput {
   code: string
@@ -47,11 +48,11 @@ export class MerchantsService {
   async get(code: string) {
     const merchant = await findMerchant(this.#db.pool, code)
     if (!merchant) throw notFound(`merchant ${code}`)
-    const account = await this.#chart.registry.account(BigInt(merchant.account_id))
+    const account = await this.#chart.registry.account(merchant.accountId)
     return this.#view(merchant, -(await readBalance(this.#db.pool, account)))
   }
 
-  #view(merchant: MerchantRow, payable: bigint) {
+  #view(merchant: Merchant, payable: bigint) {
     return {
       id: merchant.code,
       object: 'merchant',

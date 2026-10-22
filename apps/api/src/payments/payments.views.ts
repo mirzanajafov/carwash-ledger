@@ -1,32 +1,32 @@
 import { unixSeconds } from '../http/unix-time.ts'
-import type { PaymentRecord, RefundRecord } from './payments.repository.ts'
+import type { Payment, Refund } from './payment.ts'
 
-export function paymentView(p: PaymentRecord) {
+export function paymentView(p: Payment) {
   return {
     id: p.id,
     object: 'payment',
-    merchant: p.merchant_code,
+    merchant: p.merchantCode,
     amount: Number(p.amount),
     currency: p.currency,
-    capture_mode: p.capture_mode,
+    capture_mode: p.captureMode,
     status: p.status,
-    captured_amount: Number(p.captured_amount),
-    refunded_amount: Number(p.refunded_amount),
+    captured_amount: Number(p.capturedAmount),
+    refunded_amount: Number(p.refundedAmount),
     fee: Number(p.fee),
-    failure_reason: p.failure_reason,
-    created: unixSeconds(p.created_at),
+    failure_reason: p.failureReason,
+    created: unixSeconds(p.createdAt),
   }
 }
 
-export function refundView(r: RefundRecord) {
+export function refundView(r: Refund) {
   return {
     id: r.id,
     object: 'refund',
-    payment: r.payment_id,
+    payment: r.paymentId,
     amount: Number(r.amount),
     status: r.status,
-    fee_refund: Number(r.fee_refund),
-    failure_reason: r.failure_reason,
-    created: unixSeconds(r.created_at),
+    fee_refund: Number(r.feeRefund),
+    failure_reason: r.failureReason,
+    created: unixSeconds(r.createdAt),
   }
 }
