@@ -7,7 +7,7 @@ import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/id
 import type { PayoutId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
-import { insertAttempt, pendingAttempt } from '../payments/attempts.repository.ts'
+import { insertAttempt, pendingPayoutAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { insertPayout, loadPayout, lockPayoutBalances, setPayoutJournal } from './payouts.repository.ts'
 import { payoutView } from './payouts.views.ts'
@@ -37,14 +37,15 @@ export class PayoutsService {
   async create(owned: OwnedKey, input: PayoutInput): Promise<Final> {
     const payoutId = owned.payoutId ?? (await this.#startPayout(owned, input))
     for (let round = 0; ; round++) {
-      const attempt = await pendingAttempt(this.#db.pool, { payoutId }, ['payout'])
+      const attempt = await pendingPayoutAttempt(this.#db.pool, payoutId)
       if (!attempt) break
       if (round >= MAX_ROUNDS) throw new Error(`payout ${payoutId} is still pending after ${round} rounds`)
       await this.#attempts.settle(attempt)
     }
-    return this.#db.transaction(async (client) =>
-      this.#idempotency.finish(client, owned, { status: 200, body: payoutView(await loadPayout(client, payoutId)) }),
-    )
+    return this.#db.transaction(async (client) => {
+      const payout = await loadPayout(client, payoutId)
+      return this.#idempotency.finish(client, owned, { status: 200, body: payoutView(payout) })
+    })
   }
 
   #startPayout(owned: OwnedKey, input: PayoutInput): Promise<PayoutId> {
@@ -65,7 +66,7 @@ export class PayoutsService {
       if (amount > payable) {
         throw new DomainError('conflict', 'insufficient_funds', `merchant ${input.merchant} has ${payable} available for payout`)
       }
-      const payoutId = await insertPayout(client, merchant.id, amount, input.currency)
+      const payoutId = await insertPayout(client, { merchantId: merchant.id, amount, currency: input.currency })
       const journalId = await postInTransaction(client, this.#chart.registry, {
         externalRef: `payout:${payoutId}`,
         entries: [

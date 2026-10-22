@@ -1,6 +1,7 @@
 import type { Queryable } from '@carwash/pg'
 import type { AttemptId } from '../ids.ts'
-import type { AttemptKind, AttemptStatus } from './attempt.ts'
+import type { AttemptKind } from '../psp/answers.ts'
+import type { AttemptStatus } from './attempt.ts'
 
 export type AnomalyKind = 'answer_mismatch' | 'unexpected_answer' | 'answer_changed' | 'refund_declined' | 'unmatched_webhook'
 

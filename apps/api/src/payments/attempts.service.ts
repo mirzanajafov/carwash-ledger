@@ -75,9 +75,9 @@ export class AttemptsService {
     }
     const { from, to } = resolution
     if (to === 'failed') {
-      await this.#move(client, payment.id, from, to, { failure_reason: answer.reason ?? 'declined' })
+      await this.#move(client, payment.id, from, to, { failureReason: answer.reason ?? 'declined' })
     } else if (attempt.kind === 'authorize') {
-      await this.#move(client, payment.id, from, to, { psp_charge_id: answer.chargeId })
+      await this.#move(client, payment.id, from, to, { pspChargeId: answer.chargeId })
       if (payment.captureMode === 'auto') {
         await insertAttempt(client, { kind: 'capture', paymentId: payment.id, amount: payment.amount, currency: payment.currency })
       }
@@ -93,7 +93,7 @@ export class AttemptsService {
         ]),
       })
       await journalEvents(client, journalId)
-      await this.#move(client, payment.id, from, to, { captured_amount: attempt.amount, fee, capture_journal_id: journalId })
+      await this.#move(client, payment.id, from, to, { capturedAmount: attempt.amount, fee, captureJournalId: journalId })
     } else {
       await this.#move(client, payment.id, from, to, {})
     }
@@ -144,7 +144,7 @@ export class AttemptsService {
     await refundEvent(client, refundId, 'refund.succeeded')
     const after = before + amount
     if (after === captured) {
-      await this.#move(client, payment.id, 'captured', 'refunded', { refunded_amount: after })
+      await this.#move(client, payment.id, 'captured', 'refunded', { refundedAmount: after })
     } else {
       await setPaymentRefunded(client, payment.id, after)
     }

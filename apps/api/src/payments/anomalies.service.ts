@@ -7,11 +7,10 @@ import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
-import { checkAnswer } from '../psp/answers.ts'
+import { answeredAmount, checkAnswer, type AttemptKind } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { pspUnavailable } from '../psp/psp.errors.ts'
 import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
-import type { AttemptKind } from './attempt.ts'
 import { loadAttempt, setAttemptAmount } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { correctRefundAmount } from './payments.repository.ts'
@@ -27,11 +26,6 @@ export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt_id: s
     ACCEPTABLE.has(row.attempt_kind) &&
     row.attempt_id !== null
   )
-}
-
-function answeredAmount(body: unknown): bigint | undefined {
-  const amount = typeof body === 'object' && body !== null && 'amount' in body ? body.amount : undefined
-  return typeof amount === 'number' && Number.isSafeInteger(amount) && amount > 0 ? BigInt(amount) : undefined
 }
 
 function refuse(message: string): DomainError {

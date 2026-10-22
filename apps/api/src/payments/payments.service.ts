@@ -7,8 +7,7 @@ import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/id
 import type { PaymentId, RefundId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
-import type { CardAttemptKind } from './attempt.ts'
-import { insertAttempt, pendingAttempt } from './attempts.repository.ts'
+import { insertAttempt, pendingCardAttempt, pendingRefundAttempt } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { platformFee } from './fees.ts'
 import type { CaptureMode, Payment, PaymentStatus } from './payment.ts'
@@ -23,7 +22,6 @@ export interface CreatePaymentInput {
   capture?: CaptureMode
 }
 
-const CARD_KINDS: readonly CardAttemptKind[] = ['authorize', 'capture', 'cancel']
 const MAX_ROUNDS = 5
 
 function paymentFinal(payment: Payment, expected: readonly PaymentStatus[]): Final {
@@ -62,34 +60,35 @@ export class PaymentsService {
     return this.#drive(owned, paymentId, expected)
   }
 
-  async capture(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number | undefined): Promise<Final> {
-    const settled =
+  async capture(owned: OwnedKey, caller: ApiClientIdentity, requestedId: string, amount: number | undefined): Promise<Final> {
+    const paymentId =
       owned.paymentId ??
-      (await this.#startSettlement(owned, caller, paymentId, 'capture', (payment) => {
+      (await this.#startSettlement(owned, caller, requestedId, 'capture', (payment) => {
         const value = amount === undefined ? payment.amount : BigInt(amount)
         if (value > payment.amount) throw new DomainError('invalid', 'amount_too_large', 'a capture cannot exceed the authorized amount')
         this.#checkAmount(value)
         return value
       }))
-    return this.#drive(owned, settled, ['captured', 'failed'])
+    return this.#drive(owned, paymentId, ['captured', 'failed'])
   }
 
-  async cancel(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string): Promise<Final> {
-    const settled = owned.paymentId ?? (await this.#startSettlement(owned, caller, paymentId, 'cancel', (payment) => payment.amount))
-    return this.#drive(owned, settled, ['canceled'])
+  async cancel(owned: OwnedKey, caller: ApiClientIdentity, requestedId: string): Promise<Final> {
+    const paymentId = owned.paymentId ?? (await this.#startSettlement(owned, caller, requestedId, 'cancel', (payment) => payment.amount))
+    return this.#drive(owned, paymentId, ['canceled'])
   }
 
   async refund(owned: OwnedKey, caller: ApiClientIdentity, paymentId: string, amount: number): Promise<Final> {
     const refundId = owned.refundId ?? (await this.#startRefund(owned, caller, paymentId, BigInt(amount)))
     for (let round = 0; ; round++) {
-      const attempt = await pendingAttempt(this.#db.pool, { refundId }, ['refund'])
+      const attempt = await pendingRefundAttempt(this.#db.pool, refundId)
       if (!attempt) break
       if (round >= MAX_ROUNDS) throw new Error(`refund ${refundId} is still pending after ${round} rounds`)
       await this.#attempts.settle(attempt)
     }
-    return this.#db.transaction(async (client) =>
-      this.#idempotency.finish(client, owned, { status: 200, body: refundView(await loadRefund(client, refundId)) }),
-    )
+    return this.#db.transaction(async (client) => {
+      const refund = await loadRefund(client, refundId)
+      return this.#idempotency.finish(client, owned, { status: 200, body: refundView(refund) })
+    })
   }
 
   async get(caller: ApiClientIdentity, paymentId: string) {
@@ -161,12 +160,15 @@ export class PaymentsService {
 
   async #drive(owned: OwnedKey, paymentId: PaymentId, expected: PaymentStatus[]): Promise<Final> {
     for (let round = 0; ; round++) {
-      const attempt = await pendingAttempt(this.#db.pool, { paymentId }, CARD_KINDS)
+      const attempt = await pendingCardAttempt(this.#db.pool, paymentId)
       if (!attempt) break
       if (round >= MAX_ROUNDS) throw new Error(`payment ${paymentId} still has a pending attempt after ${round} rounds`)
       await this.#attempts.settle(attempt)
     }
-    return this.#db.transaction(async (client) => this.#idempotency.finish(client, owned, paymentFinal(await loadPayment(client, paymentId), expected)))
+    return this.#db.transaction(async (client) => {
+      const payment = await loadPayment(client, paymentId)
+      return this.#idempotency.finish(client, owned, paymentFinal(payment, expected))
+    })
   }
 
   #checkAmount(amount: bigint): void {

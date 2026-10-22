@@ -1,11 +1,9 @@
 import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
 import { asAttemptId, asPaymentId, asPayoutId, asRefundId, type AttemptId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
-import type { PspAnswer } from '../psp/answers.ts'
-import type { Attempt, AttemptKind, AttemptParent, AttemptStatus } from './attempt.ts'
+import { CARD_ATTEMPT_KINDS, type AttemptKind, type PspAnswer } from '../psp/answers.ts'
+import type { Attempt, AttemptParent, AttemptStatus } from './attempt.ts'
 
 export type NewAttempt = { amount: bigint; currency: string } & AttemptParent
-
-export type AttemptOwner = { paymentId: PaymentId } | { refundId: RefundId } | { payoutId: PayoutId }
 
 interface AttemptRow {
   id: string
@@ -41,12 +39,6 @@ function toAttempt(row: AttemptRow): Attempt {
   return { ...fields, kind: row.kind, paymentId: asPaymentId(row.payment_id), refundId: asRefundId(row.refund_id) }
 }
 
-function ownerColumn(owner: AttemptOwner): [string, string] {
-  if ('paymentId' in owner) return ['payment_id', owner.paymentId]
-  if ('refundId' in owner) return ['refund_id', owner.refundId]
-  return ['payout_id', owner.payoutId]
-}
-
 export async function findAttempt(db: Queryable, id: string): Promise<Attempt | undefined> {
   const [row] = (await db.query<AttemptRow>(`SELECT ${COLUMNS} FROM attempts WHERE id = $1`, [id])).rows
   return row && toAttempt(row)
@@ -56,8 +48,12 @@ export async function loadAttempt(db: Queryable, id: AttemptId): Promise<Attempt
   return toAttempt(firstRow(await db.query<AttemptRow>(`SELECT ${COLUMNS} FROM attempts WHERE id = $1`, [id]), `attempt ${id} does not exist`))
 }
 
-export async function pendingAttempt(db: Queryable, owner: AttemptOwner, kinds: readonly AttemptKind[]): Promise<Attempt | undefined> {
-  const [column, id] = ownerColumn(owner)
+async function oldestPending(
+  db: Queryable,
+  column: 'payment_id' | 'refund_id' | 'payout_id',
+  id: string,
+  kinds: readonly AttemptKind[],
+): Promise<Attempt | undefined> {
   const [row] = (
     await db.query<AttemptRow>(
       `SELECT ${COLUMNS} FROM attempts WHERE ${column} = $1 AND kind = ANY($2::attempt_kind[]) AND status = 'pending' ORDER BY created_at LIMIT 1`,
@@ -65,6 +61,18 @@ export async function pendingAttempt(db: Queryable, owner: AttemptOwner, kinds: 
     )
   ).rows
   return row && toAttempt(row)
+}
+
+export function pendingCardAttempt(db: Queryable, paymentId: PaymentId): Promise<Attempt | undefined> {
+  return oldestPending(db, 'payment_id', paymentId, CARD_ATTEMPT_KINDS)
+}
+
+export function pendingRefundAttempt(db: Queryable, refundId: RefundId): Promise<Attempt | undefined> {
+  return oldestPending(db, 'refund_id', refundId, ['refund'])
+}
+
+export function pendingPayoutAttempt(db: Queryable, payoutId: PayoutId): Promise<Attempt | undefined> {
+  return oldestPending(db, 'payout_id', payoutId, ['payout'])
 }
 
 export async function attemptsToRecover(db: Queryable, olderThanSeconds: number, limit: number): Promise<Attempt[]> {

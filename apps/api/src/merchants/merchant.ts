@@ -1,5 +1,5 @@
 export interface Merchant {
-  id: bigint
+  id: string
   code: string
   name: string
   currency: string

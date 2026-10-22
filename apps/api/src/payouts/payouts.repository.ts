@@ -52,13 +52,19 @@ export async function lockPayoutBalances(client: Transaction, merchantAccountId:
   return merchant.length === 0 ? undefined : merchant.reduce((sum, row) => sum + BigInt(row.amount), 0n)
 }
 
-export async function insertPayout(client: Transaction, merchantId: bigint, amount: bigint, currency: string): Promise<PayoutId> {
+export interface NewPayout {
+  merchantId: string
+  amount: bigint
+  currency: string
+}
+
+export async function insertPayout(client: Transaction, payout: NewPayout): Promise<PayoutId> {
   return asPayoutId(
     firstRow(
       await client.query<{ id: string }>('INSERT INTO payouts (merchant_id, amount, currency) VALUES ($1, $2, $3) RETURNING id', [
-        merchantId,
-        amount,
-        currency,
+        payout.merchantId,
+        payout.amount,
+        payout.currency,
       ]),
     ).id,
   )

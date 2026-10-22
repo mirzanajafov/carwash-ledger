@@ -1,7 +1,9 @@
 import type { PaymentId, RefundId } from '../ids.ts'
 
 export type PaymentStatus = 'created' | 'authorized' | 'captured' | 'refunded' | 'canceled' | 'failed'
-export type CaptureMode = 'auto' | 'manual'
+export const CAPTURE_MODES = ['auto', 'manual'] as const
+
+export type CaptureMode = (typeof CAPTURE_MODES)[number]
 export type RefundStatus = 'pending' | 'succeeded' | 'failed'
 
 export interface Payment {

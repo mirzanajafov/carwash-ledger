@@ -12,7 +12,7 @@ interface MerchantRow {
 const COLUMNS = 'id::text, code, name, currency, account_id::text'
 
 function toMerchant(row: MerchantRow): Merchant {
-  return { id: BigInt(row.id), code: row.code, name: row.name, currency: row.currency, accountId: BigInt(row.account_id) }
+  return { id: row.id, code: row.code, name: row.name, currency: row.currency, accountId: BigInt(row.account_id) }
 }
 
 export async function findMerchant(db: Queryable, code: string): Promise<Merchant | undefined> {

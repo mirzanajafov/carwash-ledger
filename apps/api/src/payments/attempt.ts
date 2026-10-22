@@ -1,8 +1,6 @@
 import type { AttemptId, PaymentId, PayoutId, RefundId } from '../ids.ts'
+import type { AnswerStatus, CardAttemptKind } from '../psp/answers.ts'
 
-export type CardAttemptKind = 'authorize' | 'capture' | 'cancel'
-export type AttemptKind = CardAttemptKind | 'refund' | 'payout'
-export type AnswerStatus = 'succeeded' | 'declined'
 export type AttemptStatus = 'pending' | AnswerStatus
 
 export type AttemptParent =

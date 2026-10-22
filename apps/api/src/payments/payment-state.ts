@@ -1,4 +1,4 @@
-import type { AnswerStatus, CardAttemptKind } from './attempt.ts'
+import type { AnswerStatus, CardAttemptKind } from '../psp/answers.ts'
 import type { PaymentStatus } from './payment.ts'
 
 export type Resolution = { kind: 'move'; from: PaymentStatus; to: PaymentStatus } | { kind: 'anomaly'; reason: string }

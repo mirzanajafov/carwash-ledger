@@ -4,7 +4,7 @@ import type { CaptureMode, Payment, PaymentStatus, Refund, RefundStatus } from '
 
 export interface NewPayment {
   clientId: string
-  merchantId: bigint
+  merchantId: string
   amount: bigint
   currency: string
   capture: CaptureMode
@@ -12,12 +12,12 @@ export interface NewPayment {
 }
 
 export interface PaymentChanges {
-  failure_reason?: string
-  psp_charge_id?: string | null
-  captured_amount?: bigint
+  failureReason?: string
+  pspChargeId?: string | null
+  capturedAmount?: bigint
   fee?: bigint
-  capture_journal_id?: bigint
-  refunded_amount?: bigint
+  captureJournalId?: bigint
+  refundedAmount?: bigint
 }
 
 interface PaymentRow {
@@ -117,12 +117,23 @@ export async function insertPayment(client: Transaction, payment: NewPayment): P
 }
 
 export async function movePayment(client: Transaction, id: PaymentId, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<boolean> {
-  const set = Object.entries(changes)
-  const assignments = set.map(([column], index) => `, ${column} = $${index + 4}`).join('')
   const moved = await client.query(
-    `UPDATE payments SET status = $3::payment_status, updated_at = now()${assignments}
+    `UPDATE payments SET status = $3::payment_status, updated_at = now(),
+       failure_reason = coalesce($4, failure_reason), psp_charge_id = coalesce($5, psp_charge_id),
+       captured_amount = coalesce($6, captured_amount), fee = coalesce($7, fee),
+       capture_journal_id = coalesce($8, capture_journal_id), refunded_amount = coalesce($9, refunded_amount)
      WHERE id = $1 AND status = $2::payment_status`,
-    [id, from, to, ...set.map(([, value]) => value)],
+    [
+      id,
+      from,
+      to,
+      changes.failureReason ?? null,
+      changes.pspChargeId ?? null,
+      changes.capturedAmount ?? null,
+      changes.fee ?? null,
+      changes.captureJournalId ?? null,
+      changes.refundedAmount ?? null,
+    ],
   )
   return moved.rowCount === 1
 }

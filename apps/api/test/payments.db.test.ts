@@ -174,6 +174,16 @@ describe('payments API', () => {
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.body.id}`])).toBe(1)
   })
 
+  it('finishes a cancel the PSP did before hanging when the client retries it with the same key', async () => {
+    const created = await call('POST', '/v1/payments', { body: pay('tok_timeout_after_cancel', { capture: 'manual' }) })
+    expect(created.body).toMatchObject({ status: 'authorized' })
+    const key = randomUUID()
+    const cancel = `/v1/payments/${created.body.id}/cancel`
+    expect(await call('POST', cancel, { key })).toMatchObject({ status: 503, body: { error: { code: 'psp_unavailable' } } })
+    expect(await call('POST', cancel, { key })).toMatchObject({ status: 200, replayed: false, body: { status: 'canceled' } })
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM attempts WHERE payment_id = $1 AND kind = 'cancel'`, [created.body.id])).toBe(1)
+  })
+
   it('cancels an authorization without touching the ledger', async () => {
     const created = await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })
     expect((await call('POST', `/v1/payments/${created.body.id}/cancel`)).body).toMatchObject({ status: 'canceled' })
