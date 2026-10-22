@@ -1,4 +1,4 @@
-import { firstRow, withTransaction, type Queryable } from '@carwash/pg'
+import { firstRow, type Queryable, type Transaction, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import { UnknownAccountError } from './errors.ts'
 import { INSERT_ACCOUNT, INSERT_BALANCE_ROWS, SELECT_ACCOUNTS, SELECT_ACCOUNTS_BY_CODE } from './sql.ts'
@@ -78,7 +78,7 @@ export interface NewAccount {
   shards?: number
 }
 
-export async function insertAccount(client: pg.ClientBase, spec: NewAccount): Promise<Account> {
+export async function insertAccount(client: Transaction, spec: NewAccount): Promise<Account> {
   const shards = spec.balanceMode === 'sharded' ? (spec.shards ?? 16) : 1
   const inserted = await client.query<{ id: string }>(INSERT_ACCOUNT, [spec.code, spec.type, spec.currency, spec.balanceMode, shards])
   const id = BigInt(firstRow(inserted).id)

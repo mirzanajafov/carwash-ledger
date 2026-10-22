@@ -103,9 +103,11 @@ describe('the outbox', () => {
     expect(await unpublished()).toBe(0)
   })
 
-  it('refuses the pool at compile time, so an event cannot be written in an autocommit of its own by accident', () => {
+  it('refuses the pool and a client outside a transaction at compile time, so an event cannot be written in an autocommit of its own', () => {
     expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeEvent>[0]>()
     expectTypeOf<pg.Pool>().not.toExtend<Parameters<typeof writeJournalEvents>[0]>()
+    expectTypeOf<pg.PoolClient>().not.toExtend<Parameters<typeof writeEvent>[0]>()
+    expectTypeOf<pg.PoolClient>().not.toExtend<Parameters<typeof writeJournalEvents>[0]>()
   })
 
   it('puts every key in one fixed lane', async () => {

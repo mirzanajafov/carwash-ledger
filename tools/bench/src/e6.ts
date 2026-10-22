@@ -72,7 +72,7 @@ function round(x: number): number {
   return Math.round(x * 10) / 10
 }
 
-function timed(client: pg.ClientBase, clock: Timing): pg.ClientBase {
+function timed<C extends pg.ClientBase>(client: C, clock: Timing): C {
   return new Proxy(client, {
     get(target, property, receiver) {
       if (property === 'query') {

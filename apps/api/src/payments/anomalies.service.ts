@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { postInTransaction } from '@carwash/ledger'
-import type pg from 'pg'
+import type { Transaction } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { DomainError } from '../domain-errors.ts'
@@ -82,7 +82,7 @@ export class AnomaliesService {
     return row
   }
 
-  async #adjustPayout(client: pg.ClientBase, payoutId: string, amount: bigint): Promise<void> {
+  async #adjustPayout(client: Transaction, payoutId: string, amount: bigint): Promise<void> {
     const payout = (await lockPayout(client, payoutId))!
     if (payout.status !== 'pending') throw refuse('the payout is no longer pending')
     const difference = BigInt(payout.amount) - amount

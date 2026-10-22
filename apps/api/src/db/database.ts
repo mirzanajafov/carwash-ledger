@@ -1,7 +1,7 @@
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { withRetry } from '@carwash/ledger'
-import { createPool, withTransaction } from '@carwash/pg'
+import { createPool, type Transaction, withTransaction } from '@carwash/pg'
 import pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 
@@ -20,7 +20,7 @@ export class Database implements OnModuleDestroy {
     })
   }
 
-  async transaction<T>(work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+  async transaction<T>(work: (client: Transaction) => Promise<T>): Promise<T> {
     const { value } = await withRetry(async () => {
       const committed = await withTransaction(this.pool, async (client) => {
         const written = await work(client)

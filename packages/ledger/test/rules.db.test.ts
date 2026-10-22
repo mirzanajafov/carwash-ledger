@@ -1,5 +1,4 @@
-import { firstRow, withTransaction } from '@carwash/pg'
-import type pg from 'pg'
+import { firstRow, type Transaction, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { AlreadyReversedError, DuplicateJournalError, InvalidJournalError, readBalance, reversalOf } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
@@ -8,11 +7,11 @@ let ledger: LedgerFixture
 let eur: ModeAccounts
 let usd: ModeAccounts
 
-async function insertJournal(client: pg.ClientBase, ref: string): Promise<string> {
+async function insertJournal(client: Transaction, ref: string): Promise<string> {
   return firstRow(await client.query<{ id: string }>('INSERT INTO journals (external_ref) VALUES ($1) RETURNING id::text', [ref])).id
 }
 
-async function insertEntry(client: pg.ClientBase, journalId: string, accountId: bigint, amount: bigint): Promise<void> {
+async function insertEntry(client: Transaction, journalId: string, accountId: bigint, amount: bigint): Promise<void> {
   await client.query('INSERT INTO entries (journal_id, account_id, amount) VALUES ($1, $2, $3)', [journalId, accountId.toString(), amount.toString()])
 }
 

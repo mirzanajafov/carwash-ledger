@@ -1,9 +1,8 @@
 import { canonicalJournal, fromHex, leafHash, rootFromLeaves, toHex, verifyConsistency, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, checkSequenced, violations } from '@carwash/invariants'
-import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '@carwash/audit-pg'
-import { firstRow } from '@carwash/pg'
+import { firstRow, type Transaction } from '@carwash/pg'
 import { inRollbackWithTriggersOff } from '@carwash/testkit'
 import { Database } from '../src/db/database.ts'
 import { startStack, type Stack } from './support.ts'
@@ -24,7 +23,7 @@ async function sequenceAll(): Promise<number> {
   }
 }
 
-function s7(corrupt: (client: pg.ClientBase) => Promise<unknown>): Promise<string[]> {
+function s7(corrupt: (client: Transaction) => Promise<unknown>): Promise<string[]> {
   return inRollbackWithTriggersOff(stack.admin, async (client) => {
     await corrupt(client)
     return (await checkAuditIn(client)).examples

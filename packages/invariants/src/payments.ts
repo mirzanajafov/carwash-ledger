@@ -1,4 +1,4 @@
-import { firstRow, inSnapshot, type Queryable } from '@carwash/pg'
+import { firstRow, inSnapshot, type Queryable, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, EXAMPLES, type Check, type Finding } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -216,7 +216,7 @@ interface ReplayStart extends MerchantReplay {
 
 const FROM_THE_FIRST_ENTRY = { journal: '-9223372036854775808', total: '0', since: '0' }
 
-async function replayStarts(client: pg.ClientBase, since: PaymentBase | undefined): Promise<ReplayStart[]> {
+async function replayStarts(client: Transaction, since: PaymentBase | undefined): Promise<ReplayStart[]> {
   if (!since) {
     const { rows } = await client.query<{ account: string }>('SELECT m.account_id::text AS account FROM merchants m')
     return rows.map((row) => ({ account: row.account, ...FROM_THE_FIRST_ENTRY }))
@@ -229,7 +229,7 @@ async function replayStarts(client: pg.ClientBase, since: PaymentBase | undefine
   })
 }
 
-async function payoutsCovered(client: pg.ClientBase, since: PaymentBase | undefined): Promise<{ s6: Finding; merchants: MerchantReplay[]; entries: number }> {
+async function payoutsCovered(client: Transaction, since: PaymentBase | undefined): Promise<{ s6: Finding; merchants: MerchantReplay[]; entries: number }> {
   const params = [JSON.stringify(await replayStarts(client, since))]
   const s6 = await collect(client, [{ sql: PAYOUTS_COVERED, params }])
   const { rows } = await client.query<MerchantReplay & { entries: number }>(REPLAYED, params)
@@ -241,7 +241,7 @@ async function payoutsCovered(client: pg.ClientBase, since: PaymentBase | undefi
 const DAY = 24 * 3600
 const MARGIN = 300
 
-export async function checkPaymentsIn(client: pg.ClientBase, options: PaymentChecks = {}): Promise<PaymentChecksRun> {
+export async function checkPaymentsIn(client: Transaction, options: PaymentChecks = {}): Promise<PaymentChecksRun> {
   const window = Math.max(0, Math.floor(options.keyWindowSeconds ?? DAY) - MARGIN)
   const now = firstRow(
     await client.query<{ snapshot: string; taken_at: Date; resumable: boolean }>(
@@ -321,7 +321,7 @@ export async function checkPaymentsIncrementally(pool: pg.Pool, options: Omit<Pa
   return run
 }
 
-export async function checkSettledIn(client: pg.ClientBase): Promise<InvariantResult> {
+export async function checkSettledIn(client: Transaction): Promise<InvariantResult> {
   const l1 = await collect(client, STILL_PENDING)
   return { id: 'L1', description: 'no attempt is left pending unless its answer was refused as an anomaly', ...l1 }
 }

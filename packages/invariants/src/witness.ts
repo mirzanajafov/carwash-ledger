@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto'
-import type pg from 'pg'
+import type { Transaction } from '@carwash/pg'
 import type { Finding } from './collect.ts'
 
 export interface WitnessedCheckpoint {
@@ -85,7 +85,7 @@ function interior(left: Buffer, right: Buffer): Buffer {
   return createHash('sha256').update(Buffer.of(1)).update(left).update(right).digest()
 }
 
-async function rootAt(client: pg.ClientBase, size: number): Promise<{ root: string } | { missing: string }> {
+async function rootAt(client: Transaction, size: number): Promise<{ root: string } | { missing: string }> {
   const needed = subtrees(size)
   const { rows } = await client.query<{ level: number; idx: string; hash: Buffer }>(
     `SELECT n.level, n.idx::text AS idx, n.hash FROM audit_nodes n
@@ -102,7 +102,7 @@ async function rootAt(client: pg.ClientBase, size: number): Promise<{ root: stri
   return { root: hashes.reduceRight((right, left) => interior(left, right)).toString('hex') }
 }
 
-async function rootProblem(client: pg.ClientBase, treeSize: number, checkpoint: WitnessedCheckpoint, claimed: string): Promise<string | undefined> {
+async function rootProblem(client: Transaction, treeSize: number, checkpoint: WitnessedCheckpoint, claimed: string): Promise<string | undefined> {
   if (checkpoint.size > treeSize) return `${claimed} size ${checkpoint.size} but the log has only ${treeSize} leaves`
   const computed = await rootAt(client, checkpoint.size)
   if ('missing' in computed) return `the log has no subtree ${computed.missing}, which the root at size ${checkpoint.size} needs`
@@ -114,7 +114,7 @@ interface StoredCopy extends WitnessedCheckpoint {
   witnessKey: string
 }
 
-async function newestCopy(client: pg.ClientBase): Promise<StoredCopy | undefined> {
+async function newestCopy(client: Transaction): Promise<StoredCopy | undefined> {
   const { rows } = await client.query<{ size: string; root: Buffer; signature: Buffer; witness_key: string }>(
     'SELECT size::text, root, signature, witness_key FROM audit_checkpoints ORDER BY size DESC LIMIT 1',
   )
@@ -128,12 +128,12 @@ async function newestCopy(client: pg.ClientBase): Promise<StoredCopy | undefined
 
 type Signed = (checkpoint: WitnessedCheckpoint) => boolean
 
-async function latestProblem(client: pg.ClientBase, treeSize: number, latest: WitnessedCheckpoint, signed: Signed): Promise<string | undefined> {
+async function latestProblem(client: Transaction, treeSize: number, latest: WitnessedCheckpoint, signed: Signed): Promise<string | undefined> {
   if (!signed(latest)) return `the checkpoint at size ${latest.size} does not carry the witness's signature`
   return rootProblem(client, treeSize, latest, 'the witness signed')
 }
 
-async function copyProblem(client: pg.ClientBase, treeSize: number, copy: StoredCopy, witness: WitnessView, signed: Signed): Promise<string | undefined> {
+async function copyProblem(client: Transaction, treeSize: number, copy: StoredCopy, witness: WitnessView, signed: Signed): Promise<string | undefined> {
   if (copy.witnessKey !== witness.publicKey) {
     return `the copy in audit_checkpoints at size ${copy.size} names the witness key ${copy.witnessKey}, the witness publishes ${witness.publicKey}`
   }
@@ -143,7 +143,7 @@ async function copyProblem(client: pg.ClientBase, treeSize: number, copy: Stored
   return rootProblem(client, treeSize, copy, 'audit_checkpoints holds')
 }
 
-export async function checkWitnessedIn(client: pg.ClientBase, witness: WitnessView, treeSize: number): Promise<Finding> {
+export async function checkWitnessedIn(client: Transaction, witness: WitnessView, treeSize: number): Promise<Finding> {
   const signed: Signed = (checkpoint) =>
     verify(null, Buffer.from(`${witness.origin}\n${checkpoint.size}\n${checkpoint.root}\n`), witness.key, Buffer.from(checkpoint.signature, 'base64'))
   const copy = await newestCopy(client)

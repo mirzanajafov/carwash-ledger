@@ -4,6 +4,14 @@ const ignore = () => undefined
 
 export type Queryable = pg.Pool | pg.ClientBase
 
+declare const open: unique symbol
+
+export type Transaction = pg.ClientBase & { readonly [open]: true }
+
+function opened(client: pg.ClientBase): Transaction {
+  return client as Transaction
+}
+
 const ISOLATION = {
   'read committed': '',
   'repeatable read': 'ISOLATION LEVEL REPEATABLE READ',
@@ -58,13 +66,13 @@ export async function checkout(pool: pg.Pool): Promise<Checkout> {
   }
 }
 
-async function transaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions, end: 'COMMIT' | 'ROLLBACK'): Promise<T> {
+async function transaction<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>, options: TransactionOptions, end: 'COMMIT' | 'ROLLBACK'): Promise<T> {
   const lease = await checkout(pool)
   const { client } = lease
   let broken = false
   try {
     await client.query(begin(options))
-    const value = await work(client)
+    const value = await work(opened(client))
     const ended = await client.query(end)
     if (ended.command !== end) throw new Error('the transaction was rolled back at COMMIT because a statement in it had failed')
     return value
@@ -78,14 +86,14 @@ async function transaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Pr
   }
 }
 
-export function withTransaction<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
+export function withTransaction<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>, options: TransactionOptions = {}): Promise<T> {
   return transaction(pool, work, options, 'COMMIT')
 }
 
-export function inRollback<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+export function inRollback<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>): Promise<T> {
   return transaction(pool, work, {}, 'ROLLBACK')
 }
 
-export function inSnapshot<T>(pool: pg.Pool, read: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+export function inSnapshot<T>(pool: pg.Pool, read: (client: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(pool, read, { isolation: 'repeatable read', readOnly: true })
 }

@@ -1,4 +1,4 @@
-import { inSnapshot } from '@carwash/pg'
+import { inSnapshot, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { collect, EXAMPLES, type Check } from './collect.ts'
 import type { InvariantResult } from './types.ts'
@@ -74,12 +74,12 @@ function queued(graceSeconds: number): readonly Check[] {
   ]
 }
 
-async function auditLogSize(client: pg.ClientBase): Promise<number> {
+async function auditLogSize(client: Transaction): Promise<number> {
   const { rows } = await client.query<{ size: string }>('SELECT coalesce(max(seq) + 1, 0)::text AS size FROM audit_log')
   return Number(rows[0]?.size ?? 0)
 }
 
-export async function checkAuditIn(client: pg.ClientBase, witness?: WitnessView): Promise<InvariantResult> {
+export async function checkAuditIn(client: Transaction, witness?: WitnessView): Promise<InvariantResult> {
   const s7 = await collect(client, AGREES)
   if (!witness) return { id: 'S7', description: 'the audit log agrees with the journals and with itself: leaves, chain and subtrees', ...s7 }
   const witnessed = await checkWitnessedIn(client, witness, await auditLogSize(client))
@@ -99,7 +99,7 @@ export interface SequencedOptions {
   graceSeconds?: number
 }
 
-export async function checkSequencedIn(client: pg.ClientBase, witness?: WitnessView, options: SequencedOptions = {}): Promise<InvariantResult> {
+export async function checkSequencedIn(client: Transaction, witness?: WitnessView, options: SequencedOptions = {}): Promise<InvariantResult> {
   const grace = options.graceSeconds ?? 0
   const l4 = await collect(client, queued(grace))
   const description = grace > 0 ? `every journal is sequenced into the audit log within ${grace} s` : 'every journal has been sequenced into the audit log'

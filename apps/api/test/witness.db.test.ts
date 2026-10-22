@@ -8,10 +8,9 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
 import { checkAudit, checkAuditIn, readWitness, readWitnessHistory, violations, type WitnessView } from '@carwash/invariants'
-import { firstRow, inRollback } from '@carwash/pg'
+import { firstRow, inRollback, type Transaction } from '@carwash/pg'
 import { inRollbackWithTriggersOff, withTriggersOff } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
-import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '@carwash/audit-pg'
 import { Sequencer } from '../src/audit/sequencer.service.ts'
@@ -44,7 +43,7 @@ function pay(amount: number) {
   return { amount, currency: 'EUR', merchant: 'wash_1', token: 'tok_ok' }
 }
 
-async function rewriteHistory(client: pg.ClientBase): Promise<void> {
+async function rewriteHistory(client: Transaction): Promise<void> {
   const { journal_id: journal } = firstRow(
     await client.query<{ journal_id: string }>(
       `SELECT a.journal_id::text FROM audit_log a JOIN journals j ON j.id = a.journal_id WHERE j.external_ref LIKE 'capture:%' ORDER BY a.seq LIMIT 1`,

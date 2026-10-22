@@ -1,4 +1,4 @@
-import type pg from 'pg'
+import type { Transaction } from '@carwash/pg'
 
 export const EXAMPLES = 5
 
@@ -12,7 +12,7 @@ export interface Finding {
   examples: string[]
 }
 
-export async function collect(client: pg.ClientBase, checks: readonly Check[]): Promise<Finding> {
+export async function collect(client: Transaction, checks: readonly Check[]): Promise<Finding> {
   let count = 0
   const examples: string[] = []
   for (const check of checks) {

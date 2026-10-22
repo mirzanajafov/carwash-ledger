@@ -1,6 +1,6 @@
 import { checkLedger, violations } from '@carwash/invariants'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { checkout, firstRow, inRollback, withTransaction } from '@carwash/pg'
+import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { AccountRegistry, DuplicateJournalError, InvalidJournalError, pgAccountLoader, postInTransaction } from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
@@ -35,17 +35,13 @@ afterAll(() => cleanup.disposeAsync())
 
 describe('postInTransaction', () => {
   it('commits and rolls back with the transaction it was given', async () => {
-    const lease = await checkout(ledger.app)
-    await lease.client.query('BEGIN')
-    await postInTransaction(lease.client, registry, { externalRef: 'tx:rolled-back', entries: capture(sharded, 0, 1000n, 30n) })
-    await lease.client.query('ROLLBACK')
+    await inRollback(ledger.app, (tx) => postInTransaction(tx, registry, { externalRef: 'tx:rolled-back', entries: capture(sharded, 0, 1000n, 30n) }))
     expect(await journalCount('tx:rolled-back')).toBe(0)
     expect(await storedBalance(sharded.receivable.id)).toBe(0n)
 
-    await lease.client.query('BEGIN')
-    const id = await postInTransaction(lease.client, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) })
-    await lease.client.query('COMMIT')
-    lease.release()
+    const id = await withTransaction(ledger.app, (tx) =>
+      postInTransaction(tx, registry, { externalRef: 'tx:committed', entries: capture(sharded, 0, 1000n, 30n) }),
+    )
     expect(id).toBeGreaterThan(0n)
     expect(await storedBalance(sharded.receivable.id)).toBe(1000n)
     const [merchant] = sharded.merchants
@@ -68,21 +64,14 @@ describe('postInTransaction', () => {
   })
 
   it('holds a locked account until the outer transaction ends', async () => {
-    const first = await checkout(ledger.app)
-    const second = await checkout(ledger.app)
-    try {
-      await first.client.query('BEGIN')
-      await postInTransaction(first.client, registry, { externalRef: 'tx:holder', entries: capture(locked, 1, 500n, 10n) })
-      await second.client.query('BEGIN')
-      await second.client.query(`SET LOCAL lock_timeout = '200ms'`)
-      const blocked = postInTransaction(second.client, registry, { externalRef: 'tx:waiter', entries: capture(locked, 1, 500n, 10n) })
+    await withTransaction(ledger.app, async (first) => {
+      await postInTransaction(first, registry, { externalRef: 'tx:holder', entries: capture(locked, 1, 500n, 10n) })
+      const blocked = inRollback(ledger.app, async (second) => {
+        await second.query(`SET LOCAL lock_timeout = '200ms'`)
+        return postInTransaction(second, registry, { externalRef: 'tx:waiter', entries: capture(locked, 1, 500n, 10n) })
+      })
       expect(await sqlState(blocked)).toBe('55P03')
-      await second.client.query('ROLLBACK')
-      await first.client.query('COMMIT')
-    } finally {
-      first.release()
-      second.release()
-    }
+    })
     expect(await journalCount('tx:holder')).toBe(1)
     expect(await journalCount('tx:waiter')).toBe(0)
   })

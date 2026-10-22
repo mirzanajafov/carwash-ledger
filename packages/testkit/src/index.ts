@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { createPool, inRollback, withTransaction } from '@carwash/pg'
+import { createPool, inRollback, type Transaction, withTransaction } from '@carwash/pg'
 import type pg from 'pg'
 import { applyMigration, databaseUrl, migrationNames, quoteIdent, TEMPLATE_DATABASE, withAdmin, type Role } from './template.ts'
 
@@ -42,18 +42,18 @@ export async function createTestDatabase(options: { template?: string; through?:
   }
 }
 
-function triggersOff<T>(work: (client: pg.ClientBase) => Promise<T>): (client: pg.ClientBase) => Promise<T> {
+function triggersOff<T>(work: (client: Transaction) => Promise<T>): (client: Transaction) => Promise<T> {
   return async (client) => {
     await client.query('SET LOCAL session_replication_role = replica')
     return work(client)
   }
 }
 
-export function withTriggersOff<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+export function withTriggersOff<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(pool, triggersOff(work))
 }
 
-export function inRollbackWithTriggersOff<T>(pool: pg.Pool, work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+export function inRollbackWithTriggersOff<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>): Promise<T> {
   return inRollback(pool, triggersOff(work))
 }
 

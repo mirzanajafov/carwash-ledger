@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { toHex } from '@carwash/audit'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
-import { firstRow, inRollback, withTransaction } from '@carwash/pg'
+import { firstRow, inRollback, withTransaction, type Transaction } from '@carwash/pg'
 import { createTestDatabase, signCopies, type SignedCopies, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
@@ -286,9 +286,6 @@ describe('incremental verification', () => {
 
 describe('sharing the process', () => {
   const BULK = 10_000
-  const scoped = new AsyncDisposableStack()
-  let client: pg.PoolClient
-  let stand: SignedCopies
 
   async function measured(work: () => Promise<unknown>): Promise<{ longest: number; total: number; cpu: number }> {
     const loop = monitorEventLoopDelay({ resolution: 1 })
@@ -304,66 +301,62 @@ describe('sharing the process', () => {
     return { longest: loop.max / 1e6, total: performance.now() - started, cpu: (used.user + used.system) / 1000 }
   }
 
-  beforeAll(async () => {
-    client = await admin.connect()
-    scoped.defer(() => {
-      client.release()
+  function withBulk<T>(work: (tx: Transaction, stand: SignedCopies) => Promise<T>): Promise<T> {
+    return inRollback(admin, async (tx) => {
+      await tx.query(
+        `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
+         INSERT INTO entries (journal_id, account_id, amount)
+         SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
+        [accounts.receivable, accounts.merchant, BULK],
+      )
+      let sequenced: number
+      do {
+        sequenced = await sequenceBatch(tx, 1000)
+      } while (sequenced > 0)
+      await tx.query('DELETE FROM audit_checkpoints')
+      return work(tx, await signCopies(tx, posted + BULK, 1))
     })
-    await client.query('BEGIN')
-    scoped.defer(async () => {
-      await client.query('ROLLBACK')
-    })
-    await client.query(
-      `WITH j AS (INSERT INTO journals (external_ref) SELECT 'bulk:' || g FROM generate_series(1, $3::int) g RETURNING id)
-       INSERT INTO entries (journal_id, account_id, amount)
-       SELECT j.id, x.account_id, x.amount FROM j CROSS JOIN (VALUES ($1::bigint, 700::bigint), ($2::bigint, -700::bigint)) AS x(account_id, amount)`,
-      [accounts.receivable, accounts.merchant, BULK],
-    )
-    let sequenced: number
-    do {
-      sequenced = await sequenceBatch(client, 1000)
-    } while (sequenced > 0)
-    await client.query('DELETE FROM audit_checkpoints')
-    stand = await signCopies(client, posted + BULK, 1)
-  })
-
-  afterAll(() => scoped.disposeAsync())
+  }
 
   it('lets other work run between journals instead of hashing the whole log in one go', async () => {
-    const run = await measured(async () => {
-      expect(await verifyLog(client, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
-    })
+    const run = await withBulk((tx) =>
+      measured(async () => {
+        expect(await verifyLog(tx, { batch: 50_000 })).toMatchObject({ journals: posted + BULK, findings: 0 })
+      }),
+    )
     expect(run.longest).toBeLessThan(run.total / 3)
   })
 
   it('lets other work run between signatures, and stops at the next turn when asked', async () => {
-    const whole = await measured(async () => {
-      expect(await verifyLog(client, { witness: stand, batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: stand.count, findings: 0 })
-    })
-    expect(whole.longest).toBeLessThan(whole.total / 3)
+    await withBulk(async (client, stand) => {
+      const whole = await measured(async () => {
+        expect(await verifyLog(client, { witness: stand, batch: 50_000 })).toMatchObject({ journals: posted + BULK, witnessed: stand.count, findings: 0 })
+      })
+      expect(whole.longest).toBeLessThan(whole.total / 3)
 
-    const stop = new AbortController()
-    const progress: number[] = []
-    setTimeout(() => {
-      stop.abort()
-    }, 50)
-    const stopped = await measured(async () => {
-      await expect(
-        verifyLog(client, {
-          witness: stand,
-          batch: 50_000,
-          signal: stop.signal,
-          onProgress: async (done) => {
-            progress.push(done)
-          },
-        }),
-      ).rejects.toMatchObject({ name: 'AbortError' })
+      const stop = new AbortController()
+      const progress: number[] = []
+      setTimeout(() => {
+        stop.abort()
+      }, 50)
+      const stopped = await measured(async () => {
+        await expect(
+          verifyLog(client, {
+            witness: stand,
+            batch: 50_000,
+            signal: stop.signal,
+            onProgress: async (done) => {
+              progress.push(done)
+            },
+          }),
+        ).rejects.toMatchObject({ name: 'AbortError' })
+      })
+      expect(progress).toEqual([])
+      expect(stopped.cpu).toBeLessThan(whole.cpu / 4)
     })
-    expect(progress).toEqual([])
-    expect(stopped.cpu).toBeLessThan(whole.cpu / 4)
   })
 
   it('refuses a batch that would never move', async () => {
-    await expect(verifyLog(client, { batch: 0 })).rejects.toThrow(RangeError)
+    await expect(verifyLog(admin, { batch: 0 })).rejects.toThrow(RangeError)
   })
 })

@@ -1,4 +1,4 @@
-import type pg from 'pg'
+import type { Transaction } from '@carwash/pg'
 
 export const LANES = 16
 
@@ -24,7 +24,7 @@ export function laneSql(key: string): string {
   return `(hashtextextended(${key}, 0) & ${LANES - 1})::smallint`
 }
 
-export async function writeEvent(client: pg.ClientBase, event: NewEvent): Promise<void> {
+export async function writeEvent(client: Transaction, event: NewEvent): Promise<void> {
   await client.query(`INSERT INTO outbox (topic, key, lane, type, payload) VALUES ($1, $2, ${laneSql('$2')}, $3, $4)`, [
     event.topic,
     event.key,
@@ -33,7 +33,7 @@ export async function writeEvent(client: pg.ClientBase, event: NewEvent): Promis
   ])
 }
 
-export async function writeJournalEvents(client: pg.ClientBase, journalId: bigint): Promise<number> {
+export async function writeJournalEvents(client: Transaction, journalId: bigint): Promise<number> {
   const { rowCount } = await client.query(
     `INSERT INTO outbox (topic, key, lane, type, payload)
      SELECT '${TOPICS.ledger}', e.account_id::text, ${laneSql('e.account_id::text')}, 'entry.posted',
