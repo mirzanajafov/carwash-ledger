@@ -1,0 +1,27 @@
+{
+  "commit": "0acb0c5",
+  "mutant": null,
+  "node": "v24.21.0",
+  "mode": "ledger",
+  "runs": 2,
+  "seed": 1,
+  "options": {
+    "durationMs": 30000,
+    "merchants": 20,
+    "duplicateShare": 0.05,
+    "killEveryMs": 3000,
+    "postgresEveryMs": 20000,
+    "toxicEveryMs": 4000,
+    "checkEveryMs": 5000,
+    "settleMs": 120000,
+    "rate": 150,
+    "posters": 4,
+    "pool": 8,
+    "reversalShare": 0.2,
+    "failpointProbability": 0.001,
+    "snapshotMs": 100,
+    "receivable": "sharded",
+    "fees": "derived",
+    "shards": 16
+  }
+}

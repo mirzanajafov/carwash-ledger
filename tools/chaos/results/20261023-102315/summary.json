@@ -1,0 +1,30 @@
+{
+  "mode": "ledger",
+  "mutant": null,
+  "runs": 2,
+  "journeys": 10908,
+  "attempts": 35346,
+  "conflictRetries": 0,
+  "randomKills": 17,
+  "crashes": 0,
+  "failpointKills": {
+    "post.after_lock": 10,
+    "post.after_commit": 5,
+    "post.before_commit": 5
+  },
+  "postgresKills": 3,
+  "postgresRecoveryMsMedian": 4664,
+  "toxics": {
+    "latency": 2,
+    "timeout": 1,
+    "reset_peer": 0,
+    "limit_data": 2,
+    "down": 8
+  },
+  "settleMsMedian": 5647,
+  "settleMsMax": 5647,
+  "runsWithViolations": 0,
+  "violationsByInvariant": {},
+  "firstViolatingRun": null,
+  "harnessErrors": 0
+}

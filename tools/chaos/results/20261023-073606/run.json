@@ -1,0 +1,45 @@
+{
+  "commit": "c0220bb",
+  "mutant": null,
+  "node": "v24.21.0",
+  "mode": "payments",
+  "runs": 5,
+  "seed": 1,
+  "options": {
+    "durationMs": 30000,
+    "merchants": 8,
+    "duplicateShare": 0.05,
+    "killEveryMs": 3000,
+    "postgresEveryMs": 20000,
+    "toxicEveryMs": 4000,
+    "checkEveryMs": 5000,
+    "settleMs": 120000,
+    "rate": 15,
+    "clients": 4,
+    "manualShare": 0.3,
+    "cancelShare": 0.2,
+    "partialShare": 0.3,
+    "refundShare": 0.3,
+    "reuseShare": 0.03,
+    "rivalShare": 0.1,
+    "payoutEveryMs": 500,
+    "forgeEveryMs": 1000,
+    "kafkaEveryMs": 15000,
+    "failpointProbability": 0.0005,
+    "leaseSeconds": 5,
+    "pspTimeoutMs": 2000,
+    "psp": {
+      "decline": 0.05,
+      "fail": 0.03,
+      "timeoutAfterCommit": 0.03,
+      "slow": 0.03,
+      "wrongAmount": 0.005,
+      "webhook": {
+        "duplicate": 0.05,
+        "delay": 0.02,
+        "reorder": 0.05,
+        "drop": 0.05
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { afterEach, assert, describe, expect, it } from 'vitest'
-import { armFailpoints, disarmFailpoints, failpoint, parseFailpoints, type FailpointName } from '../src/index.ts'
+import { armFailpoints, disarmFailpoints, failpoint, failpointSpec, FAILPOINTS, parseFailpoints, type FailpointName } from '../src/index.ts'
 
 afterEach(() => disarmFailpoints())
 
@@ -47,5 +47,12 @@ describe('failpoints', () => {
     expect(parseFailpoints('')).toEqual(new Map())
     expect(() => parseFailpoints('post.nowhere=0.1')).toThrow('unknown failpoint')
     expect(() => parseFailpoints('post.after_lock=2')).toThrow('probability')
+  })
+
+  it('write a spec for every point under the given prefixes that parses back to the same rates', () => {
+    const spec = failpointSpec(['post.', 'snapshot.'], (name) => (name.startsWith('post.') ? 0.01 : 0.5))
+    const parsed = parseFailpoints(spec)
+    expect([...parsed.keys()]).toEqual(FAILPOINTS.filter((name) => name.startsWith('post.') || name.startsWith('snapshot.')))
+    for (const [name, rate] of parsed) expect(rate).toBe(name.startsWith('post.') ? 0.01 : 0.5)
   })
 })
