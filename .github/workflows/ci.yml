@@ -40,3 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: chmod a+w tools/chaos/results && CHAOS_CPUS=$(nproc) sh tools/chaos/run.sh --runs 3 --duration 30 --fail-on-violation
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-results
+          path: tools/chaos/results
+          retention-days: 7
