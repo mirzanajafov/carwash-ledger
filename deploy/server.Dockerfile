@@ -61,3 +61,5 @@ COPY --from=build --chown=node:node /out/traffic /app
 
 FROM api AS migrate
 COPY --from=build --chown=node:node /out/db /db
+WORKDIR /db
+CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]

@@ -85,7 +85,6 @@ services:
       target: migrate
     container_name: carwash-migrate
     restart: "no"
-    working_dir: /db
     command:
       [
         "sh",
@@ -178,7 +177,9 @@ services:
   worker:
     <<: *server
     image: carwash-api:latest
-    pull_policy: never
+    build:
+      <<: *build
+      target: api
     container_name: carwash-worker
     command: ["node", "dist/worker.js"]
     environment:

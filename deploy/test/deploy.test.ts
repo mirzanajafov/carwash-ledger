@@ -13,7 +13,8 @@ failing() { [ "$FAIL_AT" = any ] || [ "$(git rev-parse HEAD)" = "$FAIL_AT" ]; }
 case "$*" in
   "inspect carwash-postgres") exit 1 ;;
   inspect*) if [ "$FAIL" = health ] && failing; then echo starting; else echo healthy; fi ;;
-  *" build -q"*) ! { [ "$FAIL" = build ] && failing; } ;;
+  *" build -q api") ! { [ "$FAIL" = build-api ] && failing; } ;;
+  *" build -q") ! { [ "$FAIL" = build ] && failing; } ;;
   *"up -d"*) ! { [ "$FAIL" = up ] && failing; } ;;
 esac
 `
@@ -60,30 +61,40 @@ function server() {
   const previous = commit('one')
   git(root, 'clone', '-q', origin, 'server')
   const target = commit('two')
-  const deploy = (fail: 'nothing' | 'build' | 'up' | 'health', at: string) =>
+  const deploy = (fail: 'nothing' | 'build-api' | 'build' | 'up' | 'health', at: string) =>
     spawnSync(bash(), [join(root, 'server', 'deploy', 'deploy.sh')], {
       encoding: 'utf8',
       env: { ...env, FAIL: fail, FAIL_AT: at },
     })
-  const ups = () =>
+  const calls = (command: string) =>
     readFileSync(dockerLog, 'utf8')
       .split('\n')
-      .filter((line) => line.includes('up -d')).length
-  return { previous, target, deploy, ups, head: () => git(join(root, 'server'), 'rev-parse', 'HEAD') }
+      .filter((line) => line.includes(command))
+      .map((line) => line.slice(line.indexOf(command)))
+  return {
+    previous,
+    target,
+    deploy,
+    ups: () => calls('up -d').length,
+    builds: () => calls('build -q'),
+    head: () => git(join(root, 'server'), 'rev-parse', 'HEAD'),
+  }
 }
 
 describe('deploy.sh', { timeout: 60_000 }, () => {
-  it('goes live on the new commit when the stack starts and turns healthy', () => {
-    const { target, deploy, ups, head } = server()
+  it('builds the API before the other images, and goes live on the new commit when the stack starts and turns healthy', () => {
+    const { target, deploy, ups, builds, head } = server()
     const run = deploy('nothing', 'any')
     expect(run.status).toBe(0)
     expect(run.stdout).toContain('Live:')
     expect(head()).toBe(target)
+    expect(builds()).toEqual(['build -q api', 'build -q'])
     expect(ups()).toBe(1)
   })
 
   it.each([
-    ['an image fails to build', 'build', 1],
+    ['the API image fails to build', 'build-api', 1],
+    ['another image fails to build', 'build', 1],
     ['the stack fails to start', 'up', 2],
     ['the stack never turns healthy', 'health', 2],
   ] as const)('rolls back to the commit before and starts it again when %s', (_, fail, starts) => {
