@@ -16,5 +16,6 @@ export type FromWorker = { type: 'outcome'; id: number; outcome: Outcome } | { t
 export function describeError(error: unknown): string {
   if (!(error instanceof Error)) return String(error)
   const code = (error as { code?: unknown }).code
-  return `${error.name}${typeof code === 'string' ? ` ${code}` : ''}: ${error.message}`
+  const text = `${error.name}${typeof code === 'string' ? ` ${code}` : ''}: ${error.message}`
+  return error.cause === undefined ? text : `${text}, caused by ${describeError(error.cause)}`
 }

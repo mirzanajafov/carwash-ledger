@@ -10,6 +10,7 @@ import { createPool } from '@carwash/pg'
 import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { withPort, type Lab } from '../lab.ts'
+import { describeError } from '../messages.ts'
 import { Service, type ServiceEvents } from '../service.ts'
 import type { Endpoints } from './client.ts'
 import { PROXIES, type ProxyName } from './plan.ts'
@@ -193,10 +194,10 @@ export class PaymentsStack {
     await this.#lab.kafka.stop().catch(() => undefined)
     await this.psp.end().catch(() => undefined)
     await keepLogs(this.#logs, join(this.#lab.dir, 'logs'), this.#seed, [...this.#services.keys(), 'kafka']).catch((error: unknown) =>
-      log(`could not keep the service logs: ${String(error)}`),
+      log(`could not keep the service logs: ${describeError(error)}`),
     )
-    await this.pspDb.drop().catch((error: unknown) => log(`psp drop failed: ${String(error)}`))
-    await this.ledgerDb.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
+    await this.pspDb.drop().catch((error: unknown) => log(`psp drop failed: ${describeError(error)}`))
+    await this.ledgerDb.drop().catch((error: unknown) => log(`drop failed: ${describeError(error)}`))
   }
 
   #defineServices(events: ServiceEvents): void {

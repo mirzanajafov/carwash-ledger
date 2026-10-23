@@ -3,6 +3,7 @@ import { mulberry32 } from '@carwash/lab'
 import { NO_FAULTS } from '@carwash/psp'
 import { drive, startClock } from '../drive.ts'
 import type { Lab } from '../lab.ts'
+import { describeError } from '../messages.ts'
 import { Outages } from '../outages.ts'
 import type { ServiceEvents } from '../service.ts'
 import { Supervisor } from '../supervisor.ts'
@@ -79,15 +80,23 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           await outages.holdToxic(fault.proxy, fault.toxic, fault.lastsMs, index)
         }
       } catch (error) {
-        report.harnessErrors.push(`${fault.kind} at ${fault.at} ms: ${String(error)}`)
+        const failed = `${fault.kind} at ${fault.at} ms: ${describeError(error)}`
+        report.harnessErrors.push(failed)
+        log(`fault failed: ${failed}`)
       }
     }
 
+    const tasks: Promise<unknown>[] = []
+    const track = (task: Promise<unknown>) =>
+      tasks.push(task.catch((error: unknown) => report.harnessErrors.push(`task: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)))
+
     const askedRuns = new Set<string>()
     const periodicCheck = async () => {
-      void askForVerification().then((asked) => {
-        if (asked) askedRuns.add(asked.id)
-      })
+      track(
+        askForVerification().then((asked) => {
+          if (asked) askedRuns.add(asked.id)
+        }),
+      )
       log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, stack.ledgerDb.name)}`)
       try {
         found.addResults(await checkLedger(audit), 'during')
@@ -102,9 +111,6 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       }
     }
 
-    const tasks: Promise<unknown>[] = []
-    const track = (task: Promise<unknown>) =>
-      tasks.push(task.catch((error: unknown) => report.harnessErrors.push(`task: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)))
     let nextJourney = 0
     let nextPayout = 0
     let nextFault = 0
@@ -158,7 +164,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     await stack.stopServices()
     await driven.lastCheck
 
-    report.harnessErrors.push(...driven.checkErrors.map((error) => `check: ${String(error)}`))
+    report.harnessErrors.push(...driven.checkErrors.map((error) => `check: ${describeError(error)}`))
     await checkWhenStopped(stack, report, found, { witness, clients, journeys })
     Object.assign(report, await countWhatHappened(stack, { clients, journeys, forger }))
     return report

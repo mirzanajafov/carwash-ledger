@@ -218,6 +218,7 @@ export function describePaymentsRun(index: number, r: PaymentsReport): string {
     `kills ${total(r.kills.random)} random + ${total(r.kills.failpoints)} at failpoints, crashes ${r.exits.crash}, ` +
     `postgres ${r.postgres.kills}, kafka ${r.kafka.kills}, toxics ${total(r.toxics)}, surprises ${r.surprises.count}, ` +
     `witnessed ${r.witness.size} leaves in ${r.witness.checkpoints} checkpoints, ${r.witness.compared} compared by the verifier, ` +
-    `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}`
+    `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}` +
+    (r.harnessErrors.length > 0 ? `, ${r.harnessErrors.length} harness errors` : '')
   )
 }
