@@ -3,6 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { errorOf } from '@carwash/contracts'
 import { canonicalJson } from '@carwash/http'
 import type { Random } from '@carwash/lab'
+import { describeError } from '../messages.ts'
 
 export type RequestKind = 'create' | 'capture' | 'cancel' | 'refund' | 'payout' | 'merchant' | 'probe'
 
@@ -149,7 +150,7 @@ export class Clients {
     } catch (error) {
       const label = error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'network error'
       this.#count(label)
-      record.lastError = `${label}: ${error instanceof Error ? error.message : String(error)}`
+      record.lastError = `${label}: ${describeError(error)}`
       if (this.#logged++ % 50 === 0) this.#log(`client ${label} on ${base}${record.path} (${record.lastError})`)
       return { status: 0, body: null, verdict: 'retry', retryAfter: 0 }
     } finally {

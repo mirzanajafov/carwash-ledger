@@ -245,6 +245,6 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
   } finally {
     supervisor.stopRestarting()
     await Promise.all(workers.map((w) => w.stop())).catch(() => undefined)
-    await db.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
+    await db.drop().catch((error: unknown) => log(`drop failed: ${describeError(error)}`))
   }
 }

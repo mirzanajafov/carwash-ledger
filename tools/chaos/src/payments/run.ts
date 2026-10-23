@@ -86,13 +86,16 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       }
     }
 
+    const tasks: Promise<unknown>[] = []
+    const track = (task: Promise<unknown>) =>
+      tasks.push(task.catch((error: unknown) => report.harnessErrors.push(`task: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)))
+
     const askedRuns = new Set<string>()
     const periodicCheck = async () => {
-      void askForVerification().then(
-        (asked) => {
+      track(
+        askForVerification().then((asked) => {
           if (asked) askedRuns.add(asked.id)
-        },
-        (error: unknown) => report.harnessErrors.push(`asking for a verification: ${describeError(error)}`),
+        }),
       )
       log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, stack.ledgerDb.name)}`)
       try {
@@ -108,9 +111,6 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
       }
     }
 
-    const tasks: Promise<unknown>[] = []
-    const track = (task: Promise<unknown>) =>
-      tasks.push(task.catch((error: unknown) => report.harnessErrors.push(`task: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)))
     let nextJourney = 0
     let nextPayout = 0
     let nextFault = 0

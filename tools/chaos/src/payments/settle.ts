@@ -105,7 +105,9 @@ async function settleDay(day: number): Promise<SettlementView> {
         signal: AbortSignal.timeout(30_000),
       })
       if (response.status !== 201) throw new Error(`ingesting day ${day}: status ${response.status} ${await response.text()}`)
-      return SettlementView.parse(await response.json())
+      const settled = SettlementView.parse(await response.json())
+      if (settled.outcome === 'not_ready') throw new Error(`ingesting day ${day}: no file after closing it`)
+      return settled
     } catch (error) {
       if (attempt >= 20) throw error
       await sleep(500)
