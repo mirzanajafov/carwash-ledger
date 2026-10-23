@@ -7,7 +7,7 @@ import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
-import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind } from '../psp/answers.ts'
+import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { pspUnavailable } from '../psp/psp.errors.ts'
 import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyAttempt, type AnomalyRow } from './anomalies.repository.ts'
@@ -17,10 +17,26 @@ import { correctRefundAmount } from './payments.repository.ts'
 
 const ACCEPTABLE: ReadonlySet<AttemptKind> = new Set(['capture', 'refund', 'payout'])
 
-export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt: AnomalyAttempt } {
-  if (row.kind !== 'answer_mismatch' || row.resolved_at !== null || row.attempt?.status !== 'pending' || !ACCEPTABLE.has(row.attempt.kind)) return false
-  const answered = answeredAmount(row.details?.answer)
-  return answered !== undefined && answered <= BigInt(row.attempt.amount)
+type Acceptance = { ok: true; amount: bigint; answer: PspAnswer } | { ok: false; reason: string }
+
+function pendingMismatch(row: AnomalyRow): row is AnomalyRow & { attempt: AnomalyAttempt } {
+  return row.kind === 'answer_mismatch' && row.resolved_at === null && row.attempt?.status === 'pending' && ACCEPTABLE.has(row.attempt.kind)
+}
+
+function acceptance(expected: ExpectedAnswer, body: unknown): Acceptance {
+  const amount = answeredAmount(body)
+  if (amount === undefined) return { ok: false, reason: 'the bank did not say an amount' }
+  if (amount > expected.amount) return { ok: false, reason: `the bank says ${amount}, more than the ${expected.amount} that was asked` }
+  const check = checkAnswer({ ...expected, amount }, body)
+  if (!check.ok) return { ok: false, reason: `the bank's answer differs in more than the amount: ${check.problems.join('. ')}` }
+  if (check.answer.status !== 'succeeded') return { ok: false, reason: 'the bank declined this operation, so there is no amount to accept' }
+  return { ok: true, amount, answer: check.answer }
+}
+
+export function acceptable(row: AnomalyRow): boolean {
+  if (!pendingMismatch(row)) return false
+  const { id, kind, amount, currency } = row.attempt
+  return acceptance({ attemptId: id, kind, amount: BigInt(amount), currency, chargeId: row.charge_id }, row.details?.answer).ok
 }
 
 function refuse(message: string): DomainError {
@@ -47,7 +63,7 @@ export class AnomaliesService {
 
   async accept(id: number, clientId: string): Promise<AnomalyRow> {
     const row = await this.#find(id)
-    if (!acceptable(row)) {
+    if (!pendingMismatch(row)) {
       throw refuse(
         row.resolved_at
           ? 'this anomaly is already resolved'
@@ -58,19 +74,15 @@ export class AnomaliesService {
     const reply = await this.#psp.pull(attempt.id)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
     if (reply.kind === 'none') throw refuse('the bank has no record of this operation')
-    const amount = answeredAmount(reply.body)
-    if (amount === undefined) throw refuse('the bank did not say an amount')
-    if (amount > attempt.amount) throw refuse(`the bank says ${amount}, more than the ${attempt.amount} that was asked`)
-    const call = await this.#attempts.callFor(attempt)
-    const check = checkAnswer(expectedFrom(call, amount), reply.body)
-    if (!check.ok) throw refuse(`the bank's answer differs in more than the amount: ${check.problems.join('. ')}`)
-    if (check.answer.status !== 'succeeded') throw refuse('the bank declined this operation, so there is no amount to accept')
+    const accepted = acceptance(expectedFrom(await this.#attempts.callFor(attempt)), reply.body)
+    if (!accepted.ok) throw refuse(accepted.reason)
+    const { amount, answer } = accepted
     await this.#db.transaction(async (client) => {
       if (!(await resolveAnomaly(client, id, 'accepted', clientId))) throw refuse('this anomaly is already resolved')
       if (!(await setAttemptAmount(client, attempt.id, amount))) throw refuse('the attempt is no longer pending')
       if (attempt.kind === 'refund') await correctRefundAmount(client, attempt.refundId, amount)
       if (attempt.kind === 'payout') await this.#adjustPayout(client, attempt.payoutId, amount)
-      const applied = await this.#attempts.apply(client, attempt.id, check.answer)
+      const applied = await this.#attempts.apply(client, attempt.id, answer)
       if (applied !== 'applied') throw refuse(`the answer could not be applied (${applied})`)
     })
     return this.#find(id)
