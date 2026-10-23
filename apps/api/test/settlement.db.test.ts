@@ -109,4 +109,17 @@ describe('settlement', () => {
     const listed = BreakList.parse((await stack.call('GET', `/v1/reconciliation/breaks?from=${today}&through=${today + 5}`, { as: 'admin' })).body)
     expect(listed.data.map((b) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
   })
+
+  it('refuses a query it cannot use, and says which parameter is wrong', async () => {
+    const refused = async (path: string) => (await stack.call('GET', path, { as: 'admin' })).body
+    const message = (text: string) => ({ error: { code: 'invalid_request', message: text } })
+    expect(await refused('/v1/reconciliation/days?limit=0')).toEqual(message('limit must be between 1 and 60'))
+    expect(await refused('/v1/reconciliation/days?limit=7.5')).toEqual(message('limit must be between 1 and 60'))
+    expect(await refused('/v1/reconciliation/days?currency=eur')).toEqual(message('currency must be a three-letter currency code'))
+    expect(await refused('/v1/reconciliation/days/1e3')).toEqual(message('day must be a day number'))
+    expect(await refused('/v1/reconciliation/breaks')).toEqual(message('from must be a day number'))
+    expect(await refused(`/v1/reconciliation/breaks?from=${today}&through=-1`)).toEqual(message('through must be a day number'))
+    expect(await refused('/v1/reconciliation/days?sort=day')).toEqual(message('property sort should not exist'))
+    expect((await stack.call('GET', '/v1/reconciliation/days', { as: 'admin' })).status).toBe(200)
+  })
 })

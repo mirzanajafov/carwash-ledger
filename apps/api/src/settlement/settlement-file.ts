@@ -1,4 +1,5 @@
 import type { FileLine } from '@carwash/recon'
+import { CURRENCY_CODE } from '../currency.ts'
 
 export interface ParsedFile {
   id: string
@@ -23,7 +24,7 @@ export function parseSettlementFile(csv: string): ParsedFile {
   const [head, record, columns, ...rows] = csv.replace(/\r\n/g, '\n').trimEnd().split('\n')
   if (head !== HEAD || record === undefined || columns !== COLUMNS) throw new Error('settlement file: unexpected header')
   const [id, day, currency, count, gross, fee, net] = record.split(',')
-  if (!id || currency === undefined || !/^[A-Z]{3}$/.test(currency)) throw new Error('settlement file: bad header record')
+  if (!id || currency === undefined || !CURRENCY_CODE.test(currency)) throw new Error('settlement file: bad header record')
   const dayNumber = Number(integer(day, 'day'))
   const lines: FileLine[] = []
   const operatedAt: Date[] = []

@@ -2,6 +2,7 @@ import { list, nonNegativeInteger, oneOf, optional, positiveInteger, required, t
 import type { BalanceMode } from '@carwash/ledger'
 import { RELAY_DEFAULTS } from '@carwash/outbox'
 import { FALLBACKS, type Fallback, type FeeContract } from '@carwash/recon'
+import { CURRENCY_CODE } from './currency.ts'
 import type { FeeSchedule } from './payments/fees.ts'
 
 export const CORE_CONFIG = Symbol('CORE_CONFIG')
@@ -69,7 +70,7 @@ export interface WorkerConfig {
 
 export function loadCoreConfig(env: Env): CoreConfig {
   const currencies = list(env, 'CURRENCIES', 'EUR')
-  if (currencies.length === 0 || new Set(currencies).size !== currencies.length || !currencies.every((c) => /^[A-Z]{3}$/.test(c))) {
+  if (currencies.length === 0 || new Set(currencies).size !== currencies.length || !currencies.every((c) => CURRENCY_CODE.test(c))) {
     throw new Error('CURRENCIES must be a comma-separated list of different currency codes')
   }
   const hotAccountShards = positiveInteger(env, 'HOT_ACCOUNT_SHARDS', 16)

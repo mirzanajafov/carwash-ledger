@@ -145,4 +145,14 @@ describe('the audit log', () => {
     await sequenceAll()
     expect((await checkSequenced(stack.admin)).count).toBe(0)
   })
+
+  it('refuses a sequence number, journal id or tree size that is not a whole number', async () => {
+    const refused = async (path: string) => (await stack.call('GET', path)).body
+    const message = (text: string) => ({ error: { code: 'invalid_request', message: text } })
+    expect(await refused('/v1/audit/leaves/one')).toEqual(message('seq must be a tree size'))
+    expect(await refused('/v1/journals/12abc')).toEqual(message('the journal id must be a number'))
+    expect(await refused('/v1/journals/1/proof?tree_size=0x10')).toEqual(message('tree_size must be a tree size'))
+    expect(await refused('/v1/audit/consistency')).toEqual(message('first must be a tree size'))
+    expect(await refused('/v1/audit/consistency?first=1&second=2.0')).toEqual(message('second must be a tree size'))
+  })
 })

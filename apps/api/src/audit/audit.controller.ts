@@ -24,15 +24,8 @@ import type {
 } from '@carwash/contracts'
 import { Database } from '../db/database.ts'
 import { invalidInput, notFound } from '../domain-errors.ts'
+import { ConsistencyQuery, JournalParams, ProofQuery, SeqParams } from '../http/dto.ts'
 import { runView, VerificationRuns } from './verification-runs.ts'
-
-function size(value: string, name: string): number
-function size(value: string | undefined, name: string): number | undefined
-function size(value: string | undefined, name: string): number | undefined {
-  if (value === undefined) return undefined
-  if (!/^\d{1,15}$/.test(value)) throw invalidInput(`${name} must be a tree size`)
-  return Number(value)
-}
 
 @Controller('v1')
 export class AuditController {
@@ -79,16 +72,14 @@ export class AuditController {
   }
 
   @Get('audit/leaves/:seq')
-  async leaf(@Param('seq') seq: string): Promise<LeafView> {
-    const at = size(seq, 'seq')
-    const found = await leafBySeq(this.#db.pool, at)
-    if (!found) throw notFound(`seq ${at} in the audit log`)
-    return { object: 'leaf', seq: at, journal_id: found.journal_id, leaf: toHex(new Uint8Array(found.leaf)) }
+  async leaf(@Param() { seq }: SeqParams): Promise<LeafView> {
+    const found = await leafBySeq(this.#db.pool, seq)
+    if (!found) throw notFound(`seq ${seq} in the audit log`)
+    return { object: 'leaf', seq, journal_id: found.journal_id, leaf: toHex(new Uint8Array(found.leaf)) }
   }
 
   @Get('journals/:id')
-  async journal(@Param('id') id: string): Promise<JournalView> {
-    if (!/^\d{1,18}$/.test(id)) throw invalidInput('the journal id must be a number')
+  async journal(@Param() { id }: JournalParams): Promise<JournalView> {
     const journal = await findJournal(this.#db.pool, id)
     if (!journal) throw notFound(`journal ${id}`)
     return {
@@ -103,13 +94,12 @@ export class AuditController {
   }
 
   @Get('journals/:id/proof')
-  async inclusion(@Param('id') id: string, @Query('tree_size') requested?: string): Promise<InclusionProofView> {
-    if (!/^\d{1,18}$/.test(id)) throw invalidInput('the journal id must be a number')
+  async inclusion(@Param() { id }: JournalParams, @Query() { tree_size: requested }: ProofQuery): Promise<InclusionProofView> {
     const sequenced = await leafByJournal(this.#db.pool, id)
     if (!sequenced) throw notFound(`a sequenced journal ${id}`)
     const seq = Number(sequenced.seq)
     const current = await treeSize(this.#db.pool)
-    const at = size(requested, 'tree_size') ?? current
+    const at = requested ?? current
     if (at <= seq || at > current) throw invalidInput(`tree_size must be between ${seq + 1} and ${current}`)
     const proof = await proveInclusion(this.#db.pool, seq, at)
     return {
@@ -124,11 +114,10 @@ export class AuditController {
   }
 
   @Get('audit/consistency')
-  async consistency(@Query('first') first?: string, @Query('second') second?: string): Promise<ConsistencyProofView> {
+  async consistency(@Query() { first: from, second }: ConsistencyQuery): Promise<ConsistencyProofView> {
     const current = await treeSize(this.#db.pool)
-    const from = size(first, 'first')
-    const to = size(second, 'second') ?? current
-    if (from === undefined || from < 1 || from > to || to > current) throw invalidInput(`first and second must satisfy 1 <= first <= second <= ${current}`)
+    const to = second ?? current
+    if (from < 1 || from > to || to > current) throw invalidInput(`first and second must satisfy 1 <= first <= second <= ${current}`)
     return {
       object: 'consistency_proof',
       first: from,

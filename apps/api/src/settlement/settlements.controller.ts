@@ -1,7 +1,7 @@
 import { Controller, Param, Post, Query } from '@nestjs/common'
 import type { SettlementView } from '@carwash/contracts'
 import { AdminOnly } from '../auth/access.guard.ts'
-import { currencyCode, dayNumber } from './params.ts'
+import { CurrencyQuery, DayParams } from '../http/dto.ts'
 import { Settlements } from './settlements.service.ts'
 
 @AdminOnly()
@@ -14,11 +14,9 @@ export class SettlementsController {
   }
 
   @Post(':day/ingest')
-  async ingest(@Param('day') day: string, @Query('currency') currency?: string): Promise<SettlementView> {
-    const code = currencyCode(currency)
-    const parsedDay = dayNumber(day, 'day')
-    const outcome = await this.#settlements.ingest(parsedDay, code)
-    const reconciliation = outcome === 'not_ready' ? undefined : await this.#settlements.reconcile(code)
-    return { object: 'settlement', day: parsedDay, currency: code, outcome, reconciliation }
+  async ingest(@Param() { day }: DayParams, @Query() { currency }: CurrencyQuery): Promise<SettlementView> {
+    const outcome = await this.#settlements.ingest(day, currency)
+    const reconciliation = outcome === 'not_ready' ? undefined : await this.#settlements.reconcile(currency)
+    return { object: 'settlement', day, currency, outcome, reconciliation }
   }
 }

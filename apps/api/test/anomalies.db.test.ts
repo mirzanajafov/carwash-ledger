@@ -109,4 +109,12 @@ describe('resolving anomalies', () => {
     const resolved = await anomalies('resolved')
     expect(resolved.map((a) => a.resolution).sort()).toEqual(['accepted', 'accepted', 'accepted', 'disputed'])
   })
+
+  it('lists open or resolved anomalies, and refuses any other state or a limit out of range', async () => {
+    const refused = async (path: string) => (await stack.call('GET', path, { as: 'admin' })).body
+    const message = (text: string) => ({ error: { code: 'invalid_request', message: text } })
+    expect(await refused('/v1/admin/anomalies?state=all')).toEqual(message('state must be open or resolved'))
+    expect(await refused('/v1/admin/anomalies?limit=500')).toEqual(message('limit must be between 1 and 200'))
+    expect(AnomalyList.parse((await stack.call('GET', '/v1/admin/anomalies?state=resolved&limit=2', { as: 'admin' })).body).data.length).toBeLessThanOrEqual(2)
+  })
 })

@@ -1,8 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import type { BreakList, SettlementDayList, SettlementDayView } from '@carwash/contracts'
 import { AdminOnly } from '../auth/access.guard.ts'
-import { invalidInput } from '../domain-errors.ts'
-import { currencyCode, dayNumber } from './params.ts'
+import { BreaksQuery, CurrencyQuery, DayParams, DaysQuery } from '../http/dto.ts'
 import { Settlements } from './settlements.service.ts'
 
 @AdminOnly()
@@ -15,21 +14,17 @@ export class ReconciliationController {
   }
 
   @Get('days')
-  async days(@Query('currency') currency?: string, @Query('limit') limit?: string): Promise<SettlementDayList> {
-    const count = limit === undefined ? 7 : Number(limit)
-    if (!Number.isInteger(count) || count < 1 || count > 60) throw invalidInput('limit must be between 1 and 60')
-    return { object: 'list', ...(await this.#settlements.days(currencyCode(currency), count)) }
+  async days(@Query() { currency, limit }: DaysQuery): Promise<SettlementDayList> {
+    return { object: 'list', ...(await this.#settlements.days(currency, limit)) }
   }
 
   @Get('days/:day')
-  async day(@Param('day') day: string, @Query('currency') currency?: string): Promise<SettlementDayView> {
-    return this.#settlements.day(currencyCode(currency), dayNumber(day, 'day'), 200)
+  async day(@Param() { day }: DayParams, @Query() { currency }: CurrencyQuery): Promise<SettlementDayView> {
+    return this.#settlements.day(currency, day, 200)
   }
 
   @Get('breaks')
-  async breaks(@Query('from') from?: string, @Query('through') through?: string, @Query('currency') currency?: string): Promise<BreakList> {
-    const first = dayNumber(from, 'from')
-    const last = through === undefined ? first : dayNumber(through, 'through')
-    return { object: 'list', data: await this.#settlements.breaks(currencyCode(currency), first, last) }
+  async breaks(@Query() { currency, from, through }: BreaksQuery): Promise<BreakList> {
+    return { object: 'list', data: await this.#settlements.breaks(currency, from, through ?? from) }
   }
 }
