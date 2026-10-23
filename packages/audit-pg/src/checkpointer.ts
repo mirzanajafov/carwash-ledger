@@ -1,10 +1,22 @@
 import type { KeyObject } from 'node:crypto'
 import { fromHex, ORIGIN, toHex } from '@carwash/audit'
 import { failpoint } from '@carwash/failpoints'
+import type { Queryable } from '@carwash/pg'
 import type pg from 'pg'
 import { proveConsistency, rootAt, treeSize } from './log.ts'
 import type { WitnessClient } from './witness-client.ts'
-import { isSignedBy, witnessKey } from './witness-key.ts'
+import { ed25519PublicKey, isSignedBy } from './witness-key.ts'
+
+export interface CheckpointRow {
+  size: string
+  root: Buffer
+  signed_at: Date
+}
+
+export interface SignedCheckpointRow extends CheckpointRow {
+  signature: Buffer
+  witness_key: string
+}
 
 export type CheckpointOutcome =
   | { kind: 'empty' }
@@ -34,7 +46,7 @@ export class Checkpointer {
     const reply = await this.#witness.submit({ size, root, from_size: from, proof })
     if (reply.kind === 'refused') return { kind: 'refused', size, code: reply.code, message: reply.message }
     const signed = reply.checkpoint
-    if (signed.size !== size || signed.root !== root || !isSignedBy(signed, key.object)) {
+    if (signed.size !== size || signed.root !== root || !isSignedBy(signed, key.object, ORIGIN)) {
       throw new Error(`the witness answered size ${size} with a checkpoint that does not verify`)
     }
     failpoint('checkpoint.after_sign')
@@ -51,7 +63,19 @@ export class Checkpointer {
     const key = await this.#witness.key()
     if (key.origin !== ORIGIN) throw new Error(`the witness signs for ${key.origin}, not ${ORIGIN}`)
     if (key.algorithm !== 'ed25519') throw new Error(`the witness signs with ${key.algorithm}, not ed25519`)
-    this.#key = { raw: key.public_key, object: witnessKey(key.public_key) }
+    this.#key = { raw: key.public_key, object: ed25519PublicKey(key.public_key) }
     return this.#key
   }
+}
+
+export async function latestCheckpoint(db: Queryable): Promise<SignedCheckpointRow | undefined> {
+  const { rows } = await db.query<SignedCheckpointRow>(
+    'SELECT size::text, root, signature, witness_key, signed_at FROM audit_checkpoints c ORDER BY c.size DESC LIMIT 1',
+  )
+  return rows[0]
+}
+
+export async function recentCheckpoints(db: Queryable): Promise<CheckpointRow[]> {
+  const { rows } = await db.query<CheckpointRow>('SELECT size::text, root, signed_at FROM audit_checkpoints c ORDER BY c.size DESC LIMIT 20')
+  return rows
 }

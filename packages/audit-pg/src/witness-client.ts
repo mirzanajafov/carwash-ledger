@@ -1,6 +1,13 @@
-import { errorOf, SignedCheckpointView, WitnessKeyView, type CheckpointSubmission } from '@carwash/contracts'
+import { errorOf, WitnessCheckpointView, WitnessKeyView } from '@carwash/contracts'
 
-export type SubmitReply = { kind: 'signed'; checkpoint: SignedCheckpointView; fresh: boolean } | { kind: 'refused'; code: string; message: string }
+export interface CheckpointRequest {
+  size: number
+  root: string
+  from_size: number
+  proof: string[]
+}
+
+export type SubmitReply = { kind: 'signed'; checkpoint: WitnessCheckpointView; fresh: boolean } | { kind: 'refused'; code: string; message: string }
 
 export class WitnessClient {
   readonly #url: string
@@ -19,16 +26,16 @@ export class WitnessClient {
     return WitnessKeyView.parse(body)
   }
 
-  async latest(): Promise<SignedCheckpointView | undefined> {
+  async latest(): Promise<WitnessCheckpointView | undefined> {
     const { status, body } = await this.#request('GET', '/v1/checkpoints/latest')
     if (status === 404) return undefined
     if (status !== 200) throw new Error(`the witness answered ${status} for its latest checkpoint`)
-    return SignedCheckpointView.parse(body)
+    return WitnessCheckpointView.parse(body)
   }
 
-  async submit(submission: CheckpointSubmission): Promise<SubmitReply> {
-    const { status, body } = await this.#request('POST', '/v1/checkpoints', submission)
-    if (status === 200 || status === 201) return { kind: 'signed', checkpoint: SignedCheckpointView.parse(body), fresh: status === 201 }
+  async submit(request: CheckpointRequest): Promise<SubmitReply> {
+    const { status, body } = await this.#request('POST', '/v1/checkpoints', request)
+    if (status === 200 || status === 201) return { kind: 'signed', checkpoint: WitnessCheckpointView.parse(body), fresh: status === 201 }
     const refused = status === 409 ? errorOf(body) : undefined
     if (refused) return { kind: 'refused', code: refused.code, message: refused.message }
     throw new Error(`the witness answered ${status}: ${JSON.stringify(body)}`)

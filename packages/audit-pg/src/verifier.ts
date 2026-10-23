@@ -3,7 +3,7 @@ import { chainHash, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type
 import type { Queryable, Transaction } from '@carwash/pg'
 import { canonicalOf, ENTRIES, MICROS, type JournalRow } from './journals.ts'
 import { rootAt, treeSize } from './log.ts'
-import { isSignedBy, witnessKey } from './witness-key.ts'
+import { ed25519PublicKey, isSignedBy } from './witness-key.ts'
 
 const TURN_MS = 10
 
@@ -151,7 +151,7 @@ export async function verifyLog(db: Transaction, options: VerifyOptions = {}): P
     if (!stored || toHex(stored) !== options.from.root) findings.add({ kind: 'history', size: start, what: 'root' })
   }
 
-  const witness = options.witness && { ...options.witness, key: witnessKey(options.witness.publicKey) }
+  const witness = options.witness && { ...options.witness, key: ed25519PublicKey(options.witness.publicKey) }
   const signedRoots = async (above: number, through: number): Promise<SignedCheckpoint[]> => {
     if (!witness) return []
     const good: SignedCheckpoint[] = []

@@ -115,3 +115,13 @@ export async function sequenceBatch(client: Transaction, limit: number): Promise
   await client.query('DELETE FROM audit_queue WHERE journal_id = ANY($1::bigint[])', [ids])
   return journals.length
 }
+
+export async function leafBySeq(db: Queryable, seq: number): Promise<{ journal_id: string; leaf: Buffer } | undefined> {
+  const { rows } = await db.query<{ journal_id: string; leaf: Buffer }>('SELECT journal_id::text, leaf FROM audit_log WHERE seq = $1', [seq])
+  return rows[0]
+}
+
+export async function leafByJournal(db: Queryable, journalId: string): Promise<{ seq: string; leaf: Buffer } | undefined> {
+  const { rows } = await db.query<{ seq: string; leaf: Buffer }>('SELECT seq::text, leaf FROM audit_log WHERE journal_id = $1', [journalId])
+  return rows[0]
+}

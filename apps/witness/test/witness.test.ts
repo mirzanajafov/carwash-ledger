@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, assert, describe, expect, it } from 'vitest'
 import { checkpointBody, completedBy, consistencyProof, leafHash, rootOf, toHex, type Hash, type SubtreeSource } from '@carwash/audit'
-import { SignedCheckpointView } from '@carwash/contracts'
+import { WitnessCheckpointView } from '@carwash/contracts'
 import { createWitnessServer, Refusal, Witness } from '../src/index.ts'
 
 const dirs: string[] = []
@@ -44,9 +44,9 @@ function submission(source: SubtreeSource, size: number, fromSize = 0) {
   }
 }
 
-async function signedHistory(witness: Witness): Promise<SignedCheckpointView[]> {
-  const signed: SignedCheckpointView[] = []
-  for await (const line of witness.history()) signed.push(SignedCheckpointView.parse(JSON.parse(line)))
+async function signedHistory(witness: Witness): Promise<WitnessCheckpointView[]> {
+  const signed: WitnessCheckpointView[] = []
+  for await (const line of witness.history()) signed.push(WitnessCheckpointView.parse(JSON.parse(line)))
   return signed
 }
 
@@ -124,7 +124,7 @@ describe('the witness', () => {
     const lines = readFileSync(join(dir, 'checkpoints.jsonl'), 'utf8').trim().split('\n')
     const [oldest, newest] = lines
     assert(oldest && newest)
-    const forged = { ...SignedCheckpointView.parse(JSON.parse(newest)), root: toHex(rootOf(50, log(7, 50))) }
+    const forged = { ...WitnessCheckpointView.parse(JSON.parse(newest)), root: toHex(rootOf(50, log(7, 50))) }
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${oldest}\n${JSON.stringify(forged)}\n`)
     expect(() => new Witness(dir, 'test-log')).toThrow(/did not sign/)
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${oldest}\n`)
