@@ -35,7 +35,13 @@ const PRISMA_TO_SQLSTATE: Readonly<Record<string, string>> = {
 }
 
 const AdapterError = z.object({
-  driverAdapterError: z.object({ cause: z.object({ originalCode: z.string(), originalMessage: z.optional(z.string()) }) }),
+  driverAdapterError: z.object({
+    cause: z.object({
+      originalCode: z.string(),
+      originalMessage: z.optional(z.string()),
+      constraint: z.optional(z.object({ index: z.optional(z.string()) })),
+    }),
+  }),
 })
 
 export function asPgError(error: unknown): unknown {
@@ -44,7 +50,7 @@ export function asPgError(error: unknown): unknown {
   const cause = adapter.success ? adapter.data.driverAdapterError.cause : undefined
   const code = cause?.originalCode ?? PRISMA_TO_SQLSTATE[error.code]
   if (code === undefined) return error
-  return Object.assign(new Error(cause?.originalMessage ?? error.message, { cause: error }), { code })
+  return Object.assign(new Error(cause?.originalMessage ?? error.message, { cause: error }), { code, constraint: cause?.constraint?.index })
 }
 
 type Tx = Prisma.TransactionClient

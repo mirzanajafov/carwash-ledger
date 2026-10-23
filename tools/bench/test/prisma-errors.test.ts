@@ -1,5 +1,5 @@
 import { Prisma } from '@carwash/db'
-import { sqlStateOf } from '@carwash/pg'
+import { constraintOf, sqlStateOf } from '@carwash/pg'
 import { describe, expect, it } from 'vitest'
 import { asPgError } from '../src/prisma-posters.ts'
 
@@ -12,6 +12,16 @@ describe('a Prisma error seen as a Postgres one', () => {
     const error = asPgError(prismaError('P2010', { driverAdapterError: { cause: { originalCode: 'LG003', originalMessage: 'journal does not balance' } } }))
     expect(sqlStateOf(error)).toBe('LG003')
     expect(error).toMatchObject({ message: 'journal does not balance' })
+  })
+
+  it('carries the constraint a unique violation broke, so the ledger can tell a duplicate journal from a second reversal', () => {
+    const error = asPgError(
+      prismaError('P2002', {
+        driverAdapterError: { cause: { originalCode: '23505', originalMessage: 'duplicate key value', constraint: { index: 'journals_external_ref_key' } } },
+      }),
+    )
+    expect(sqlStateOf(error)).toBe('23505')
+    expect(constraintOf(error)).toBe('journals_external_ref_key')
   })
 
   it('maps the Prisma codes that have a state, and leaves the others alone', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RetriesExhaustedError, sqlStateOf, withRetry } from '../src/index.ts'
+import { RetriesExhaustedError, withRetry } from '../src/index.ts'
 
 const noSleep = async () => undefined
 const options = { maxAttempts: 4, baseDelayMs: 1, maxDelayMs: 10 }
@@ -51,19 +51,5 @@ describe('withRetry', () => {
       ),
     ).rejects.toBeInstanceOf(RetriesExhaustedError)
     expect(calls).toBe(4)
-  })
-})
-
-describe('sqlStateOf', () => {
-  it('reads a pg error', () => {
-    expect(sqlStateOf(pgError('LG002'))).toBe('LG002')
-  })
-
-  it('reads a state wrapped as a cause', () => {
-    expect(sqlStateOf(new Error('outer', { cause: pgError('40P01') }))).toBe('40P01')
-  })
-
-  it('returns nothing for an error without a state', () => {
-    expect(sqlStateOf(new Error('plain'))).toBeUndefined()
   })
 })

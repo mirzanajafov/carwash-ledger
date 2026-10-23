@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
+import { writeJournalEvents } from '@carwash/outbox'
 import type { Transaction } from '@carwash/pg'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
+import { paymentEvent, refundEvent } from '../events/events.ts'
 import type { AttemptId, PaymentId } from '../ids.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { failPayout, loadPayout, lockPayout, succeedPayout } from '../payouts/payouts.repository.ts'
@@ -88,7 +89,7 @@ export class AttemptsService {
           { accountId: accounts.fees.id, amount: -fee },
         ]),
       })
-      await journalEvents(client, journalId)
+      await writeJournalEvents(client, journalId)
       await this.#move(client, payment.id, from, to, { capturedAmount: attempt.amount, fee, captureJournalId: journalId })
     } else {
       await this.#move(client, payment.id, from, to, {})
@@ -136,7 +137,7 @@ export class AttemptsService {
       ]),
     })
     await succeedRefund(client, refundId, back, journalId)
-    await journalEvents(client, journalId)
+    await writeJournalEvents(client, journalId)
     await refundEvent(client, refundId)
     const after = before + amount
     if (after === captured) {
@@ -156,7 +157,7 @@ export class AttemptsService {
     }
     const reversal = await reversalOf(client, payout.journalId, `payout-reversal:${payout.id}`)
     const reversalId = await postInTransaction(client, this.#chart.registry, reversal)
-    await journalEvents(client, reversalId)
+    await writeJournalEvents(client, reversalId)
     await failPayout(client, payout.id, answer.reason ?? 'declined', reversalId)
     return 'applied'
   }

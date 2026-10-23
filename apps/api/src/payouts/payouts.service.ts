@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { lockStoredBalances, postInTransaction } from '@carwash/ledger'
+import { writeJournalEvents } from '@carwash/outbox'
 import { Database } from '../db/database.ts'
-import { journalEvents } from '../events/events.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import type { PayoutId } from '../ids.ts'
@@ -75,7 +75,7 @@ export class PayoutsService {
         ],
       })
       await setPayoutJournal(client, payoutId, journalId)
-      await journalEvents(client, journalId)
+      await writeJournalEvents(client, journalId)
       await insertAttempt(client, { kind: 'payout', payoutId, amount, currency: input.currency })
       await this.#idempotency.recordPoint(client, owned, 'payout_created', { payoutId })
       return payoutId

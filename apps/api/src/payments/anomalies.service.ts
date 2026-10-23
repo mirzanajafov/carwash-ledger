@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { postInTransaction } from '@carwash/ledger'
+import { writeJournalEvents } from '@carwash/outbox'
 import type { Transaction } from '@carwash/pg'
 import { Database } from '../db/database.ts'
-import { journalEvents } from '../events/events.ts'
 import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
 import { ChartService } from '../ledger/chart.service.ts'
@@ -95,7 +95,7 @@ export class AnomaliesService {
       ],
     })
     await recordPayoutAdjustment(client, payout.id, amount, journalId)
-    await journalEvents(client, journalId)
+    await writeJournalEvents(client, journalId)
   }
 
   async #find(id: number): Promise<AnomalyRow> {
