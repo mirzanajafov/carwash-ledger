@@ -13,6 +13,7 @@
   "dependencies": {
     "@carwash/audit": "workspace:*",
     "@carwash/audit-pg": "workspace:*",
+    "@carwash/contracts": "workspace:*",
     "@carwash/failpoints": "workspace:*",
     "@carwash/invariants": "workspace:*",
     "@carwash/ledger": "workspace:*",
@@ -26,7 +27,8 @@
     "class-validator": "^0.15.1",
     "pg": "catalog:",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@carwash/psp": "workspace:*",

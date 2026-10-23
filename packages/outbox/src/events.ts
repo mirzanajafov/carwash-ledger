@@ -1,11 +1,20 @@
 import type { Transaction } from '@carwash/pg'
-import type { PaymentEventType, PaymentPayload, RefundEventType, RefundPayload } from './payloads.ts'
+import { z } from 'zod'
 
 export const LANES = 16
 
 export const TOPICS = { payments: 'payments', ledger: 'ledger' } as const
 
 export type Topic = (typeof TOPICS)[keyof typeof TOPICS]
+
+export const Envelope = z.object({
+  id: z.uuid(),
+  type: z.string(),
+  occurred_at: z.iso.datetime(),
+  data: z.unknown(),
+})
+
+export type Envelope = z.infer<typeof Envelope>
 
 export interface NewEvent {
   topic: Topic
@@ -25,14 +34,6 @@ export async function writeEvent(client: Transaction, event: NewEvent): Promise<
     event.type,
     JSON.stringify(event.payload),
   ])
-}
-
-export async function writePaymentEvent(client: Transaction, type: PaymentEventType, payment: PaymentPayload): Promise<void> {
-  await writeEvent(client, { topic: TOPICS.payments, key: payment.id, type, payload: payment })
-}
-
-export async function writeRefundEvent(client: Transaction, type: RefundEventType, refund: RefundPayload): Promise<void> {
-  await writeEvent(client, { topic: TOPICS.payments, key: refund.payment, type, payload: refund })
 }
 
 export async function writeJournalEvents(client: Transaction, journalId: bigint): Promise<number> {

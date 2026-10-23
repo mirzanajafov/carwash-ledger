@@ -3,8 +3,7 @@ import type { KafkaJS } from '@confluentinc/kafka-javascript'
 import { failpoint } from '@carwash/failpoints'
 import { withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
-import type { Topic } from './events.ts'
-import { Envelope } from './payloads.ts'
+import { Envelope, type Topic } from './events.ts'
 
 export interface ConsumedEvent {
   id: string

@@ -1,19 +1,12 @@
-import {
-  writeJournalEvents,
-  writePaymentEvent,
-  writeRefundEvent,
-  type PaymentEventType,
-  type PaymentPayload,
-  type RefundEventType,
-  type RefundPayload,
-} from '@carwash/outbox'
+import type { PaymentEventData, RefundEventData } from '@carwash/contracts'
+import { TOPICS, writeEvent, writeJournalEvents } from '@carwash/outbox'
 import type { Transaction } from '@carwash/pg'
-import { unixSeconds } from '../http/unix-time.ts'
 import type { PaymentId, RefundId } from '../ids.ts'
 import type { Payment, Refund } from '../payments/payment.ts'
 import { loadPayment, loadRefund } from '../payments/payments.repository.ts'
+import { unixSeconds } from '../unix-time.ts'
 
-function paymentPayload(p: Payment): PaymentPayload {
+function paymentData(p: Payment): PaymentEventData {
   return {
     id: p.id,
     object: 'payment',
@@ -30,7 +23,8 @@ function paymentPayload(p: Payment): PaymentPayload {
   }
 }
 
-function refundPayload(r: Refund): RefundPayload {
+function refundData(r: Refund): RefundEventData {
+  if (r.status === 'pending') throw new Error(`refund ${r.id} is still pending, so it has no event`)
   return {
     id: r.id,
     object: 'refund',
@@ -43,12 +37,14 @@ function refundPayload(r: Refund): RefundPayload {
   }
 }
 
-export async function paymentEvent(client: Transaction, paymentId: PaymentId, type: PaymentEventType): Promise<void> {
-  await writePaymentEvent(client, type, paymentPayload(await loadPayment(client, paymentId)))
+export async function paymentEvent(client: Transaction, paymentId: PaymentId): Promise<void> {
+  const data = paymentData(await loadPayment(client, paymentId))
+  await writeEvent(client, { topic: TOPICS.payments, key: data.id, type: `payment.${data.status}`, payload: data })
 }
 
-export async function refundEvent(client: Transaction, refundId: RefundId, type: RefundEventType): Promise<void> {
-  await writeRefundEvent(client, type, refundPayload(await loadRefund(client, refundId)))
+export async function refundEvent(client: Transaction, refundId: RefundId): Promise<void> {
+  const data = refundData(await loadRefund(client, refundId))
+  await writeEvent(client, { topic: TOPICS.payments, key: data.payment, type: `refund.${data.status}`, payload: data })
 }
 
 export async function journalEvents(client: Transaction, journalId: bigint): Promise<void> {

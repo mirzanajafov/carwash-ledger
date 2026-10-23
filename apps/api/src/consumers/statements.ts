@@ -1,5 +1,11 @@
-import { EntryPosted, TOPICS, type ConsumerSpec } from '@carwash/outbox'
+import { EntryPostedData } from '@carwash/contracts'
+import { TOPICS, type ConsumerSpec } from '@carwash/outbox'
+import type { z } from 'zod'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
+
+const PostedEntry = EntryPostedData.pick({ account_id: true, account: true, amount: true, posted_at: true })
+
+type PostedEntry = z.infer<typeof PostedEntry>
 
 interface DayTotal {
   accountId: string
@@ -19,7 +25,7 @@ const ADD = `
     credits = statements.credits + excluded.credits,
     entries = statements.entries + excluded.entries`
 
-export function dayTotals(entries: readonly Pick<EntryPosted, 'account_id' | 'account' | 'amount' | 'posted_at'>[]): DayTotal[] {
+export function dayTotals(entries: readonly PostedEntry[]): DayTotal[] {
   const totals = new Map<string, DayTotal>()
   for (const entry of entries) {
     if (!entry.account.startsWith(MERCHANT_PREFIX)) continue
@@ -39,7 +45,7 @@ export const statements: ConsumerSpec = {
   name: 'statements',
   topic: TOPICS.ledger,
   apply: async (client, events) => {
-    const totals = dayTotals(events.filter((event) => event.type === 'entry.posted').map((event) => EntryPosted.parse(event.data)))
+    const totals = dayTotals(events.filter((event) => event.type === 'entry.posted').map((event) => PostedEntry.parse(event.data)))
     if (totals.length === 0) return
     await client.query(ADD, [
       totals.map((t) => t.accountId),

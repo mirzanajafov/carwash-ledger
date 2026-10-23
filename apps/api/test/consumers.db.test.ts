@@ -1,8 +1,8 @@
+import { EntryPostedData, PaymentEventData, RefundEventData } from '@carwash/contracts'
 import { checkEvents, checkLedger, violations } from '@carwash/invariants'
-import { EntryPosted, PaymentPayload, RefundPayload } from '@carwash/outbox'
 import fc from 'fast-check'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { Database } from '../src/db/database.ts'
 import { deliver, outboxEvents, startStack, type OutboxEvent, type Stack } from './support.ts'
 
@@ -64,8 +64,12 @@ describe('the consumers', () => {
 
   it('receive payloads that match the schemas the outbox publishes', async () => {
     const events = await outboxEvents(app, 'all')
-    const schemaOf = (type: string) => (type === 'entry.posted' ? EntryPosted : type.startsWith('refund.') ? RefundPayload : PaymentPayload)
-    for (const event of events) expect(schemaOf(event.type).safeParse(event.data).success, event.type).toBe(true)
+    const families = { payment: PaymentEventData, refund: RefundEventData, entry: EntryPostedData }
+    for (const event of events) {
+      const family = event.type.split('.')[0]
+      assert(family === 'payment' || family === 'refund' || family === 'entry', `no schema for ${event.type}`)
+      families[family].parse(event.data)
+    }
     expect([...new Set(events.map((event) => event.type))]).toEqual(
       expect.arrayContaining(['payment.authorized', 'payment.captured', 'payment.canceled', 'payment.failed', 'refund.succeeded', 'entry.posted']),
     )

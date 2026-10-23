@@ -74,6 +74,9 @@ importers:
       '@carwash/audit-pg':
         specifier: workspace:*
         version: link:../../packages/audit-pg
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@carwash/failpoints':
         specifier: workspace:*
         version: link:../../packages/failpoints
@@ -116,6 +119,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@carwash/psp':
         specifier: workspace:*
@@ -330,6 +336,16 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
 
   packages/db:
     dependencies:

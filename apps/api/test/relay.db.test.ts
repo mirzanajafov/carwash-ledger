@@ -49,18 +49,18 @@ describe('the worker relay', () => {
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL')).toBe(0)
 
     const consumer = kafkaClient({ brokers: BROKERS, clientId: 'api-test' }).consumer({ kafkaJS: { groupId: `api-test-${randomUUID()}`, fromBeginning: true } })
-    const types: string[] = []
+    const values: string[] = []
     try {
       await consumer.connect()
       await consumer.subscribe({ topics: [`${PREFIX}payments`] })
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`saw ${types.join(', ')}`)), 30_000)
+        const timer = setTimeout(() => reject(new Error(`saw ${values.length} of 4`)), 30_000)
         void consumer.run({
           eachMessage: async ({ message }) => {
             if (message.key?.toString() !== payment.id) return
             assert(message.value)
-            types.push(Envelope.parse(JSON.parse(message.value.toString())).type)
-            if (types.length === 4) {
+            values.push(message.value.toString())
+            if (values.length === 4) {
               clearTimeout(timer)
               resolve()
             }
@@ -70,7 +70,12 @@ describe('the worker relay', () => {
     } finally {
       await consumer.disconnect()
     }
-    expect(types).toEqual(['payment.authorized', 'payment.captured', 'refund.succeeded', 'payment.refunded'])
+    expect(values.map((value) => Envelope.parse(JSON.parse(value)).type)).toEqual([
+      'payment.authorized',
+      'payment.captured',
+      'refund.succeeded',
+      'payment.refunded',
+    ])
   })
 
   it('lets the consumers catch up with everything, so L2 and L3 hold', async () => {
