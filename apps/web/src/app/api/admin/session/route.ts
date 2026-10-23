@@ -1,15 +1,9 @@
 import { OpenedSessionView } from '@carwash/contracts'
 import * as z from 'zod/mini'
 import { callApi, readBody, refuse, relay, unreachable } from '@/lib/server'
-import { adminSession, forgetSession, rememberSession, sessionToken } from '@/lib/session'
+import { forgetSession, rememberSession, sessionToken } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
-
-export async function GET(): Promise<Response> {
-  const session = await adminSession()
-  if (!session && (await sessionToken())) await forgetSession()
-  return Response.json(session ? { admin: true, client: session.client, expires_at: session.expiresAt } : { admin: false })
-}
 
 const LoginBody = z.object({ key: z.string() })
 
@@ -30,7 +24,11 @@ export async function POST(request: Request): Promise<Response> {
 
 export async function DELETE(): Promise<Response> {
   const token = await sessionToken()
-  if (token) await callApi('DELETE', '/v1/admin/sessions/current', token).catch(() => null)
+  if (token) {
+    const reply = await callApi('DELETE', '/v1/admin/sessions/current', token).catch(() => null)
+    if (reply === null) return unreachable()
+    if (reply.status !== 200 && reply.status !== 401) return relay(reply)
+  }
   await forgetSession()
   return Response.json({ admin: false })
 }

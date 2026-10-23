@@ -15,7 +15,8 @@ export interface AdminSession {
 const ATTRIBUTES = { httpOnly: true, secure: SECURE, sameSite: 'strict', path: '/' } as const
 
 export async function rememberSession(token: string, expiresAt: string): Promise<void> {
-  ;(await cookies()).set(SESSION_COOKIE, token, { ...ATTRIBUTES, expires: new Date(expiresAt) })
+  const maxAge = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000))
+  ;(await cookies()).set(SESSION_COOKIE, token, { ...ATTRIBUTES, maxAge })
 }
 
 export async function forgetSession(): Promise<void> {
