@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
+import { firstRow, takeAdvisoryLock, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Faults, SettlementFault } from './faults.ts'
 
@@ -138,7 +138,7 @@ export class Settlements {
 
   file(day: number, currency: string): Promise<SettlementFile | undefined> {
     return withTransaction(this.#pool, async (client) => {
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`settlement:${currency}`])
+      await takeAdvisoryLock(client, `settlement:${currency}`)
       return (await this.#stored(client, day, currency)) ?? (await this.#generate(client, day, currency))
     })
   }

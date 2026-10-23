@@ -110,3 +110,7 @@ export function inRollback<T>(pool: pg.Pool, work: (client: Transaction) => Prom
 export function inSnapshot<T>(pool: pg.Pool, read: (client: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(pool, read, { isolation: 'repeatable read', readOnly: true })
 }
+
+export async function takeAdvisoryLock(client: Transaction, key: string): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key])
+}

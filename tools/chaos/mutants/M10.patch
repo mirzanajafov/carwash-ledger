@@ -1,7 +1,7 @@
 --- a/apps/api/src/settlement/settlement-ingest.service.ts
 +++ b/apps/api/src/settlement/settlement-ingest.service.ts
-@@ -39,8 +39,7 @@
-     return this.#db.transaction(async (client) => {
+@@ -46,8 +46,7 @@
+       await takeAdvisoryLock(client, settlementsKey(currency))
        if (await fileExists(client, file.id)) return 'already'
        const entries: EntryInput[] = [
 -        { accountId: accounts.bank.id, amount: file.net },

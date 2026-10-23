@@ -1,6 +1,6 @@
 import type { BreakClass, BreakView } from '@carwash/contracts'
-import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
-import type { Break, FileLine, Kind, LedgerItem } from '@carwash/recon'
+import { firstRow, takeAdvisoryLock, type Queryable, type Transaction } from '@carwash/pg'
+import type { Break, FileLine, Kind, LedgerItem, Window } from '@carwash/recon'
 import type { ParsedFile } from './settlement-file.ts'
 
 export interface LedgerItemsQuery {
@@ -54,6 +54,10 @@ const LINES_FOR_MATCHING = `
   WHERE f.currency = $1 AND f.day BETWEEN $2 AND $3
   ORDER BY f.day, l.line`
 
+export function settlementsKey(currency: string): string {
+  return `settlements:${currency}`
+}
+
 export async function fileExists(client: Transaction, id: string): Promise<boolean> {
   return (await client.query('SELECT 1 FROM settlement_files WHERE id = $1', [id])).rowCount === 1
 }
@@ -86,16 +90,31 @@ export async function insertFile(client: Transaction, file: ParsedFile, journalI
   )
 }
 
-export async function latestFileDay(db: Queryable, currency: string): Promise<number | null> {
-  return firstRow(await db.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [currency])).day
+export interface FilesSoFar {
+  count: number
+  latest: number | null
+  reconciled: number
+}
+
+export async function filesSoFar(db: Queryable, currency: string): Promise<FilesSoFar> {
+  return firstRow(
+    await db.query<FilesSoFar>(
+      `SELECT count(*)::int AS count, max(day)::int AS latest, coalesce((SELECT files FROM recon_cursors WHERE currency = $1), 0) AS reconciled
+       FROM settlement_files WHERE currency = $1`,
+      [currency],
+    ),
+  )
 }
 
 export async function settledSoFar(db: Queryable, currency: string, daySeconds: number): Promise<{ latest: number | null; first: number | null }> {
   return firstRow(
     await db.query<{ latest: number | null; first: number | null }>(
-      `SELECT (SELECT max(day)::int FROM settlement_files WHERE currency = $1) AS latest,
-              (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
-               WHERE currency = $1 AND kind IN ('capture', 'refund') AND status = 'succeeded') AS first`,
+      `SELECT latest,
+              CASE WHEN latest IS NULL THEN
+                (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
+                 WHERE currency = $1 AND kind IN ('capture', 'refund') AND status = 'succeeded')
+              END AS first
+       FROM (SELECT max(day)::int AS latest FROM settlement_files WHERE currency = $1) files`,
       [currency, daySeconds],
     ),
   )
@@ -121,8 +140,15 @@ export async function linesForMatching(db: Queryable, currency: string, from: nu
   return rows.map((row) => ({ ...row, gross: BigInt(row.gross), fee: BigInt(row.fee), net: BigInt(row.net) }))
 }
 
-export async function replaceBreaks(client: Transaction, currency: string, from: number, through: number, breaks: readonly Break[]): Promise<void> {
-  await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, from, through])
+export async function saveReconciliation(client: Transaction, currency: string, span: Window, breaks: readonly Break[], files: number): Promise<void> {
+  await takeAdvisoryLock(client, settlementsKey(currency))
+  const { rows } = await client.query<{ files: number }>('SELECT files FROM recon_cursors WHERE currency = $1', [currency])
+  if ((rows[0]?.files ?? 0) > files) return
+  await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, span.keepFrom, span.keepThrough])
+  await client.query('INSERT INTO recon_cursors (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
+    currency,
+    files,
+  ])
   if (breaks.length === 0) return
   await client.query(
     `INSERT INTO recon_breaks (currency, day, class, file_id, line, journal_ref, attempt_id, detail)

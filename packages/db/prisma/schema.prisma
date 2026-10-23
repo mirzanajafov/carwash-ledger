@@ -449,6 +449,13 @@ model ReconBreak {
   @@map("recon_breaks")
 }
 
+model ReconCursor {
+  currency String @id @db.Char(3)
+  files    Int
+
+  @@map("recon_cursors")
+}
+
 model AuditQueue {
   journalId BigInt   @id @map("journal_id")
   queuedAt  DateTime @default(now()) @map("queued_at") @db.Timestamptz(6)
