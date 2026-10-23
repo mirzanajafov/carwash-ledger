@@ -20,11 +20,7 @@ export interface RunningPsp {
 
 const SWEEP_EVERY_MS = 60_000
 
-function stderr(message: string): void {
-  process.stderr.write(`${message}\n`)
-}
-
-export async function startPsp(config: Config, log = stderr): Promise<RunningPsp> {
+export async function startPsp(config: Config, log: (message: string) => void): Promise<RunningPsp> {
   const pool = createPool({ connectionString: config.databaseUrl, max: 10 })
   await migrate(pool)
   const faults = new Faults(config.faultPlan)

@@ -9,7 +9,7 @@ export interface DeliveryOptions {
   intervalMs?: number
   timeoutMs?: number
   maxAttempts?: number
-  log?: (message: string) => void
+  log: (message: string) => void
 }
 
 interface Claimed {
@@ -48,7 +48,6 @@ export class WebhookSender {
       intervalMs: 200,
       timeoutMs: 5000,
       maxAttempts: 10,
-      log: (message) => process.stderr.write(`${message}\n`),
       ...options,
     }
   }

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type * as z from 'zod/mini'
+import * as z from 'zod/mini'
 
 export class HttpError extends Error {
   readonly status: number
@@ -24,10 +24,10 @@ export type Reply =
 export interface ServeOptions {
   name: string
   log?: ((message: string) => void) | undefined
-  errorOf?: (error: unknown) => HttpError | undefined
+  mapError?: ((error: unknown) => HttpError | undefined) | undefined
 }
 
-export async function readJson(request: IncomingMessage, maxBytes: number): Promise<unknown> {
+export async function readJson(request: IncomingMessage, maxBytes: number, invalidCode = 'invalid'): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request as AsyncIterable<Buffer>) {
@@ -39,7 +39,7 @@ export async function readJson(request: IncomingMessage, maxBytes: number): Prom
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'))
   } catch {
-    throw new HttpError(400, 'invalid', 'the body is not JSON')
+    throw new HttpError(400, invalidCode, 'the body is not JSON')
   }
 }
 
@@ -47,6 +47,12 @@ export function parse<S extends z.ZodMiniType>(schema: S, input: unknown, code =
   const result = schema.safeParse(input)
   if (result.success) return result.data
   throw new HttpError(400, code, result.error.issues[0]?.message ?? 'the request is not valid')
+}
+
+export function onlyFields<Shape extends Record<string, z.ZodMiniType>>(shape: Shape, unknownField: string, notObject: string) {
+  return z.strictObject(shape, {
+    error: (issue) => (issue.code === 'unrecognized_keys' ? `${unknownField} ${issue.keys.join(', ')}` : notObject),
+  })
 }
 
 export function bearerMatches(request: IncomingMessage, secret: string): boolean {
@@ -79,15 +85,19 @@ function closedEarly(error: unknown): boolean {
 export function serve(handle: (request: IncomingMessage) => Promise<Reply | undefined>, options: ServeOptions): Server {
   const log = options.log ?? ((message: string) => process.stderr.write(`${message}\n`))
   const fail = (request: IncomingMessage, response: ServerResponse, error: unknown): void => {
-    if (response.headersSent || request.socket.destroyed || closedEarly(error)) return
-    const known = error instanceof HttpError ? error : options.errorOf?.(error)
+    if (closedEarly(error)) return
+    const known = error instanceof HttpError ? error : options.mapError?.(error)
     if (!known) log(`${options.name}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+    if (response.headersSent || request.socket.destroyed) return
     const { status, code, message } = known ?? new HttpError(500, 'internal_error', 'internal error')
     write(response, status, 'application/json', JSON.stringify({ error: { code, message } }))
   }
   return createServer((request, response) => {
     handle(request)
-      .then((reply) => (reply === undefined ? undefined : send(response, reply)))
+      .then(async (reply) => {
+        if (reply === undefined) response.destroy()
+        else await send(response, reply)
+      })
       .catch((error: unknown) => {
         fail(request, response, error)
       })

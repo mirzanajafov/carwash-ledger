@@ -2,7 +2,7 @@ import type { IncomingMessage, Server } from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { WeatherView } from '@carwash/contracts'
 import { bearerMatches, HttpError, parse, readJson, serve, type Reply } from '@carwash/http'
-import { FaultPlanInput, parseToken, WeatherInput, type Faults, type TokenEffect } from './faults.ts'
+import { FaultPlanInput, parseToken, WeatherRequest, type Faults, type TokenEffect } from './faults.ts'
 import { requestHash, type Answer, type OperationRequest, type Psp } from './psp.ts'
 import { CancelRequest, CaptureRequest, ChargeRequest, PayoutRequest, RefundRequest } from './requests.ts'
 import type { Settlements } from './settlement.ts'
@@ -11,7 +11,7 @@ export interface ServerOptions {
   apiKey: string
   adminKey: string
   hangMs: number
-  log?: (message: string) => void
+  log: (message: string) => void
 }
 
 const MAX_BODY_BYTES = 16 * 1024
@@ -52,7 +52,7 @@ function notAllowed(method: string, path: string): HttpError {
 export function createPspServer(psp: Psp, faults: Faults, settlements: Settlements, options: ServerOptions): Server {
   async function post(request: IncomingMessage, path: string): Promise<Answer> {
     const key = idempotencyKey(request)
-    const body = await readJson(request, MAX_BODY_BYTES)
+    const body = await readJson(request, MAX_BODY_BYTES, INVALID)
     const hash = requestHash('POST', path, body)
 
     if (path === '/v1/charges') {
@@ -72,7 +72,6 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
     }
     const [, chargeId, verb] = CHARGE_ACTION.exec(path) ?? []
     if (chargeId === undefined) throw new HttpError(404, 'not_found', `no route POST ${path}`)
-    const token = tokenEffect(await psp.chargeToken(chargeId))
     let operation: Pick<OperationRequest, 'kind' | 'apply'>
     if (verb === 'capture') {
       const { amount } = parse(CaptureRequest, body, INVALID)
@@ -84,6 +83,7 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
       const { amount } = parse(RefundRequest, body, INVALID)
       operation = { kind: 'refund', apply: (client, behaviour) => psp.refund(client, behaviour, chargeId, amount) }
     }
+    const token = tokenEffect(await psp.chargeToken(chargeId))
     return psp.execute({ key, hash, token, ...operation })
   }
 
@@ -96,7 +96,7 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
     }
     if (path === '/admin/weather') {
       if (method === 'PUT') {
-        const weather = parse(WeatherInput, await readJson(request, MAX_BODY_BYTES), INVALID)
+        const weather = parse(WeatherRequest, await readJson(request, MAX_BODY_BYTES, INVALID), INVALID)
         faults.setWeather(weather.label, weather.plan, weather.seconds)
       } else if (method === 'DELETE') {
         faults.clearWeather()
@@ -106,7 +106,7 @@ export function createPspServer(psp: Psp, faults: Faults, settlements: Settlemen
       return { status: 200, json: weatherView(faults) }
     }
     if (path !== '/admin/faults') throw new HttpError(404, 'not_found', `no route ${method} ${path}`)
-    if (method === 'PUT') faults.plan = parse(FaultPlanInput, await readJson(request, MAX_BODY_BYTES), INVALID)
+    if (method === 'PUT') faults.plan = parse(FaultPlanInput, await readJson(request, MAX_BODY_BYTES, INVALID), INVALID)
     else if (method !== 'GET') throw notAllowed(method, path)
     return { status: 200, json: faults.plan }
   }

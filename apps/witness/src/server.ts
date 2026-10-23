@@ -1,7 +1,7 @@
 import type { IncomingMessage, Server } from 'node:http'
 import { bearerMatches, HttpError, parse, readJson, serve, type Reply } from '@carwash/http'
 import * as z from 'zod/mini'
-import { Refusal, Witness, type Submission } from './witness.ts'
+import { Refusal, Witness } from './witness.ts'
 
 const MAX_BODY_BYTES = 1_000_000
 
@@ -49,14 +49,13 @@ export function createWitnessServer(witness: Witness, token: string): Server {
     if (route === 'GET /v1/checkpoints') return { status: 200, stream: historyDocument(witness), contentType: 'application/json' }
     if (route === 'POST /v1/checkpoints') {
       if (!bearerMatches(request, token)) throw new HttpError(401, 'unauthorized', 'the submitter token is missing or wrong')
-      const submission: Submission = parse(SubmissionRequest, await readJson(request, MAX_BODY_BYTES))
-      const { signed, fresh } = await witness.submit(submission)
+      const { signed, fresh } = await witness.submit(parse(SubmissionRequest, await readJson(request, MAX_BODY_BYTES)))
       return { status: fresh ? 201 : 200, json: signed }
     }
     throw new HttpError(404, 'not_found', `no route ${route}`)
   }
   return serve(handle, {
     name: 'witness',
-    errorOf: (error) => (error instanceof Refusal ? new HttpError(409, error.code, error.message) : undefined),
+    mapError: (error) => (error instanceof Refusal ? new HttpError(409, error.code, error.message) : undefined),
   })
 }

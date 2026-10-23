@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { onlyFields } from '@carwash/http'
 import * as z from 'zod/mini'
 
 export const CARD_OPERATIONS = ['authorize', 'capture', 'cancel', 'refund'] as const
@@ -8,29 +9,7 @@ export type OperationKind = CardOperation | 'payout'
 export const WEBHOOK_FAULTS = ['duplicate', 'delay', 'reorder', 'drop'] as const
 export type WebhookFault = (typeof WEBHOOK_FAULTS)[number]
 
-export interface FaultPlan {
-  seed: number
-  decline: number
-  fail: number
-  timeoutAfterCommit: number
-  slow: number
-  slowMs: readonly [number, number]
-  wrongAmount: number
-  webhook: Record<WebhookFault, number>
-  settlement: Record<SettlementFault, number>
-}
-
-export const NO_FAULTS: FaultPlan = {
-  seed: 0,
-  decline: 0,
-  fail: 0,
-  timeoutAfterCommit: 0,
-  slow: 0,
-  slowMs: [500, 3000],
-  wrongAmount: 0,
-  webhook: { duplicate: 0, delay: 0, reorder: 0, drop: 0 },
-  settlement: { nextDay: 0, feeDifference: 0, wrongAmount: 0, missingLine: 0, duplicateLine: 0, droppedReference: 0 },
-}
+export type FaultPlan = z.output<typeof FaultPlanInput>
 
 export type TokenEffect =
   | { kind: 'ok' | 'decline' | 'expire_authorization' }
@@ -173,32 +152,33 @@ const milliseconds = z.int({ error: SLOW_MS }).check(z.gte(0, { error: SLOW_MS }
 const LABEL = 'label must be 1-32 lowercase letters, digits, spaces or dashes'
 const SECONDS = `seconds must be an integer from 1 to ${MAX_WEATHER_SECONDS}`
 
-export const FaultPlanInput = z.strictObject(
+export const FaultPlanInput = onlyFields(
   {
     seed: z._default(z.int({ error: 'seed must be an integer' }), 0),
     decline: probability('decline'),
     fail: probability('fail'),
     timeoutAfterCommit: probability('timeoutAfterCommit'),
     slow: probability('slow'),
-    slowMs: z._default(
+    slowMs: z.prefault(
       z.readonly(z.tuple([milliseconds, milliseconds], { error: SLOW_MS }).check(z.refine(([low, high]) => low <= high, { error: SLOW_MS }))),
-      NO_FAULTS.slowMs,
+      [500, 3000],
     ),
     wrongAmount: probability('wrongAmount'),
-    webhook: z._default(
-      z.strictObject(
+    webhook: z.prefault(
+      onlyFields(
         {
           duplicate: probability('webhook.duplicate'),
           delay: probability('webhook.delay'),
           reorder: probability('webhook.reorder'),
           drop: probability('webhook.drop'),
         },
-        { error: (issue) => (issue.code === 'unrecognized_keys' ? `unknown webhook fault ${issue.keys.join(', ')}` : 'webhook must be an object') },
+        'unknown webhook fault',
+        'webhook must be an object',
       ),
-      NO_FAULTS.webhook,
+      {},
     ),
-    settlement: z._default(
-      z.strictObject(
+    settlement: z.prefault(
+      onlyFields(
         {
           nextDay: probability('settlement.nextDay'),
           feeDifference: probability('settlement.feeDifference'),
@@ -207,19 +187,24 @@ export const FaultPlanInput = z.strictObject(
           duplicateLine: probability('settlement.duplicateLine'),
           droppedReference: probability('settlement.droppedReference'),
         },
-        { error: (issue) => (issue.code === 'unrecognized_keys' ? `unknown settlement fault ${issue.keys.join(', ')}` : 'settlement must be an object') },
+        'unknown settlement fault',
+        'settlement must be an object',
       ),
-      NO_FAULTS.settlement,
+      {},
     ),
   },
-  { error: (issue) => (issue.code === 'unrecognized_keys' ? `unknown fault plan field ${issue.keys.join(', ')}` : 'the fault plan must be an object') },
+  'unknown fault plan field',
+  'the fault plan must be an object',
 )
 
-export const WeatherInput = z.strictObject(
+export const NO_FAULTS: FaultPlan = FaultPlanInput.parse({})
+
+export const WeatherRequest = onlyFields(
   {
     label: z.string({ error: LABEL }).check(z.regex(/^[a-z][a-z0-9 -]{0,31}$/, { error: LABEL })),
     plan: FaultPlanInput,
     seconds: z.int({ error: SECONDS }).check(z.gte(1, { error: SECONDS }), z.lte(MAX_WEATHER_SECONDS, { error: SECONDS })),
   },
-  { error: (issue) => (issue.code === 'unrecognized_keys' ? `unknown weather field ${issue.keys.join(', ')}` : 'the weather must be an object') },
+  'unknown weather field',
+  'the weather must be an object',
 )

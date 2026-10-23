@@ -26,6 +26,6 @@ export function createTamperServer(service: TamperService, token: string): Serve
   }
   return serve(handle, {
     name: 'tamper',
-    errorOf: (error) => (error instanceof Conflict ? new HttpError(409, error.code, error.message) : undefined),
+    mapError: (error) => (error instanceof Conflict ? new HttpError(409, error.code, error.message) : undefined),
   })
 }

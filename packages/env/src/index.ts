@@ -10,16 +10,24 @@ export function optional(env: Env, name: string): string | undefined {
   return env[name] || undefined
 }
 
-export function integer(env: Env, name: string, fallback: number): number {
+export function nonNegativeInteger(env: Env, name: string, fallback: number): number {
   const raw = env[name]
   if (raw === undefined || raw === '') return fallback
   const value = Number(raw)
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer`)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value)) throw new Error(`${name} must be a non-negative integer`)
   return value
 }
 
 export function positiveInteger(env: Env, name: string, fallback: number): number {
-  const value = integer(env, name, fallback)
+  const value = nonNegativeInteger(env, name, fallback)
   if (value === 0) throw new Error(`${name} must be a positive integer`)
+  return value
+}
+
+export function positiveNumber(env: Env, name: string, fallback: number): number {
+  const raw = env[name]
+  if (raw === undefined || raw === '') return fallback
+  const value = Number(raw)
+  if (!/^\d+(\.\d+)?$/.test(raw) || !(value > 0)) throw new Error(`${name} must be a positive number`)
   return value
 }

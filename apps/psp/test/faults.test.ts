@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FaultPlanInput, Faults, NO_FAULTS, parseToken, WeatherInput, type TokenEffect } from '../src/faults.ts'
+import { FaultPlanInput, Faults, NO_FAULTS, parseToken, WeatherRequest, type TokenEffect } from '../src/faults.ts'
 
 describe('parseToken', () => {
   it('reads every kind of test token and rejects anything else', () => {
@@ -115,16 +115,16 @@ describe('the weather', () => {
   })
 
   it('takes a label, a plan and a bounded number of seconds, and nothing else', () => {
-    expect(WeatherInput.parse({ label: 'storm', plan: { fail: 0.2 }, seconds: 300 })).toEqual({
+    expect(WeatherRequest.parse({ label: 'storm', plan: { fail: 0.2 }, seconds: 300 })).toEqual({
       label: 'storm',
       plan: { ...NO_FAULTS, fail: 0.2 },
       seconds: 300,
     })
-    expect(() => WeatherInput.parse({ label: 'storm', plan: {}, seconds: 0 })).toThrow('seconds')
-    expect(() => WeatherInput.parse({ label: 'storm', plan: {}, seconds: 3601 })).toThrow('seconds')
-    expect(() => WeatherInput.parse({ label: 'storm', plan: {}, seconds: 1.5 })).toThrow('seconds')
-    expect(() => WeatherInput.parse({ label: '<b>', plan: {}, seconds: 60 })).toThrow('label')
-    expect(() => WeatherInput.parse({ label: 'storm', plan: { fail: 2 }, seconds: 60 })).toThrow('fail must be a probability')
-    expect(() => WeatherInput.parse({ label: 'storm', plan: {}, seconds: 60, forever: true })).toThrow('unknown weather field forever')
+    expect(() => WeatherRequest.parse({ label: 'storm', plan: {}, seconds: 0 })).toThrow('seconds')
+    expect(() => WeatherRequest.parse({ label: 'storm', plan: {}, seconds: 3601 })).toThrow('seconds')
+    expect(() => WeatherRequest.parse({ label: 'storm', plan: {}, seconds: 1.5 })).toThrow('seconds')
+    expect(() => WeatherRequest.parse({ label: '<b>', plan: {}, seconds: 60 })).toThrow('label')
+    expect(() => WeatherRequest.parse({ label: 'storm', plan: { fail: 2 }, seconds: 60 })).toThrow('fail must be a probability')
+    expect(() => WeatherRequest.parse({ label: 'storm', plan: {}, seconds: 60, forever: true })).toThrow('unknown weather field forever')
   })
 })
