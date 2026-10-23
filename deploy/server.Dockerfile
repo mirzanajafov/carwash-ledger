@@ -21,7 +21,7 @@ COPY apps/psp/package.json apps/psp/
 COPY apps/witness/package.json apps/witness/
 COPY apps/tamper/package.json apps/tamper/
 COPY apps/traffic/package.json apps/traffic/
-RUN pnpm install --frozen-lockfile --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..."
+RUN pnpm install --frozen-lockfile --filter "@carwash/db" --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..."
 COPY packages packages
 COPY apps/api apps/api
 COPY apps/psp apps/psp

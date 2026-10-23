@@ -63,20 +63,6 @@ describe('sqlStateOf', () => {
     expect(sqlStateOf(new Error('outer', { cause: pgError('40P01') }))).toBe('40P01')
   })
 
-  it('prefers the driver state inside a Prisma error', () => {
-    const error = Object.assign(new Error('prisma'), {
-      code: 'P2010',
-      clientVersion: '7',
-      meta: { driverAdapterError: { cause: { originalCode: 'LG003' } } },
-    })
-    expect(sqlStateOf(error)).toBe('LG003')
-  })
-
-  it('maps Prisma codes without a driver state', () => {
-    expect(sqlStateOf(Object.assign(new Error('prisma'), { code: 'P2034', clientVersion: '7' }))).toBe('40001')
-    expect(sqlStateOf(Object.assign(new Error('prisma'), { code: 'P2025', clientVersion: '7' }))).toBeUndefined()
-  })
-
   it('returns nothing for an error without a state', () => {
     expect(sqlStateOf(new Error('plain'))).toBeUndefined()
   })

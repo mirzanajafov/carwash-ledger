@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { lockBalances, postInTransaction } from '@carwash/ledger'
+import { lockStoredBalances, postInTransaction } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
@@ -56,7 +56,7 @@ export class PayoutsService {
         throw new DomainError('invalid', 'currency_mismatch', `merchant ${input.merchant} is paid in ${merchant.currency}`)
       }
       const bank = this.#chart.accounts(input.currency).bank
-      const balance = (await lockBalances(client, [merchant.accountId, bank.id])).get(merchant.accountId)
+      const balance = (await lockStoredBalances(client, [merchant.accountId, bank.id])).get(merchant.accountId)
       if (balance === undefined) throw new Error(`merchant ${input.merchant} has no balance row`)
       const payable = -balance
       if (input.amount === undefined && payable <= 0n) {

@@ -8,6 +8,11 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./driver": {
+      "source": "./src/driver.ts",
+      "types": "./dist/driver.d.ts",
+      "default": "./dist/driver.js"
     }
   },
   "scripts": {

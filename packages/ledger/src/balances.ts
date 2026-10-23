@@ -12,15 +12,15 @@ export async function readBalance(db: Queryable, account: Account): Promise<bigi
   return BigInt(firstRow(await db.query<{ amount: string }>(sql, [account.id.toString()])).amount)
 }
 
-const LOCK_ACCOUNT_BALANCES = `
+const LOCK_STORED_BALANCES = `
 SELECT b.account_id::text, b.amount::text
 FROM balances b
 WHERE b.account_id = ANY($1::bigint[])
 ORDER BY b.account_id, b.shard
 FOR UPDATE`
 
-export async function lockBalances(client: Transaction, accountIds: readonly bigint[]): Promise<Map<bigint, bigint>> {
-  const { rows } = await client.query<{ account_id: string; amount: string }>(LOCK_ACCOUNT_BALANCES, [accountIds])
+export async function lockStoredBalances(client: Transaction, accountIds: readonly bigint[]): Promise<Map<bigint, bigint>> {
+  const { rows } = await client.query<{ account_id: string; amount: string }>(LOCK_STORED_BALANCES, [accountIds])
   const balances = new Map<bigint, bigint>()
   for (const row of rows) {
     const id = BigInt(row.account_id)

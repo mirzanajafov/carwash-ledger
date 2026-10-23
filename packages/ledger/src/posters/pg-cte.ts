@@ -55,7 +55,7 @@ export class PgCtePoster implements Poster {
   }
 
   post(input: JournalInput): Promise<PostedJournal> {
-    return postWith(this.#registry, input, this.#retry, (plan) => this.#attempt(plan))
+    return postWith(this.#registry, input, (plan) => this.#attempt(plan), this.#retry)
   }
 
   async #attempt(plan: JournalPlan): Promise<bigint> {

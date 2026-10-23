@@ -2,18 +2,16 @@ import { Prisma, type PrismaClient } from '@carwash/db'
 import {
   deltaParams,
   entryParams,
-  expectApplied,
   lockParams,
-  LOCK_BALANCES,
-  POST_JOURNAL,
-  postWith,
   type AccountRegistry,
   type JournalInput,
   type JournalPlan,
   type PostedJournal,
   type Poster,
 } from '@carwash/ledger'
+import { expectApplied, LOCK_BALANCES, POST_JOURNAL, postWith } from '@carwash/ledger/driver'
 import type { RetryOptions } from '@carwash/pg'
+import * as z from 'zod/mini'
 
 const INSERT_JOURNAL = `
 INSERT INTO journals (external_ref, reverses_id)
@@ -30,6 +28,24 @@ UPDATE balances AS b
 SET amount = b.amount + t.delta, version = b.version + 1
 FROM unnest($1::bigint[], $2::int[], $3::bigint[]) AS t(account_id, shard, delta)
 WHERE b.account_id = t.account_id AND b.shard = t.shard`
+
+const PRISMA_TO_SQLSTATE: Readonly<Record<string, string>> = {
+  P2002: '23505',
+  P2034: '40001',
+}
+
+const AdapterError = z.object({
+  driverAdapterError: z.object({ cause: z.object({ originalCode: z.string(), originalMessage: z.optional(z.string()) }) }),
+})
+
+export function asPgError(error: unknown): unknown {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return error
+  const adapter = AdapterError.safeParse(error.meta)
+  const cause = adapter.success ? adapter.data.driverAdapterError.cause : undefined
+  const code = cause?.originalCode ?? PRISMA_TO_SQLSTATE[error.code]
+  if (code === undefined) return error
+  return Object.assign(new Error(cause?.originalMessage ?? error.message, { cause: error }), { code })
+}
 
 type Tx = Prisma.TransactionClient
 
@@ -52,12 +68,16 @@ abstract class PrismaPoster implements Poster {
   }
 
   post(input: JournalInput): Promise<PostedJournal> {
-    return postWith(this.#registry, input, this.#retry, (plan) =>
-      this.#prisma.$transaction(async (tx) => {
-        if (plan.locks.length > 0) await tx.$queryRawUnsafe(LOCK_BALANCES, ...lockParams(plan))
-        return this.write(tx, plan)
-      }, optionsFor(plan)),
-    )
+    const attempt = (plan: JournalPlan) =>
+      this.#prisma
+        .$transaction(async (tx) => {
+          if (plan.locks.length > 0) await tx.$queryRawUnsafe(LOCK_BALANCES, ...lockParams(plan))
+          return this.write(tx, plan)
+        }, optionsFor(plan))
+        .catch((error: unknown) => {
+          throw asPgError(error)
+        })
+    return postWith(this.#registry, input, attempt, this.#retry)
   }
 
   protected abstract write(tx: Tx, plan: JournalPlan): Promise<bigint>

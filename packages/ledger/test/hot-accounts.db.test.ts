@@ -23,8 +23,8 @@ describe('concurrent captures on the hot accounts', () => {
   for (const mode of BALANCE_MODES) {
     it(`keeps ${mode} balances exact`, async () => {
       const { poster } = ledger
-      const accounts = await createModeAccounts(ledger.app, mode, { prefix: `${poster.name}:` })
-      const refs = Array.from({ length: journals }, (_, i) => `${poster.name}:${mode}:${i}`)
+      const accounts = await createModeAccounts(ledger.app, mode, { prefix: 'hot:' })
+      const refs = Array.from({ length: journals }, (_, i) => `hot:${mode}:${i}`)
       const gaveUp: string[] = []
       await inParallel(refs, 16, async (ref) => {
         const merchant = Number(ref.split(':').at(-1))

@@ -26,11 +26,13 @@
     "@carwash/pg": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "@carwash/witness": "workspace:*",
-    "pg": "catalog:"
+    "pg": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
+    "fast-check": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

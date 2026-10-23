@@ -1,17 +1,8 @@
+import { sqlStateOf } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { assert } from 'vitest'
-import {
-  AccountRegistry,
-  BALANCE_MODES,
-  createAccount,
-  PgCtePoster,
-  pgAccountLoader,
-  type Account,
-  type BalanceMode,
-  type EntryInput,
-  type Poster,
-} from '../src/index.ts'
+import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader, type Account, type BalanceMode, type EntryInput, type Poster } from '../src/index.ts'
 
 const PATIENT_RETRY = { maxAttempts: 40, baseDelayMs: 2, maxDelayMs: 100 }
 
@@ -61,12 +52,6 @@ export async function createModeAccounts(
   }
 }
 
-export async function createAllModes(pool: pg.Pool, options: { merchants?: number; currency?: string } = {}) {
-  const result = new Map<BalanceMode, ModeAccounts>()
-  for (const mode of BALANCE_MODES) result.set(mode, await createModeAccounts(pool, mode, options))
-  return result
-}
-
 export function capture(accounts: ModeAccounts, merchant: number, gross: bigint, fee: bigint): EntryInput[] {
   const payee = accounts.merchants[merchant % accounts.merchants.length]
   assert(payee)
@@ -90,6 +75,6 @@ export async function sqlState(promise: Promise<unknown>): Promise<string | unde
     await promise
     return undefined
   } catch (error) {
-    return (error as { code?: string }).code ?? 'no-code'
+    return sqlStateOf(error) ?? 'no-code'
   }
 }

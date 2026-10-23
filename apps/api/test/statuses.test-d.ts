@@ -1,3 +1,4 @@
+import type { AnomalyView, PaymentEventData, PaymentView, PayoutView, RefundView, VerificationRunView } from '@carwash/contracts'
 import type { $Enums } from '@carwash/db'
 import type { AccountType, BalanceMode } from '@carwash/ledger'
 import { describe, expectTypeOf, it } from 'vitest'
@@ -22,5 +23,17 @@ describe('the states the code knows', () => {
     expectTypeOf<PayoutStatus>().toEqualTypeOf<$Enums.PayoutStatus>()
     expectTypeOf<IdempotencyState>().toEqualTypeOf<$Enums.IdempotencyState>()
     expectTypeOf<VerificationStatus>().toEqualTypeOf<$Enums.VerificationStatus>()
+  })
+
+  it('are the ones the replies and events promise', () => {
+    expectTypeOf<PaymentView['status']>().toEqualTypeOf<$Enums.PaymentStatus>()
+    expectTypeOf<PaymentView['capture_mode']>().toEqualTypeOf<$Enums.CaptureMode>()
+    expectTypeOf<PaymentEventData['status']>().toEqualTypeOf<$Enums.PaymentStatus>()
+    expectTypeOf<PaymentEventData['capture_mode']>().toEqualTypeOf<$Enums.CaptureMode>()
+    expectTypeOf<RefundView['status']>().toEqualTypeOf<$Enums.RefundStatus>()
+    expectTypeOf<PayoutView['status']>().toEqualTypeOf<$Enums.PayoutStatus>()
+    expectTypeOf<NonNullable<AnomalyView['attempt']>['kind']>().toEqualTypeOf<$Enums.AttemptKind>()
+    expectTypeOf<NonNullable<AnomalyView['attempt']>['status']>().toEqualTypeOf<$Enums.AttemptStatus>()
+    expectTypeOf<VerificationRunView['status']>().toEqualTypeOf<$Enums.VerificationStatus>()
   })
 })
