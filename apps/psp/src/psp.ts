@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { HttpError } from '@carwash/http'
-import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
+import { deleteInBatches, firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Behaviour, Faults, OperationKind, TokenEffect } from './faults.ts'
 
@@ -203,17 +203,14 @@ export class Psp {
     return operationJson(rows[0])
   }
 
-  async sweepExpiredKeys(batch = 1000): Promise<number> {
-    let deleted = 0
-    for (;;) {
-      const result = await this.#pool.query(
-        `DELETE FROM idempotency_keys WHERE key IN (
-           SELECT key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
-        [this.#settings.idempotencyWindowSeconds, batch],
-      )
-      deleted += result.rowCount ?? 0
-      if ((result.rowCount ?? 0) < batch) return deleted
-    }
+  sweepExpiredKeys(batch = 1000): Promise<number> {
+    return deleteInBatches(
+      this.#pool,
+      `DELETE FROM idempotency_keys WHERE key IN (
+         SELECT key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
+      [this.#settings.idempotencyWindowSeconds],
+      batch,
+    )
   }
 
   async authorize(client: Transaction, behaviour: Behaviour, input: AuthorizeInput): Promise<Outcome> {

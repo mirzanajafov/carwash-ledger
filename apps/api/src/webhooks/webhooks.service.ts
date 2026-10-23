@@ -9,7 +9,7 @@ import { findAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { PspAnswerRejectedError, pspUnavailable } from '../psp/psp.errors.ts'
-import { markWebhookChecked, recordWebhook, unmatchedWebhooks, webhookOutcome, type WebhookOutcome } from './webhooks.repository.ts'
+import { markWebhookChecked, pruneWebhookEvents, recordWebhook, unmatchedWebhooks, webhookOutcome, type WebhookOutcome } from './webhooks.repository.ts'
 
 export type CheckOutcome = Exclude<WebhookOutcome, 'reported'>
 
@@ -91,19 +91,9 @@ export class WebhooksService {
     return rows.length
   }
 
-  async prune(batch = 1000): Promise<number> {
-    let deleted = 0
-    for (;;) {
-      const result = await this.#db.pool.query(
-        `DELETE FROM webhook_events WHERE id IN (
-           SELECT id FROM webhook_events WHERE received_at <= now() - make_interval(days => $1) LIMIT $2)`,
-        [this.#config.webhookRetentionDays, batch],
-      )
-      deleted += result.rowCount ?? 0
-      if ((result.rowCount ?? 0) < batch) {
-        if (deleted > 0) this.#logger.log(`pruned ${deleted} webhook events`)
-        return deleted
-      }
-    }
+  async prune(): Promise<number> {
+    const deleted = await pruneWebhookEvents(this.#db.pool, this.#config.webhookRetentionDays)
+    if (deleted > 0) this.#logger.log(`pruned ${deleted} webhook events`)
+    return deleted
   }
 }

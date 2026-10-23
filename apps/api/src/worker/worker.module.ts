@@ -13,6 +13,7 @@ import { SettlementModule } from '../settlement/settlement.module.ts'
 import { WebhooksModule } from '../webhooks/webhooks.module.ts'
 import { OutboxRelay } from './outbox-relay.service.ts'
 import { Recovery } from './recovery.service.ts'
+import { Scheduler } from './scheduler.ts'
 
 @Module({})
 export class WorkerModule {
@@ -20,7 +21,7 @@ export class WorkerModule {
     return {
       module: WorkerModule,
       imports: [CoreModule.register(config), HealthModule, AttemptsModule, AuditModule, IdempotencyModule, PspModule, SettlementModule, WebhooksModule],
-      providers: [OutboxRelay, EventConsumers, Sequencer, Recovery, VerificationJob],
+      providers: [OutboxRelay, EventConsumers, Sequencer, Recovery, Scheduler, VerificationJob],
     }
   }
 }

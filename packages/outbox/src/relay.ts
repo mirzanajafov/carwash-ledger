@@ -1,6 +1,6 @@
-import { setTimeout as sleep } from 'node:timers/promises'
 import { failpoint } from '@carwash/failpoints'
-import { checkout } from '@carwash/pg'
+import { exponentialBackoff, Failures, pause } from '@carwash/jobs'
+import { checkout, deleteInBatches, type Queryable } from '@carwash/pg'
 import type pg from 'pg'
 import { LANES } from './events.ts'
 
@@ -116,20 +116,18 @@ export class Relay {
 
   async #loop(): Promise<void> {
     const signal = this.#stop.signal
-    let failures = 0
+    const failures = new Failures('relay', this.#log, 50)
     let idleMs = this.#options.pollMs
     while (!signal.aborted) {
       try {
         const relayed = await this.#cycle()
-        failures = 0
+        failures.clear()
         if (relayed) this.published += relayed.published
         const next = nextWait(idleMs, relayed, this.#options)
         idleMs = next.idleMs
-        if (next.waitMs > 0) await sleep(next.waitMs, undefined, { signal }).catch(() => undefined)
+        if (next.waitMs > 0) await pause(next.waitMs, signal)
       } catch (error) {
-        failures++
-        if (failures === 1 || failures % 50 === 0) this.#log(`relay: ${error instanceof Error ? error.message : String(error)}`)
-        await sleep(Math.min(2000, 50 * 2 ** Math.min(failures, 6)), undefined, { signal }).catch(() => undefined)
+        await pause(exponentialBackoff(failures.record(error)), signal)
       }
     }
   }
@@ -146,4 +144,14 @@ export class Relay {
       lease.release(broken)
     }
   }
+}
+
+export function pruneOutbox(db: Queryable, retentionHours: number, batch = 5000): Promise<number> {
+  return deleteInBatches(
+    db,
+    `DELETE FROM outbox WHERE id IN (
+       SELECT id FROM outbox WHERE published_at < now() - make_interval(hours => $1) ORDER BY id LIMIT $2)`,
+    [retentionHours],
+    batch,
+  )
 }

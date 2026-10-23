@@ -40,6 +40,15 @@ export function firstRow<R extends pg.QueryResultRow>(result: pg.QueryResult<R>,
   return row
 }
 
+export async function deleteInBatches(db: Queryable, sql: string, params: readonly unknown[], batch: number): Promise<number> {
+  let deleted = 0
+  for (;;) {
+    const { rowCount } = await db.query(sql, [...params, batch])
+    deleted += rowCount ?? 0
+    if ((rowCount ?? 0) < batch) return deleted
+  }
+}
+
 export interface Checkout {
   readonly client: pg.PoolClient
   readonly failed: boolean

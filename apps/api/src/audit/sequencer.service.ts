@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
-import { setTimeout as sleep } from 'node:timers/promises'
+import { Checkpointer, sequenceBatch, WitnessClient, type CheckpointOutcome } from '@carwash/audit-pg'
+import { Failures, pause } from '@carwash/jobs'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { Checkpointer, sequenceBatch, WitnessClient, type CheckpointOutcome } from '@carwash/audit-pg'
 
 @Injectable()
 export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
@@ -53,29 +53,28 @@ export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async #run(): Promise<void> {
-    let failures = 0
-    let unreachable = 0
+    const warn = (message: string) => this.#logger.warn(message)
+    const sequencing = new Failures('sequencing failed', warn, 50)
+    const checkpointing = new Failures('checkpointing failed', warn, 50)
     let sinceCheckpoint = 0
     let checkpointedAt = 0
     while (!this.#stop.signal.aborted) {
       try {
         sinceCheckpoint += await this.drain()
-        failures = 0
+        sequencing.clear()
       } catch (error) {
-        failures++
-        if (failures === 1 || failures % 50 === 0) this.#logger.warn(`sequencing failed: ${error instanceof Error ? error.message : String(error)}`)
+        sequencing.record(error)
       }
       if (this.#checkpointer && (sinceCheckpoint >= this.#config.checkpointEveryLeaves || Date.now() - checkpointedAt >= this.#config.checkpointEveryMs)) {
         checkpointedAt = Date.now()
         try {
           if ((await this.checkpoint())?.kind === 'signed') sinceCheckpoint = 0
-          unreachable = 0
+          checkpointing.clear()
         } catch (error) {
-          unreachable++
-          if (unreachable === 1 || unreachable % 50 === 0) this.#logger.warn(`checkpointing failed: ${error instanceof Error ? error.message : String(error)}`)
+          checkpointing.record(error)
         }
       }
-      await sleep(this.#config.auditEveryMs, undefined, { signal: this.#stop.signal }).catch(() => undefined)
+      await pause(this.#config.auditEveryMs, this.#stop.signal)
     }
   }
 }

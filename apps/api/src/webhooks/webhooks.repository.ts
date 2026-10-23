@@ -1,4 +1,4 @@
-import type { Queryable } from '@carwash/pg'
+import { deleteInBatches, type Queryable } from '@carwash/pg'
 
 export type WebhookOutcome = 'applied' | 'already' | 'anomaly' | 'not_at_psp' | 'unmatched' | 'reported'
 
@@ -37,4 +37,14 @@ export async function unmatchedWebhooks(db: Queryable, reportAfterSeconds: numbe
 
 export async function markWebhookChecked(db: Queryable, id: string, outcome: WebhookOutcome, attemptId: string | null): Promise<void> {
   await db.query(`UPDATE webhook_events SET outcome = $2, attempt_id = $3, checks = checks + 1, checked_at = now() WHERE id = $1`, [id, outcome, attemptId])
+}
+
+export function pruneWebhookEvents(db: Queryable, retentionDays: number, batch = 1000): Promise<number> {
+  return deleteInBatches(
+    db,
+    `DELETE FROM webhook_events WHERE id IN (
+       SELECT id FROM webhook_events WHERE received_at <= now() - make_interval(days => $1) LIMIT $2)`,
+    [retentionDays],
+    batch,
+  )
 }

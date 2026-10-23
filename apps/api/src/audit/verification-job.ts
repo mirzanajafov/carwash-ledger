@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { verifyLog } from '@carwash/audit-pg'
 import { readWitness, type WitnessView } from '@carwash/invariants'
+import { runEvery } from '@carwash/jobs'
 import { inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
@@ -26,7 +26,11 @@ export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy 
 
   onApplicationBootstrap(): void {
     if (this.#config.verifyEveryMs === 0) return
-    this.#loop = this.#run()
+    this.#loop = runEvery('a verification run could not be claimed or closed', this.#config.verifyEveryMs, () => this.runNext(), {
+      signal: this.#stop.signal,
+      log: (message) => this.#logger.warn(message),
+      logEvery: 60,
+    })
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -62,20 +66,5 @@ export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy 
       }
     }
     return run
-  }
-
-  async #run(): Promise<void> {
-    let failures = 0
-    while (!this.#stop.signal.aborted) {
-      try {
-        await this.runNext()
-        failures = 0
-      } catch (error) {
-        failures++
-        if (failures === 1 || failures % 60 === 0)
-          this.#logger.warn(`a verification run could not be claimed or closed: ${error instanceof Error ? error.message : String(error)}`)
-      }
-      await sleep(this.#config.verifyEveryMs, undefined, { signal: this.#stop.signal }).catch(() => undefined)
-    }
   }
 }

@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common'
 import type { LiveEvent } from '@carwash/contracts'
+import { Failures } from '@carwash/jobs'
 import { readAllBalances } from '@carwash/ledger'
 import type pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
@@ -66,7 +67,7 @@ export class LiveFeed implements OnModuleDestroy {
   #last: LiveEvent | undefined
   #timer: NodeJS.Timeout | undefined
   #polling = false
-  #failures = 0
+  readonly #failures = new Failures('the live poll failed', (message) => this.#logger.warn(message), 60)
 
   constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
     this.#db = db
@@ -176,11 +177,9 @@ export class LiveFeed implements OnModuleDestroy {
         this.#emit(event)
       }
       for (const id of this.#payments.keys()) if (!current.has(id)) this.#payments.delete(id)
-      this.#failures = 0
+      this.#failures.clear()
     } catch (error) {
-      this.#failures++
-      if (this.#failures === 1 || this.#failures % 60 === 0)
-        this.#logger.warn(`the live poll failed: ${error instanceof Error ? error.message : String(error)}`)
+      this.#failures.record(error)
     } finally {
       this.#polling = false
     }
