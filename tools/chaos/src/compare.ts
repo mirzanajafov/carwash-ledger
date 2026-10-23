@@ -31,11 +31,11 @@ export function compareWithClient(ops: Iterable<Op>, journals: readonly LedgerJo
     found.push(...op.conflicts)
     const journal = byRef.get(op.ref)
     if (journal === undefined) {
-      if (op.acknowledged) found.push(`${op.ref} was acknowledged as journal ${op.journalId} but is not in the ledger`)
+      if (op.acknowledged) found.push(`${op.ref} was acknowledged as journal ${String(op.journalId)} but is not in the ledger`)
       continue
     }
     if (op.acknowledged && op.journalId !== journal.id) {
-      found.push(`${op.ref} was acknowledged as journal ${op.journalId}, the ledger has it as ${journal.id}`)
+      found.push(`${op.ref} was acknowledged as journal ${String(op.journalId)}, the ledger has it as ${journal.id}`)
     }
     if (canonical(journal.entries) !== canonical(op.entries)) {
       found.push(`${op.ref} has entries ${canonical(journal.entries)} in the ledger, the client sent ${canonical(op.entries)}`)

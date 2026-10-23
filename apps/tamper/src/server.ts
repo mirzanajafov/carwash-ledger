@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import type { RestoredView, TamperState } from '@carwash/contracts'
 import { Conflict, type TamperService } from './service.ts'
 
 const MAX_BODY_BYTES = 10_000
@@ -50,18 +51,18 @@ function authorized(request: IncomingMessage, token: string): boolean {
 
 export function createTamperServer(service: TamperService, token: string): Server {
   const routes = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    const route = `${request.method} ${new URL(request.url ?? '/', 'http://tamper').pathname}`
+    const route = `${String(request.method)} ${new URL(request.url ?? '/', 'http://tamper').pathname}`
     if (route === 'GET /health') return send(response, 200, { ok: true })
     if (!authorized(request, token)) return send(response, 401, { error: { code: 'unauthorized', message: 'the token is missing or wrong' } })
-    if (route === 'GET /v1/tamper') return send(response, 200, { tamper: await service.current() })
+    if (route === 'GET /v1/tamper') return send(response, 200, { tamper: await service.current() } satisfies TamperState)
     if (route === 'POST /v1/tamper') {
       const body = await readBody(request)
       if (body.class !== 1 && body.class !== 2 && body.class !== 3) {
         return send(response, 400, { error: { code: 'invalid', message: 'class must be 1, 2 or 3' } })
       }
-      return send(response, 201, { tamper: await service.tamper(body.class) })
+      return send(response, 201, { tamper: await service.tamper(body.class) } satisfies TamperState)
     }
-    if (route === 'POST /v1/restore') return send(response, 200, { restored: await service.restore() })
+    if (route === 'POST /v1/restore') return send(response, 200, { restored: await service.restore() } satisfies RestoredView)
     send(response, 404, { error: { code: 'not_found', message: `no route ${route}` } })
   }
   return createServer((request, response) => {
@@ -69,7 +70,7 @@ export function createTamperServer(service: TamperService, token: string): Serve
       if (response.headersSent) return
       if (error instanceof Conflict) return send(response, 409, { error: { code: error.code, message: error.message } })
       if (error instanceof HttpError) return send(response, error.status, { error: { code: error.code, message: error.message } })
-      process.stderr.write(`tamper: ${error instanceof Error ? error.stack : String(error)}\n`)
+      process.stderr.write(`tamper: ${error instanceof Error ? String(error.stack) : String(error)}\n`)
       send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })
   })

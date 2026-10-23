@@ -3,7 +3,7 @@ import { firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { z } from 'zod'
+import * as z from 'zod/mini'
 import { Envelope, ensureTopics, kafkaClient, KafkaPublisher, Relay, TOPICS, writeEvent } from '../src/index.ts'
 
 const Step = z.object({ n: z.number() })

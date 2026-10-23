@@ -1,3 +1,4 @@
+import { errorOf } from '@carwash/contracts'
 import type pg from 'pg'
 import type { RequestRecord } from './client.ts'
 import type { PaymentBelief, PayoutBelief } from './journeys.ts'
@@ -23,7 +24,7 @@ export function checkKeys(records: Iterable<RequestRecord>, probes: Iterable<Req
   for (const probe of probes) {
     const final = probe.final
     if (final === undefined) continue
-    if (final.status !== 422 || final.body?.error?.code !== 'idempotency_key_reused') {
+    if (final.status !== 422 || errorOf(final.body)?.code !== 'idempotency_key_reused') {
       found.push(`key ${probe.key} reused for another ${probe.kind} body got ${final.status} ${JSON.stringify(final.body).slice(0, 200)}`)
     }
   }
@@ -91,14 +92,16 @@ export function compareBeliefs(
     for (const refund of belief.refunds) {
       const stored = state.refunds.get(refund.id)
       if (stored?.status !== 'succeeded' || stored.amount !== refund.amount) {
-        found.push(`refund ${refund.id} of ${refund.amount} was told succeeded, the ledger has it ${stored?.status ?? 'missing'} for ${stored?.amount}`)
+        found.push(`refund ${refund.id} of ${refund.amount} was told succeeded, the ledger has it ${stored?.status ?? 'missing'} for ${String(stored?.amount)}`)
       }
     }
   }
   for (const belief of payouts) {
     const row = state.payouts.get(belief.payoutId)
     if (row?.status !== belief.status || row.amount !== belief.amount) {
-      found.push(`payout ${belief.payoutId} was told ${belief.status} for ${belief.amount}, the ledger has ${row?.status ?? 'nothing'} for ${row?.amount}`)
+      found.push(
+        `payout ${belief.payoutId} was told ${belief.status} for ${belief.amount}, the ledger has ${row?.status ?? 'nothing'} for ${String(row?.amount)}`,
+      )
     }
   }
   for (const request of refused) {

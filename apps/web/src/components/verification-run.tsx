@@ -1,4 +1,5 @@
-import { describeFinding, percentDone, startedBeforeTamper, type VerificationRun } from '@/lib/verification'
+import type { VerificationRunView as VerificationRun } from '@carwash/contracts'
+import { describeFinding, percentDone, startedBeforeTamper } from '@/lib/verification'
 
 function time(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''

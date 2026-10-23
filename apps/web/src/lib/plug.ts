@@ -1,3 +1,5 @@
+import { errorOf, InvariantChecksView, PaymentView, PlugView, type InvariantResult } from '@carwash/contracts'
+
 export const CRASH_POINTS = [
   { failpoint: 'post.after_lock', title: 'Balances locked', detail: 'The balance rows are locked, but the journal is not written yet.' },
   { failpoint: 'attempt.after_psp', title: 'The bank said yes', detail: 'The provider captured the money, but nothing is recorded yet.' },
@@ -8,18 +10,7 @@ export const CRASH_POINTS = [
 
 export type CrashPoint = (typeof CRASH_POINTS)[number]['failpoint']
 
-export interface Check {
-  id: string
-  description: string
-  count: number
-  examples: string[]
-}
-
-export interface PaymentScope {
-  since: string | null
-  payments: number
-  merchant_entries: number
-}
+export type PaymentScope = InvariantChecksView['payment_checks']
 
 export type Step =
   | { kind: 'armed'; at: number; failpoint: string; pid: number; startedAt: string }
@@ -29,12 +20,12 @@ export type Step =
   | { kind: 'back'; at: number; pid: number; startedAt: string; downMs: number }
   | { kind: 'retry'; at: number; attempt: number; status: number; code: string; waitMs: number }
   | { kind: 'answered'; at: number; attempt: number; status: number; paymentId: string | null; paymentStatus: string | null }
-  | { kind: 'checks'; at: number; ms: number; scope: PaymentScope; results: Check[] }
+  | { kind: 'checks'; at: number; ms: number; scope: PaymentScope; results: InvariantResult[] }
   | { kind: 'failed'; at: number; message: string }
 
 export interface Reply {
   status: number
-  body: any
+  body: unknown
   retryAfter: number | null
 }
 
@@ -50,16 +41,17 @@ export interface PlugDeps {
 
 const FINAL = new Set([200, 402])
 
-export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, merchant: string, deadlineMs = 90_000): AsyncGenerator<Step> {
+export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, merchant: string, deadlineMs = 90_000): AsyncGenerator<Step, void> {
   const started = deps.now()
   const at = () => deps.now() - started
   const armed = await deps.arm(failpoint)
   if (armed.status !== 202) {
-    yield { kind: 'refused', at: at(), status: armed.status, message: armed.body?.error?.message ?? `the API answered ${armed.status}` }
+    yield { kind: 'refused', at: at(), status: armed.status, message: errorOf(armed.body)?.message ?? `the API answered ${armed.status}` }
     return
   }
-  const dead = String(armed.body.started_at)
-  yield { kind: 'armed', at: at(), failpoint, pid: Number(armed.body.pid), startedAt: dead }
+  const plug = PlugView.parse(armed.body)
+  const dead = plug.started_at
+  yield { kind: 'armed', at: at(), failpoint, pid: plug.pid, startedAt: dead }
 
   const key = deps.key()
   const body = { amount: 2400, currency: 'EUR', merchant, token: 'tok_ok' }
@@ -88,7 +80,7 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
   while (!answer || !FINAL.has(answer.status)) {
     if (answer) {
       const waitMs = answer.retryAfter !== null ? answer.retryAfter * 1000 : 500
-      yield { kind: 'retry', at: at(), attempt, status: answer.status, code: answer.body?.error?.code ?? '', waitMs }
+      yield { kind: 'retry', at: at(), attempt, status: answer.status, code: errorOf(answer.body)?.code ?? '', waitMs }
       await deps.sleep(waitMs)
     }
     if (at() > deadlineMs) {
@@ -99,16 +91,25 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
     answer = await deps.pay(key, body).catch(() => undefined)
     if (!answer) await deps.sleep(500)
   }
-  yield { kind: 'answered', at: at(), attempt, status: answer.status, paymentId: answer.body?.id ?? null, paymentStatus: answer.body?.status ?? null }
+  const paid = PaymentView.safeParse(answer.body)
+  yield {
+    kind: 'answered',
+    at: at(),
+    attempt,
+    status: answer.status,
+    paymentId: paid.success ? paid.data.id : null,
+    paymentStatus: paid.success ? paid.data.status : null,
+  }
 
   for (;;) {
     const checked = await deps.checks()
     if (checked.status === 200) {
-      yield { kind: 'checks', at: at(), ms: checked.body.ms, scope: checked.body.payment_checks, results: checked.body.results }
+      const checks = InvariantChecksView.parse(checked.body)
+      yield { kind: 'checks', at: at(), ms: checks.ms, scope: checks.payment_checks, results: checks.results }
       return
     }
     if (checked.status !== 429 || at() > deadlineMs) {
-      yield { kind: 'failed', at: at(), message: checked.body?.error?.message ?? `the checks answered ${checked.status}` }
+      yield { kind: 'failed', at: at(), message: errorOf(checked.body)?.message ?? `the checks answered ${checked.status}` }
       return
     }
     await deps.sleep((checked.retryAfter ?? 1) * 1000)

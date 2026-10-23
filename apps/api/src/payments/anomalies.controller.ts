@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
+import type { AnomalyList, AnomalyView } from '@carwash/contracts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { invalidInput } from '../domain-errors.ts'
 import type { AnomalyRow } from './anomalies.repository.ts'
@@ -9,14 +10,19 @@ function bankAmount(row: AnomalyRow): string | null {
   return Number.isSafeInteger(amount) ? String(amount) : null
 }
 
-function view(row: AnomalyRow) {
+function attemptOf(row: AnomalyRow): AnomalyView['attempt'] {
+  const { attempt_id: id, attempt_kind: kind, attempt_status: status, amount, currency } = row
+  return id && kind && status && amount !== null && currency !== null ? { id, kind, status, amount, currency } : null
+}
+
+function view(row: AnomalyRow): AnomalyView {
   return {
     object: 'anomaly',
     id: row.id,
     kind: row.kind,
     created_at: row.created_at.toISOString(),
     problems: row.details?.problems ?? [],
-    attempt: row.attempt_id ? { id: row.attempt_id, kind: row.attempt_kind, status: row.attempt_status, amount: row.amount, currency: row.currency } : null,
+    attempt: attemptOf(row),
     bank_amount: bankAmount(row),
     payment_id: row.payment_id,
     refund_id: row.refund_id,
@@ -39,7 +45,7 @@ export class AnomaliesController {
   }
 
   @Get()
-  async list(@Query('state') state = 'open', @Query('limit') limit = '50') {
+  async list(@Query('state') state = 'open', @Query('limit') limit = '50'): Promise<AnomalyList> {
     if (state !== 'open' && state !== 'resolved') throw invalidInput('state must be open or resolved')
     const n = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 200)
     const rows = await this.#anomalies.list(state === 'open', n)
@@ -48,13 +54,13 @@ export class AnomaliesController {
 
   @Post(':id/accept')
   @HttpCode(200)
-  async accept(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number) {
+  async accept(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number): Promise<AnomalyView> {
     return view(await this.#anomalies.accept(id, request.client.id))
   }
 
   @Post(':id/dispute')
   @HttpCode(200)
-  async dispute(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number) {
+  async dispute(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number): Promise<AnomalyView> {
     return view(await this.#anomalies.dispute(id, request.client.id))
   }
 }

@@ -7,7 +7,7 @@ import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
-import { answeredAmount, checkAnswer, type AttemptKind } from '../psp/answers.ts'
+import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { pspUnavailable } from '../psp/psp.errors.ts'
 import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
@@ -67,7 +67,7 @@ export class AnomaliesService {
     if (amount === undefined) throw refuse('the bank did not say an amount')
     if (amount > attempt.amount) throw refuse(`the bank says ${amount}, more than the ${attempt.amount} that was asked`)
     const call = await this.#attempts.callFor(attempt)
-    const check = checkAnswer({ attemptId: call.attemptId, kind: call.kind, amount, currency: call.currency, chargeId: call.chargeId }, reply.body)
+    const check = checkAnswer(expectedFrom(call, amount), reply.body)
     if (!check.ok) throw refuse(`the bank's answer differs in more than the amount: ${check.problems.join('. ')}`)
     if (check.answer.status !== 'succeeded') throw refuse('the bank declined this operation, so there is no amount to accept')
     await this.#db.transaction(async (client) => {

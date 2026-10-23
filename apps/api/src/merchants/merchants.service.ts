@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import type { MerchantView } from '@carwash/contracts'
 import { insertAccount, readBalance, sqlStateOf } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
@@ -52,7 +53,7 @@ export class MerchantsService {
     return this.#view(merchant, -(await readBalance(this.#db.pool, account)))
   }
 
-  #view(merchant: Merchant, payable: bigint) {
+  #view(merchant: Merchant, payable: bigint): MerchantView {
     return {
       id: merchant.code,
       object: 'merchant',

@@ -121,12 +121,12 @@ describe('the witness', () => {
     expect(await signedHistory(second)).toEqual(await signedHistory(first))
     expect(await refusal(second.submit(submission(source, 49)))).toBe('rollback')
     const lines = readFileSync(join(dir, 'checkpoints.jsonl'), 'utf8').trim().split('\n')
-    const [, newest] = lines
-    assert(newest)
+    const [oldest, newest] = lines
+    assert(oldest && newest)
     const forged = { ...(JSON.parse(newest) as Signed), root: toHex(rootOf(50, log(7, 50))) }
-    writeFileSync(join(dir, 'checkpoints.jsonl'), `${lines[0]}\n${JSON.stringify(forged)}\n`)
+    writeFileSync(join(dir, 'checkpoints.jsonl'), `${oldest}\n${JSON.stringify(forged)}\n`)
     expect(() => new Witness(dir, 'test-log')).toThrow(/did not sign/)
-    writeFileSync(join(dir, 'checkpoints.jsonl'), `${lines[0]}\n`)
+    writeFileSync(join(dir, 'checkpoints.jsonl'), `${oldest}\n`)
     appendFileSync(join(dir, 'checkpoints.jsonl'), '\n')
     expect(new Witness(dir, 'test-log').latest()?.size).toBe(20)
   })

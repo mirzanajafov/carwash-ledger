@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { HealthView } from '@carwash/contracts'
 import { CRASH_POINTS, pullThePlug, type CrashPoint } from '@/lib/plug'
 import { callApi, clientKey, demoMerchant } from '@/lib/server'
 import { credential } from '@/lib/session'
@@ -17,7 +18,9 @@ export async function POST(request: Request): Promise<Response> {
       pay: (key, payment) => callApi('POST', '/v1/payments', clientKey(), payment, key, 12_000),
       health: async () => {
         const reply = await callApi('GET', '/health', null, undefined, undefined, 1000)
-        return reply.status === 200 ? { pid: Number(reply.body.pid), startedAt: String(reply.body.started_at) } : null
+        if (reply.status !== 200) return null
+        const health = HealthView.parse(reply.body)
+        return { pid: health.pid, startedAt: health.started_at }
       },
       checks: () => callApi('POST', '/v1/admin/checks', admin, undefined, undefined, 30_000),
       key: () => randomUUID(),

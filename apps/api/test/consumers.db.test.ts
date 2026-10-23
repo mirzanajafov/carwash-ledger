@@ -1,4 +1,4 @@
-import { EntryPostedData, PaymentEventData, RefundEventData } from '@carwash/contracts'
+import { EntryPostedData, PaymentEventData, PaymentView, RefundEventData } from '@carwash/contracts'
 import { checkEvents, checkLedger, violations } from '@carwash/invariants'
 import fc from 'fast-check'
 import type pg from 'pg'
@@ -15,7 +15,9 @@ function pay(merchant: string, extra: Record<string, unknown> = {}) {
 }
 
 async function receipts(): Promise<{ merchant: string; number: number; payment_id: string; amount: string }[]> {
-  const { rows } = await stack.admin.query('SELECT merchant, number, payment_id::text, amount::text FROM receipts ORDER BY merchant, number')
+  const { rows } = await stack.admin.query<{ merchant: string; number: number; payment_id: string; amount: string }>(
+    'SELECT merchant, number, payment_id::text, amount::text FROM receipts ORDER BY merchant, number',
+  )
   return rows
 }
 
@@ -31,14 +33,16 @@ beforeAll(async () => {
   app = stack.app.get(Database).pool
   const call = stack.call
   for (const merchant of ['wash_1', 'wash_2', 'wash_1'] as const) {
-    captured[merchant].push((await call('POST', '/v1/payments', { body: pay(merchant) })).body.id)
+    captured[merchant].push(PaymentView.parse((await call('POST', '/v1/payments', { body: pay(merchant) })).body).id)
   }
-  const manual = (await call('POST', '/v1/payments', { body: pay('wash_1', { capture: 'manual' }) })).body.id
+  const manual = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('wash_1', { capture: 'manual' }) })).body).id
   await call('POST', `/v1/payments/${manual}/capture`, { body: { amount: 900 } })
   captured.wash_1.push(manual)
   await call('POST', `/v1/payments/${manual}/refunds`, { body: { amount: 400 } })
-  await call('POST', `/v1/payments/${captured.wash_2[0]}/refunds`, { body: { amount: 1500 } })
-  const canceled = (await call('POST', '/v1/payments', { body: pay('wash_2', { capture: 'manual' }) })).body.id
+  const [refundedInFull] = captured.wash_2
+  assert(refundedInFull)
+  await call('POST', `/v1/payments/${refundedInFull}/refunds`, { body: { amount: 1500 } })
+  const canceled = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('wash_2', { capture: 'manual' }) })).body).id
   await call('POST', `/v1/payments/${canceled}/cancel`)
   await call('POST', '/v1/payments', { body: pay('wash_2', { token: 'tok_decline' }) })
   await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_1', currency: 'EUR' } })

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { errorOf } from '@carwash/contracts'
 import type { Random } from '../random.ts'
 
 export type RequestKind = 'create' | 'capture' | 'cancel' | 'refund' | 'payout' | 'merchant' | 'probe'
@@ -8,8 +9,9 @@ export type Verdict = 'stored' | 'refused' | 'rejected' | 'retry'
 
 export interface Answer {
   status: number
-  body: any
+  body: unknown
   verdict: Verdict
+  retryAfter: number
 }
 
 export interface RequestRecord {
@@ -35,11 +37,11 @@ export interface Endpoints {
   live(): string[]
 }
 
-export function verdictOf(status: number, body: any): Verdict {
+export function verdictOf(status: number, body: unknown): Verdict {
   if (status === 200 || status === 402) return 'stored'
   if (status === 502) return 'refused'
   if (status >= 500 || status === 429) return 'retry'
-  if (status === 409 && body?.error?.code === 'request_in_progress') return 'retry'
+  if (status === 409 && errorOf(body)?.code === 'request_in_progress') return 'retry'
   return 'rejected'
 }
 
@@ -115,12 +117,14 @@ export class Clients {
         record.final = final
         return final
       }
-      const retryAfter = Math.max(0, ...answers.map((a) => Number(a.body?.retryAfter ?? 0)))
+      const retryAfter = Math.max(0, ...answers.map((a) => a.retryAfter))
       await sleep(backoff(this.#random, round, retryAfter))
     }
   }
 
   async #once(record: RequestRecord, base: string): Promise<Answer> {
+    const key = this.#keys[record.caller]
+    if (key === undefined) throw new Error(`there is no key for ${record.caller}`)
     record.sends++
     this.stats.sends++
     this.inFlight.set(base, (this.inFlight.get(base) ?? 0) + 1)
@@ -128,7 +132,7 @@ export class Clients {
       const response = await fetch(`${base}${record.path}`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${this.#keys[record.caller]}`,
+          authorization: `Bearer ${key}`,
           'content-type': 'application/json',
           'idempotency-key': record.key,
         },
@@ -136,25 +140,26 @@ export class Clients {
         signal: AbortSignal.timeout(this.#timeoutMs),
       })
       const text = await response.text()
-      let body: any
+      let body: unknown
       try {
         body = JSON.parse(text)
       } catch {
         body = { unparsed: text.slice(0, 200) }
       }
       const verdict = verdictOf(response.status, body)
-      const label = `${response.status}${body?.error?.code ? ` ${body.error.code}` : ''}`
+      const code = errorOf(body)?.code
+      const label = `${response.status}${code ? ` ${code}` : ''}`
       this.#count(label)
       if (verdict === 'stored') record.stored.push(`${response.status} ${canonical(body)}`)
       if (verdict === 'retry') record.lastError = label
       const retryAfter = Number(response.headers.get('retry-after') ?? 0)
-      return { status: response.status, body: verdict === 'retry' ? { ...body, retryAfter } : body, verdict }
+      return { status: response.status, body, verdict, retryAfter: verdict === 'retry' ? retryAfter : 0 }
     } catch (error) {
       const label = error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'network error'
       this.#count(label)
       record.lastError = `${label}: ${error instanceof Error ? error.message : String(error)}`
       if (this.#logged++ % 50 === 0) this.#log(`client ${label} on ${base}${record.path} (${record.lastError})`)
-      return { status: 0, body: null, verdict: 'retry' }
+      return { status: 0, body: null, verdict: 'retry', retryAfter: 0 }
     } finally {
       this.inFlight.set(base, (this.inFlight.get(base) ?? 0) - 1)
     }

@@ -17,7 +17,7 @@ function postgresCgroup(): string {
   const read = (file: string) => tryRun('docker', ['exec', 'carwash-postgres', 'cat', `/sys/fs/cgroup/${file}`])
   const max = read('cpu.max')
   if (max === undefined) return 'unknown'
-  return `cpu.max=${max} cpuset=${read('cpuset.cpus.effective')} memory.max=${read('memory.max')}`
+  return `cpu.max=${max} cpuset=${String(read('cpuset.cpus.effective'))} memory.max=${String(read('memory.max'))}`
 }
 
 export async function describeEnvironment(admin: pg.Pool): Promise<Record<string, unknown>> {
@@ -39,7 +39,7 @@ export async function describeEnvironment(admin: pg.Pool): Promise<Record<string
 }
 
 function toJson(data: unknown, indent?: number): string {
-  return JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), indent)
+  return JSON.stringify(data, (_key: string, value: unknown) => (typeof value === 'bigint' ? value.toString() : value), indent)
 }
 
 export function createResultsDir(dir: string): string {

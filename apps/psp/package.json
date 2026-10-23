@@ -24,6 +24,7 @@
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

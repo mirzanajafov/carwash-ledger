@@ -1,11 +1,46 @@
+import type { InvariantChecksView, PaymentView } from '@carwash/contracts'
 import { describe, expect, it } from 'vitest'
 import { pullThePlug, type PlugDeps, type Reply, type Step } from './plug'
+
+function failure(code: string, message = code) {
+  return { error: { code, message } }
+}
+
+function payment(id: string, status: PaymentView['status']): PaymentView {
+  return {
+    id,
+    object: 'payment',
+    merchant: 'wash_north',
+    amount: 2400,
+    currency: 'EUR',
+    capture_mode: 'auto',
+    status,
+    captured_amount: 2400,
+    refunded_amount: 0,
+    fee: 50,
+    failure_reason: null,
+    created: 1_760_000_000,
+  }
+}
+
+const CHECKS: InvariantChecksView = {
+  object: 'invariant_checks',
+  ran_at: '2026-10-23T10:00:00.000Z',
+  ms: 12,
+  witnessed: true,
+  payment_checks: { since: null, payments: 3, merchant_entries: 5 },
+  results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }],
+}
 
 function fakeApi(script: { pay: (Reply | Error)[]; health: (string | null)[]; checks?: Reply[] }) {
   let clock = 0
   const sent: string[] = []
   const deps: PlugDeps = {
-    arm: async () => ({ status: 202, body: { pid: 7, started_at: 'first' }, retryAfter: null }),
+    arm: async () => ({
+      status: 202,
+      body: { object: 'plug', failpoint: 'attempt.after_psp', pid: 7, started_at: 'first', armed_at: '2026-10-23T10:00:00.000Z' },
+      retryAfter: null,
+    }),
     pay: async (key) => {
       sent.push(key)
       const next = script.pay.shift()
@@ -17,16 +52,7 @@ function fakeApi(script: { pay: (Reply | Error)[]; health: (string | null)[]; ch
       const started = script.health.shift()
       return started === undefined || started === null ? null : { pid: 7, startedAt: started }
     },
-    checks: async () =>
-      script.checks?.shift() ?? {
-        status: 200,
-        body: {
-          ms: 12,
-          payment_checks: { since: null, payments: 3, merchant_entries: 5 },
-          results: [{ id: 'S1', description: 'balanced', count: 0, examples: [] }],
-        },
-        retryAfter: null,
-      },
+    checks: async () => script.checks?.shift() ?? { status: 200, body: CHECKS, retryAfter: null },
     key: () => 'key-1',
     sleep: async (ms) => {
       clock += ms
@@ -47,9 +73,9 @@ describe('pulling the plug', () => {
     const { deps, sent } = fakeApi({
       pay: [
         new Error('socket hang up'),
-        { status: 503, body: { error: { code: 'database_unavailable' } }, retryAfter: 1 },
-        { status: 409, body: { error: { code: 'request_in_progress' } }, retryAfter: 5 },
-        { status: 200, body: { id: 'pay_1', status: 'captured' }, retryAfter: null },
+        { status: 503, body: failure('database_unavailable'), retryAfter: 1 },
+        { status: 409, body: failure('request_in_progress'), retryAfter: 5 },
+        { status: 200, body: payment('pay_1', 'captured'), retryAfter: null },
       ],
       health: [null, null, 'first', 'second'],
     })
@@ -62,7 +88,7 @@ describe('pulling the plug', () => {
 
   it('reports a plug somebody else pulled a moment ago instead of sending anything', async () => {
     const { deps, sent } = fakeApi({ pay: [], health: [] })
-    deps.arm = async () => ({ status: 429, body: { error: { message: 'this can run again in 40 s' } }, retryAfter: 40 })
+    deps.arm = async () => ({ status: 429, body: failure('rate_limited', 'this can run again in 40 s'), retryAfter: 40 })
     expect(await run(deps)).toEqual([{ kind: 'refused', at: 0, status: 429, message: 'this can run again in 40 s' }])
     expect(sent).toEqual([])
   })

@@ -7,7 +7,7 @@ import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
 import type { AttemptId, PaymentId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { failPayout, loadPayout, lockPayout, succeedPayout } from '../payouts/payouts.repository.ts'
-import { checkAnswer, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
+import { checkAnswer, expectedFrom, type PspAnswer } from '../psp/answers.ts'
 import { PspClient, type PspCall } from '../psp/psp.client.ts'
 import { PspAnswerRejectedError, pspUnavailable } from '../psp/psp.errors.ts'
 import { recordAnomaly } from './anomalies.repository.ts'
@@ -45,14 +45,7 @@ export class AttemptsService {
   }
 
   async receive(call: PspCall, body: unknown): Promise<Applied> {
-    const expected: ExpectedAnswer = {
-      attemptId: call.attemptId,
-      kind: call.kind,
-      amount: call.amount,
-      currency: call.currency,
-      chargeId: call.chargeId,
-    }
-    const check = checkAnswer(expected, body)
+    const check = checkAnswer(expectedFrom(call), body)
     if (!check.ok) {
       await recordAnomaly(this.#db.pool, call.attemptId, 'answer_mismatch', { problems: check.problems, answer: body })
       throw new PspAnswerRejectedError()
@@ -166,17 +159,14 @@ export class AttemptsService {
   }
 
   async callFor(attempt: Attempt): Promise<PspCall> {
-    const base = { attemptId: attempt.id, kind: attempt.kind, amount: attempt.amount, currency: attempt.currency }
+    const base = { attemptId: attempt.id, amount: attempt.amount, currency: attempt.currency }
     if (attempt.kind === 'payout') {
       const payout = await loadPayout(this.#db.pool, attempt.payoutId)
-      return { ...base, chargeId: null, token: null, destination: payout.merchantCode }
+      return { ...base, kind: 'payout', destination: payout.merchantCode }
     }
     const payment = await loadPayment(this.#db.pool, attempt.paymentId)
-    return {
-      ...base,
-      chargeId: attempt.kind === 'authorize' ? null : payment.pspChargeId,
-      token: attempt.kind === 'authorize' ? payment.token : null,
-      destination: null,
-    }
+    if (attempt.kind === 'authorize') return { ...base, kind: 'authorize', token: payment.token }
+    if (payment.pspChargeId === null) throw new Error(`payment ${payment.id} has no PSP charge to ${attempt.kind}`)
+    return { ...base, kind: attempt.kind, chargeId: payment.pspChargeId }
   }
 }

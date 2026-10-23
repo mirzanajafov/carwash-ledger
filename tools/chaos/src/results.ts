@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function toJson(data: unknown, indent?: number): string {
-  return JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), indent)
+  return JSON.stringify(data, (_key: string, value: unknown) => (typeof value === 'bigint' ? value.toString() : value), indent)
 }
 
 export function createResultsDir(dir: string, suffix: string): string {

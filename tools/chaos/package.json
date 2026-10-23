@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@carwash/audit-pg": "workspace:*",
+    "@carwash/contracts": "workspace:*",
     "@carwash/db": "workspace:*",
     "@carwash/failpoints": "workspace:*",
     "@carwash/invariants": "workspace:*",

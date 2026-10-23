@@ -1,9 +1,9 @@
 import { EntryPostedData } from '@carwash/contracts'
 import { TOPICS, type ConsumerSpec } from '@carwash/outbox'
-import type { z } from 'zod'
+import * as z from 'zod/mini'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
 
-const PostedEntry = EntryPostedData.pick({ account_id: true, account: true, amount: true, posted_at: true })
+const PostedEntry = z.pick(EntryPostedData, { account_id: true, account: true, amount: true, posted_at: true })
 
 type PostedEntry = z.infer<typeof PostedEntry>
 

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { errorOf } from '@carwash/contracts'
 
 export interface Answer {
   status: number
-  body: any
+  body: unknown
 }
 
 export class ApiClient {
@@ -29,8 +30,8 @@ export class ApiClient {
           body: body === undefined ? null : JSON.stringify(body),
           signal: AbortSignal.any([this.#signal, AbortSignal.timeout(10_000)]),
         })
-        const answer = { status: response.status, body: await response.json().catch(() => null) }
-        const retry = response.status >= 500 || (response.status === 409 && answer.body?.error?.code === 'request_in_progress') || response.status === 429
+        const answer: Answer = { status: response.status, body: await response.json().catch(() => null) }
+        const retry = response.status >= 500 || (response.status === 409 && errorOf(answer.body)?.code === 'request_in_progress') || response.status === 429
         if (!retry || attempt >= 30) return answer
         const after = Number(response.headers.get('retry-after'))
         await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : delay, undefined, { signal: this.#signal })

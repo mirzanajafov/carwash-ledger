@@ -85,8 +85,8 @@ function timed<C extends pg.ClientBase>(client: C, clock: Timing): C {
           }
         }
       }
-      const value = Reflect.get(target, property, receiver)
-      return typeof value === 'function' ? value.bind(target) : value
+      const value: unknown = Reflect.get(target, property, receiver)
+      return typeof value === 'function' ? (...args: unknown[]): unknown => Reflect.apply(value, target, args) : value
     },
   })
 }

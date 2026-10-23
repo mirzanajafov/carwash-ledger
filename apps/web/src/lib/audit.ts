@@ -1,22 +1,15 @@
-import type { VerificationRun } from './verification'
-import type { CheckpointJson } from './verify-journal'
+import { CheckpointView, TamperView, VerificationRunView } from '@carwash/contracts'
+import * as z from 'zod/mini'
 
-interface Tamper {
-  tamper_class: 1 | 2 | 3
-  seq: number
-  journal_id: string
-  witnessed_size: number
-  at: string
-  restores_at: string | null
-}
+export const AuditState = z.object({
+  tamper: z.nullable(TamperView),
+  tamperAvailable: z.boolean(),
+  checkpoint: z.nullable(CheckpointView),
+  witnessKey: z.nullable(z.string()),
+  verification: z.nullable(VerificationRunView),
+})
 
-export interface AuditState {
-  tamper: Tamper | null
-  tamperAvailable: boolean
-  checkpoint: (CheckpointJson & { signed_at: string }) | null
-  witnessKey: string | null
-  verification: VerificationRun | null
-}
+export type AuditState = z.infer<typeof AuditState>
 
 export interface AuditPanelState {
   server: AuditState | null

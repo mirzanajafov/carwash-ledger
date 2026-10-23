@@ -1,14 +1,20 @@
-export interface Plan {
-  seed?: number
-  decline?: number
-  fail?: number
-  timeoutAfterCommit?: number
-  slow?: number
-  slowMs?: [number, number]
-  wrongAmount?: number
-  webhook?: Partial<Record<'duplicate' | 'delay' | 'reorder' | 'drop', number>>
-  settlement?: Partial<Record<'nextDay' | 'feeDifference' | 'wrongAmount' | 'missingLine' | 'duplicateLine' | 'droppedReference', number>>
-}
+import * as z from 'zod/mini'
+
+const Share = z.optional(z.number())
+
+export const Plan = z.object({
+  seed: z.optional(z.number()),
+  decline: Share,
+  fail: Share,
+  timeoutAfterCommit: Share,
+  slow: Share,
+  slowMs: z.optional(z.tuple([z.number(), z.number()])),
+  wrongAmount: Share,
+  webhook: z.optional(z.partialRecord(z.enum(['duplicate', 'delay', 'reorder', 'drop']), z.number())),
+  settlement: z.optional(z.partialRecord(z.enum(['nextDay', 'feeDifference', 'wrongAmount', 'missingLine', 'duplicateLine', 'droppedReference']), z.number())),
+})
+
+export type Plan = z.infer<typeof Plan>
 
 export interface Preset {
   name: 'calm' | 'flaky' | 'storm'
@@ -57,10 +63,12 @@ export const PRESETS: readonly Preset[] = [
 export const VISITOR_SECONDS = 300
 export const VISITOR_EVERY_MS = 60_000
 
-export interface Weather {
-  base: Plan
-  weather: { label: string; plan: Plan; until: string } | null
-}
+export const Weather = z.object({
+  base: Plan,
+  weather: z.nullable(z.object({ label: z.string(), plan: Plan, until: z.string() })),
+})
+
+export type Weather = z.infer<typeof Weather>
 
 export function presetNamed(name: unknown): Preset | undefined {
   return PRESETS.find((preset) => preset.name === name)

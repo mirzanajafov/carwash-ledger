@@ -1,7 +1,8 @@
 'use client'
 
+import { errorOf } from '@carwash/contracts'
 import { useCallback, useEffect, useState } from 'react'
-import { describePlan, PRESETS, secondsLeft, type Preset, type Weather } from '@/lib/weather'
+import { describePlan, PRESETS, secondsLeft, Weather, type Preset } from '@/lib/weather'
 
 function clock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
@@ -18,7 +19,7 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
   const load = useCallback(async () => {
     try {
       const response = await fetch('/api/weather', { cache: 'no-store' })
-      if (response.ok) setState((await response.json()) as Weather)
+      if (response.ok) setState(Weather.parse(await response.json()))
     } catch {
       return
     }
@@ -39,9 +40,9 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
     setNote(null)
     try {
       const response = await fetch('/api/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
-      const body = await response.json().catch(() => null)
-      if (response.ok) setState(body as Weather)
-      else setNote(body?.error?.message ?? `The web server answered ${response.status}.`)
+      const body: unknown = await response.json().catch(() => null)
+      if (response.ok) setState(Weather.parse(body))
+      else setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
     } catch {
       setNote('The web server stopped answering.')
     } finally {

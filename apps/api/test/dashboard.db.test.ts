@@ -2,9 +2,21 @@ import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { NestFactory } from '@nestjs/core'
 import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
+import {
+  InvariantChecksView,
+  LiveBalance,
+  LiveJournal,
+  LivePayment,
+  OpenedSessionView,
+  PaymentView,
+  SessionView,
+  VerificationRunView,
+  type LiveEvent,
+} from '@carwash/contracts'
 import { PgCtePoster } from '@carwash/ledger'
 import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
+import * as z from 'zod/mini'
 import { VerificationJob } from '../src/audit/verification-job.ts'
 import { VerificationRuns } from '../src/audit/verification-runs.ts'
 import type { ApiConfig } from '../src/config.ts'
@@ -16,9 +28,16 @@ import { startApi, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 
-interface Event {
-  type: string
-  data: any
+function journalsIn(events: readonly LiveEvent[]): LiveJournal[] {
+  return events.flatMap((event) => (event.type === 'journal' ? [event.data] : []))
+}
+
+function paymentsIn(events: readonly LiveEvent[]): LivePayment[] {
+  return events.flatMap((event) => (event.type === 'payment' ? [event.data] : []))
+}
+
+function balancesIn(events: readonly LiveEvent[]): LiveBalance[][] {
+  return events.flatMap((event) => (event.type === 'balances' ? [event.data] : []))
 }
 
 function pay(amount: number) {
@@ -30,7 +49,7 @@ async function watch(url: string) {
   const response = await fetch(url, { signal: controller.signal })
   assert(response.body)
   const reader = response.body.getReader()
-  const events: Event[] = []
+  const events: LiveEvent[] = []
   const decoder = new TextDecoder()
   let buffer = ''
   const reading = (async () => {
@@ -44,7 +63,11 @@ async function watch(url: string) {
         buffer = buffer.slice(end + 2)
         const type = /^event: (.+)$/m.exec(block)?.[1]
         const data = /^data: (.+)$/m.exec(block)?.[1]
-        if (type && data) events.push({ type, data: JSON.parse(data) })
+        if (!data) continue
+        const json: unknown = JSON.parse(data)
+        if (type === 'balances') events.push({ type, data: z.array(LiveBalance).parse(json) })
+        else if (type === 'journal') events.push({ type, data: LiveJournal.parse(json) })
+        else if (type === 'payment') events.push({ type, data: LivePayment.parse(json) })
       }
     }
   })().catch(() => undefined)
@@ -52,7 +75,7 @@ async function watch(url: string) {
     status: response.status,
     contentType: response.headers.get('content-type'),
     events,
-    async until(found: (events: Event[]) => boolean, timeoutMs = 10_000) {
+    async until(found: (events: LiveEvent[]) => boolean, timeoutMs = 10_000) {
       const started = Date.now()
       while (!found(events)) {
         if (Date.now() - started > timeoutMs) throw new Error(`gave up waiting, saw ${JSON.stringify(events.map((e) => e.type))}`)
@@ -87,20 +110,19 @@ describe('the live feed', () => {
       expect(live.status).toBe(200)
       expect(live.contentType).toMatch(/text\/event-stream/)
       await live.until((events) => events.some((e) => e.type === 'balances'))
-      const created = await stack.call('POST', '/v1/payments', { body: pay(2400) })
-      expect(created.body.status).toBe('captured')
+      const created = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(2400) })).body)
+      expect(created.status).toBe('captured')
       await live.until(
         (events) =>
-          events.some((e) => e.type === 'journal' && e.data.external_ref.startsWith('capture:')) &&
-          events.some((e) => e.type === 'payment' && e.data.id === created.body.id && e.data.status === 'captured'),
+          journalsIn(events).some((j) => j.external_ref.startsWith('capture:')) &&
+          paymentsIn(events).some((p) => p.id === created.id && p.status === 'captured'),
       )
-      const journal = live.events.find((e) => e.type === 'journal' && e.data.external_ref.startsWith('capture:'))
+      const journal = journalsIn(live.events).find((j) => j.external_ref.startsWith('capture:'))
       assert(journal)
-      expect(journal.data.entries.reduce((sum: bigint, e: { amount: string }) => sum + BigInt(e.amount), 0n)).toBe(0n)
-      await live.until((events) => events.filter((e) => e.type === 'balances').length >= 2)
-      const newest = live.events.filter((e) => e.type === 'balances').at(-1)
-      assert(newest)
-      const balances = newest.data as { code: string; amount: string }[]
+      expect(journal.entries.reduce((sum, e) => sum + BigInt(e.amount), 0n)).toBe(0n)
+      await live.until((events) => balancesIn(events).length >= 2)
+      const balances = balancesIn(live.events).at(-1)
+      assert(balances)
       expect(balances.reduce((sum, b) => sum + BigInt(b.amount), 0n)).toBe(0n)
       expect(balances.some((b) => b.amount !== '0')).toBe(true)
 
@@ -108,9 +130,7 @@ describe('the live feed', () => {
       try {
         await late.until(
           (events) =>
-            events.some((e) => e.type === 'balances') &&
-            events.some((e) => e.type === 'journal' && e.data.id === journal.data.id) &&
-            events.some((e) => e.type === 'payment' && e.data.id === created.body.id),
+            balancesIn(events).length > 0 && journalsIn(events).some((j) => j.id === journal.id) && paymentsIn(events).some((p) => p.id === created.id),
           3000,
         )
       } finally {
@@ -150,11 +170,11 @@ describe('the live feed', () => {
     try {
       await live.until((events) => events.some((e) => e.type === 'balances'))
       await sleep(2500)
-      const old = live.events.filter((e) => e.type === 'journal' && BigInt(e.data.id) > before)
+      const old = journalsIn(live.events).filter((j) => BigInt(j.id) > before)
       expect(old.length).toBeLessThanOrEqual(20)
-      const created = await stack.call('POST', '/v1/payments', { body: pay(1500) })
-      await live.until((events) => events.some((e) => e.type === 'journal' && e.data.external_ref === `capture:${created.body.id}`), 5000)
-      const replayed = live.events.filter((e) => e.type === 'journal' && e.data.external_ref.startsWith('live-backlog:'))
+      const created = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(1500) })).body)
+      await live.until((events) => journalsIn(events).some((j) => j.external_ref === `capture:${created.id}`), 5000)
+      const replayed = journalsIn(live.events).filter((j) => j.external_ref.startsWith('live-backlog:'))
       expect(replayed.length).toBeLessThanOrEqual(20)
     } finally {
       await live.close()
@@ -194,12 +214,13 @@ describe('the admin side of the dashboard', () => {
   it('runs the invariants on demand as the audit role, and finds nothing wrong', async () => {
     await sequenceAll()
     expect((await stack.call('POST', '/v1/admin/checks', { key: null })).status).toBe(403)
-    const checks = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null })
-    expect(checks.status).toBe(200)
-    expect(checks.body.results.map((r: { id: string }) => r.id)).toEqual(['S1', 'S2', 'S3', 'S5', 'S6', 'S7', 'L4'])
-    expect(checks.body.results.filter((r: { count: number }) => r.count > 0)).toEqual([])
-    expect(checks.body.payment_checks).toMatchObject({ since: null })
-    expect(checks.body.payment_checks.payments).toBeGreaterThan(0)
+    const answer = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null })
+    expect(answer.status).toBe(200)
+    const checks = InvariantChecksView.parse(answer.body)
+    expect(checks.results.map((r) => r.id)).toEqual(['S1', 'S2', 'S3', 'S5', 'S6', 'S7', 'L4'])
+    expect(checks.results.filter((r) => r.count > 0)).toEqual([])
+    expect(checks.payment_checks.since).toBeNull()
+    expect(checks.payment_checks.payments).toBeGreaterThan(0)
   })
 
   it('answers 503 for the checks while the witness is not answering', async () => {
@@ -225,25 +246,27 @@ describe('verification runs', () => {
 
   const request = () => stack.call('POST', '/v1/admin/verify', { as: 'admin', key: null })
   const latest = () => stack.call('GET', '/v1/audit/verification')
+  const requestRun = async () => VerificationRunView.parse((await request()).body).id
 
   it('queues one run however often and however many at once ask for it, and the worker runs it to the end with its progress', async () => {
     await sequenceAll()
     expect((await latest()).status).toBe(404)
     const asked = await Promise.all([request(), request(), request(), request(), request()])
     expect(asked[0]).toMatchObject({ status: 202, body: { object: 'verification_run', status: 'queued', progress: null, report: null } })
-    const ids = new Set(asked.map((answer) => answer.body.id))
+    const ids = new Set(asked.map((answer) => VerificationRunView.parse(answer.body).id))
     expect(ids.size).toBe(1)
     const [id] = ids
-    expect((await request()).body.id).toBe(id)
+    expect(await requestRun()).toBe(id)
     await withWorker(async (job) => {
       expect((await job.runNext())?.id).toBe(id)
       expect(await job.runNext()).toBeUndefined()
     })
-    const finished = await latest()
-    expect(finished.body).toMatchObject({ id, status: 'done', attempts: 1, error: null, report: { mode: 'full', findings: 0 } })
-    expect(finished.body.report.journals).toBeGreaterThan(0)
-    expect(finished.body.progress).toEqual({ checked: finished.body.report.size, size: finished.body.report.size })
-    expect((await request()).body.id).not.toBe(id)
+    const finished = VerificationRunView.parse((await latest()).body)
+    expect(finished).toMatchObject({ id, status: 'done', attempts: 1, error: null, report: { mode: 'full', findings: 0 } })
+    assert(finished.report)
+    expect(finished.report.journals).toBeGreaterThan(0)
+    expect(finished.progress).toEqual({ checked: finished.report.size, size: finished.report.size })
+    expect(await requestRun()).not.toBe(id)
   })
 
   it('finds a tamper committed before the run, and nothing once it is restored', async () => {
@@ -265,11 +288,11 @@ describe('verification runs', () => {
   })
 
   it('takes over a run whose worker stopped, and gives up on one that stopped three times', async () => {
-    const run = (await request()).body.id
+    const run = await requestRun()
     await stack.admin.query(`UPDATE verification_runs SET status = 'running', attempts = 1, locked_until = now() - interval '1 second' WHERE id = $1`, [run])
     await withWorker((job) => job.runNext())
     expect((await latest()).body).toMatchObject({ id: run, status: 'done', attempts: 2 })
-    const stuck = (await request()).body.id
+    const stuck = await requestRun()
     await stack.admin.query(`UPDATE verification_runs SET status = 'running', attempts = 3, locked_until = now() - interval '1 second' WHERE id = $1`, [stuck])
     await withWorker(async (job) => {
       expect(await job.runNext()).toBeUndefined()
@@ -295,13 +318,13 @@ describe('verification runs', () => {
 
   it('leaves its run to the next worker when it stops in the middle, instead of failing it', async () => {
     await sequenceAll()
-    const run = (await request()).body.id
+    const run = await requestRun()
     let stopping = Promise.resolve()
     await withTransaction(stack.admin, async (blocker) => {
       await blocker.query('LOCK TABLE audit_log IN ACCESS EXCLUSIVE MODE')
       const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, verifyEveryMs: 20 }), { logger: false })
       try {
-        await vi.waitFor(async () => expect((await latest()).body.status).toBe('running'), { timeout: 5000 })
+        await vi.waitFor(async () => expect((await latest()).body).toMatchObject({ status: 'running' }), { timeout: 5000 })
       } finally {
         stopping = worker.close()
       }
@@ -322,7 +345,7 @@ describe('verification runs', () => {
   })
 
   it('queues a run again when the witness cannot be read, and fails it on the third attempt without saying where the witness lives', async () => {
-    const run = (await request()).body.id
+    const run = await requestRun()
     await withWorker(
       async (job) => {
         await job.runNext()
@@ -337,10 +360,10 @@ describe('verification runs', () => {
 })
 
 describe('admin sessions', () => {
-  async function login(): Promise<{ token: string; id: string; expires_at: string }> {
+  async function login(): Promise<OpenedSessionView> {
     const opened = await stack.call('POST', '/v1/admin/sessions', { as: 'admin', key: null })
     expect(opened.status).toBe(201)
-    return opened.body
+    return OpenedSessionView.parse(opened.body)
   }
 
   it('opens a session with an admin key only, and the session works like the key without minting more', async () => {
@@ -351,12 +374,11 @@ describe('admin sessions', () => {
     const hours = (Date.parse(session.expires_at) - Date.now()) / 3_600_000
     expect(hours).toBeGreaterThan(11.9)
     expect(hours).toBeLessThan(12 + 1 / 60)
-    const stored = await stack.admin.query('SELECT token_hash FROM dashboard_sessions WHERE id = $1', [session.id])
-    expect(stored.rows[0].token_hash).toEqual(createHash('sha256').update(session.token).digest())
-    expect(await stack.call('GET', '/v1/admin/sessions/current', { bearer: session.token })).toMatchObject({
-      status: 200,
-      body: { id: session.id, client: expect.any(String) },
-    })
+    const stored = firstRow(await stack.admin.query<{ token_hash: Buffer }>('SELECT token_hash FROM dashboard_sessions WHERE id = $1', [session.id]))
+    expect(stored.token_hash).toEqual(createHash('sha256').update(session.token).digest())
+    const current = await stack.call('GET', '/v1/admin/sessions/current', { bearer: session.token })
+    expect(current.status).toBe(200)
+    expect(SessionView.parse(current.body).id).toBe(session.id)
     expect((await stack.call('GET', '/v1/reconciliation/days', { bearer: session.token })).status).toBe(200)
     expect((await stack.call('POST', '/v1/admin/sessions', { bearer: session.token, key: null })).status).toBe(403)
     expect((await stack.call('GET', '/v1/admin/sessions/current', { as: 'admin' })).status).toBe(404)
@@ -380,7 +402,7 @@ describe('admin sessions', () => {
     const opened = await stack.call('POST', '/v1/admin/sessions', { bearer: 'cw_admin_short', key: null })
     expect(opened.status).toBe(201)
     await stack.admin.query('UPDATE api_clients SET revoked_at = now() WHERE id = $1', [id])
-    expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: opened.body.token })).status).toBe(401)
+    expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: OpenedSessionView.parse(opened.body).token })).status).toBe(401)
     expect((await stack.call('GET', '/v1/admin/sessions/current', { bearer: 'cw_session_made-up' })).status).toBe(401)
   })
 

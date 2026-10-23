@@ -175,12 +175,18 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   apps/tamper:
     dependencies:
       '@carwash/audit-pg':
         specifier: workspace:*
         version: link:../../packages/audit-pg
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@carwash/pg':
         specifier: workspace:*
         version: link:../../packages/pg
@@ -211,6 +217,10 @@ importers:
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
   apps/traffic:
+    dependencies:
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -227,6 +237,9 @@ importers:
       '@carwash/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       next:
         specifier: 'catalog:'
         version: 16.3.6(@babel/core@7.29.7)(@types/node@24.19.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -239,6 +252,9 @@ importers:
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.3.3
@@ -587,6 +603,9 @@ importers:
       '@carwash/audit-pg':
         specifier: workspace:*
         version: link:../../packages/audit-pg
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db

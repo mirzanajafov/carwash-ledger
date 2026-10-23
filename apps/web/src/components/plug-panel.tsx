@@ -1,9 +1,10 @@
 'use client'
 
+import { errorOf, InvariantChecksView, type InvariantResult } from '@carwash/contracts'
 import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
-import { CRASH_POINTS, type Check, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
+import { CRASH_POINTS, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
 import { ChecksTable } from './checks-table'
 
 function seconds(ms: number): string {
@@ -72,7 +73,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
   const [point, setPoint] = useState<CrashPoint>('attempt.after_psp')
   const [steps, setSteps] = useState<Step[]>([])
   const [running, setRunning] = useState(false)
-  const [checks, setChecks] = useState<{ ms: number; scope: PaymentScope; results: Check[] } | null>(null)
+  const [checks, setChecks] = useState<{ ms: number; scope: PaymentScope; results: InvariantResult[] } | null>(null)
   const [checking, setChecking] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
@@ -108,9 +109,11 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
     setNote(null)
     try {
       const response = await fetch('/api/checks', { method: 'POST' })
-      const body = await response.json()
-      if (response.ok) setChecks({ ms: body.ms, scope: body.payment_checks, results: body.results })
-      else setNote(body?.error?.message ?? `The checks answered ${response.status}.`)
+      const body: unknown = await response.json()
+      if (response.ok) {
+        const checks = InvariantChecksView.parse(body)
+        setChecks({ ms: checks.ms, scope: checks.payment_checks, results: checks.results })
+      } else setNote(errorOf(body)?.message ?? `The checks answered ${response.status}.`)
     } finally {
       setChecking(false)
     }

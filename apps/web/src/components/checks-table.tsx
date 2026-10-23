@@ -1,4 +1,5 @@
-import type { Check, PaymentScope } from '@/lib/plug'
+import type { InvariantResult } from '@carwash/contracts'
+import type { PaymentScope } from '@/lib/plug'
 
 function scopeOf({ since, payments, merchant_entries }: PaymentScope): string {
   const what = `${payments.toLocaleString('en')} payment${payments === 1 ? '' : 's'} and ${merchant_entries.toLocaleString('en')} merchant entr${merchant_entries === 1 ? 'y' : 'ies'}`
@@ -7,7 +8,7 @@ function scopeOf({ since, payments, merchant_entries }: PaymentScope): string {
     : `S3 and S6 looked only at what changed since the clean run of ${new Date(since).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' })}: ${what}.`
 }
 
-export function ChecksTable({ results, ms, scope }: { results: readonly Check[]; ms: number; scope: PaymentScope }) {
+export function ChecksTable({ results, ms, scope }: { results: readonly InvariantResult[]; ms: number; scope: PaymentScope }) {
   const broken = results.filter((r) => r.count > 0)
   return (
     <div className="rounded-xl border border-line bg-surface">

@@ -1,7 +1,8 @@
 import { PaymentEventData } from '@carwash/contracts'
 import { TOPICS, type ConsumerSpec } from '@carwash/outbox'
+import * as z from 'zod/mini'
 
-const CapturedPayment = PaymentEventData.pick({ id: true, merchant: true, captured_amount: true, fee: true, currency: true })
+const CapturedPayment = z.pick(PaymentEventData, { id: true, merchant: true, captured_amount: true, fee: true, currency: true })
 
 const ISSUE = `
   WITH counter AS (

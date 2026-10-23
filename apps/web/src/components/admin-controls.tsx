@@ -1,5 +1,6 @@
 'use client'
 
+import { errorOf } from '@carwash/contracts'
 import { useRouter } from 'next/navigation'
 import { useState, type SubmitEvent } from 'react'
 
@@ -15,12 +16,12 @@ export function AdminLogin() {
     setNote(null)
     try {
       const response = await fetch('/api/admin/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })
-      const body = await response.json().catch(() => null)
+      const body: unknown = await response.json().catch(() => null)
       if (response.ok) {
         setKey('')
         router.refresh()
       } else {
-        setNote(body?.error?.message ?? `The web server answered ${response.status}.`)
+        setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
       }
     } catch {
       setNote('The web server stopped answering.')

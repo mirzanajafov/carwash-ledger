@@ -18,8 +18,8 @@ describe('the client', () => {
     expect(verdictOf(502, {})).toBe('refused')
     expect(verdictOf(503, {})).toBe('retry')
     expect(verdictOf(500, {})).toBe('retry')
-    expect(verdictOf(409, { error: { code: 'request_in_progress' } })).toBe('retry')
-    expect(verdictOf(409, { error: { code: 'payment_not_capturable' } })).toBe('rejected')
+    expect(verdictOf(409, { error: { code: 'request_in_progress', message: 'in progress' } })).toBe('retry')
+    expect(verdictOf(409, { error: { code: 'payment_not_capturable', message: 'not capturable' } })).toBe('rejected')
     expect(verdictOf(422, {})).toBe('rejected')
   })
 
@@ -39,8 +39,12 @@ describe('the key checks', () => {
   it('flag a key answered two ways, and a reused key that was not refused', () => {
     const same = request({ stored: ['200 {"a":1}', '200 {"a":1}'] })
     const split = request({ key: 'k2', stored: ['200 {"a":1}', '200 {"a":2}'] })
-    const refused = request({ key: 'k3', kind: 'probe', final: { status: 422, body: { error: { code: 'idempotency_key_reused' } }, verdict: 'rejected' } })
-    const replayed = request({ key: 'k4', kind: 'probe', final: { status: 200, body: { id: 'p' }, verdict: 'stored' } })
+    const refused = request({
+      key: 'k3',
+      kind: 'probe',
+      final: { status: 422, body: { error: { code: 'idempotency_key_reused', message: 'reused' } }, verdict: 'rejected', retryAfter: 0 },
+    })
+    const replayed = request({ key: 'k4', kind: 'probe', final: { status: 200, body: { id: 'p' }, verdict: 'stored', retryAfter: 0 } })
     const found = checkKeys([same, split], [refused, replayed])
     expect(found.count).toBe(2)
     expect(found.examples[0]).toContain('k2')
@@ -48,7 +52,7 @@ describe('the key checks', () => {
   })
 
   it('flag every request still without an answer', () => {
-    const answered = request({ final: { status: 200, body: {}, verdict: 'stored' } })
+    const answered = request({ final: { status: 200, body: {}, verdict: 'stored', retryAfter: 0 } })
     expect(unanswered([answered, request({ key: 'k9', lastError: 'timeout' })], []).examples).toEqual([
       'create /v1/payments with k9 has no answer after 1 sends (timeout)',
     ])

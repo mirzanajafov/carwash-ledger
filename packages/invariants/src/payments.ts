@@ -383,7 +383,7 @@ export function comparePsp(
     const attempt = byId.get(op.key)
     if (attempt === undefined) found.push(`the PSP did ${op.kind} ${op.id} (${op.status}) for ${op.key}, which the ledger never asked for`)
     else if (attempt.status !== 'pending' && (attempt.status !== op.status || attempt.operation !== op.id)) {
-      found.push(`the PSP ${op.status} ${op.kind} ${op.key} as ${op.id}, the ledger has it ${attempt.status} as ${attempt.operation}`)
+      found.push(`the PSP ${op.status} ${op.kind} ${op.key} as ${op.id}, the ledger has it ${attempt.status} as ${String(attempt.operation)}`)
     }
   }
   const succeeded = new Set<string>()
@@ -404,7 +404,7 @@ export function comparePsp(
         found.push(`payout ${attempt.parent} of ${attempt.amount} has ${net ?? 'no'} journal${adjustment ? ' after its adjustment' : ''}`)
       }
       if (op.status === 'succeeded' && op.amount !== attempt.amount) {
-        found.push(`the PSP paid out ${op.amount} for payout ${attempt.parent}, the ledger moved ${attempt.amount}`)
+        found.push(`the PSP paid out ${String(op.amount)} for payout ${attempt.parent}, the ledger moved ${attempt.amount}`)
       }
       if ((op.status === 'declined') !== (reversal !== undefined)) {
         found.push(`the PSP ${op.status} payout ${attempt.parent}, the ledger ${reversal === undefined ? 'did not reverse' : 'reversed'} it`)
@@ -413,9 +413,9 @@ export function comparePsp(
     }
     if (op.status !== 'succeeded') continue
     succeeded.add(ref)
-    if (journal === undefined) found.push(`the PSP ${DID[attempt.kind]} ${op.amount} for ${ref}, the ledger has no journal`)
+    if (journal === undefined) found.push(`the PSP ${DID[attempt.kind]} ${String(op.amount)} for ${ref}, the ledger has no journal`)
     else if (journal.journals !== 1 || journal.gross !== op.amount) {
-      found.push(`the PSP ${DID[attempt.kind]} ${op.amount} for ${ref}, the ledger has ${journal.journals} journals for ${journal.gross}`)
+      found.push(`the PSP ${DID[attempt.kind]} ${String(op.amount)} for ${ref}, the ledger has ${journal.journals} journals for ${journal.gross}`)
     }
   }
   for (const [ref, journal] of money) {

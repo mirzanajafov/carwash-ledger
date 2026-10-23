@@ -1,3 +1,4 @@
+import type { VerificationRunView } from '@carwash/contracts'
 import { Injectable } from '@nestjs/common'
 import type { VerifyReport } from '@carwash/audit-pg'
 import { Database } from '../db/database.ts'
@@ -52,7 +53,7 @@ function toRun(row: Row): VerificationRun {
   }
 }
 
-export function runView(run: VerificationRun) {
+export function runView(run: VerificationRun): VerificationRunView {
   return {
     object: 'verification_run',
     id: run.id,

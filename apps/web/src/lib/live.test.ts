@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { EMPTY, reduce, totals, type Journal, type Payment } from './live'
+import type { LiveJournal, LivePayment } from '@carwash/contracts'
+import { EMPTY, reduce, totals } from './live'
 import { money } from './money'
 
-const journal = (id: string, entries: [string, string][]): Journal => ({
+const journal = (id: string, entries: [string, string][]): LiveJournal => ({
   id,
   external_ref: `capture:${id}`,
   posted_at: '2026-10-14T10:00:00.000Z',
   entries: entries.map(([account, amount]) => ({ account, amount })),
 })
 
-const payment = (id: string, status: string): Payment => ({
+const payment = (id: string, status: string): LivePayment => ({
   id,
   merchant: 'wash_north',
   amount: '2400',

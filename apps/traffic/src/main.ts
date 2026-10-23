@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import { errorOf, PaymentView, PayoutView } from '@carwash/contracts'
 import { ApiClient } from './client.ts'
 import { gapMs, mulberry32, pick, visit, type Visit } from './visits.ts'
 
@@ -28,9 +29,10 @@ async function wash(v: Visit, key: string): Promise<void> {
     token: v.token,
     capture: v.capture,
   })
-  log(`${v.program} at ${v.merchant} for ${v.amount}: ${created.status} ${created.body?.status ?? created.body?.error?.code ?? ''}`)
-  if (created.status !== 200) return
-  const id = created.body.id as string
+  const payment = PaymentView.safeParse(created.body)
+  log(`${v.program} at ${v.merchant} for ${v.amount}: ${created.status} ${payment.success ? payment.data.status : (errorOf(created.body)?.code ?? '')}`)
+  if (created.status !== 200 || !payment.success) return
+  const { id } = payment.data
   if (v.capture === 'manual') {
     await sleep(v.captureAfterMs, undefined, { signal: stop.signal })
     const captured = await api.send(key, 'POST', `/v1/payments/${id}/capture`, {})
@@ -76,7 +78,8 @@ for (;;) {
     const merchant = pick(random, merchants).code
     track(
       api.send(adminKey, 'POST', '/v1/payouts', { merchant, currency: 'EUR' }).then((answer) => {
-        log(`payout to ${merchant}: ${answer.status} ${answer.body?.amount ?? answer.body?.error?.code ?? ''}`)
+        const payout = PayoutView.safeParse(answer.body)
+        log(`payout to ${merchant}: ${answer.status} ${payout.success ? payout.data.amount : (errorOf(answer.body)?.code ?? '')}`)
       }),
     )
   }

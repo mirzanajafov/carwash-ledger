@@ -3,9 +3,11 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/audit/package.json packages/audit/
+COPY packages/contracts/package.json packages/contracts/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter "@carwash/web..."
 COPY packages/audit packages/audit
+COPY packages/contracts packages/contracts
 COPY apps/web apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @carwash/web build

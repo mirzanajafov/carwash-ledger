@@ -8,6 +8,9 @@
     "typecheck": "tsc",
     "start": "node --conditions=source src/main.ts"
   },
+  "dependencies": {
+    "@carwash/contracts": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

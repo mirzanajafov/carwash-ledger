@@ -1,18 +1,19 @@
+import { AnomalyList, type AnomalyView } from '@carwash/contracts'
 import type { Metadata } from 'next'
 import { AdminLogin, AdminLogout } from '@/components/admin-controls'
-import { AnomaliesPanel, type Anomaly } from '@/components/anomalies-panel'
+import { AnomaliesPanel } from '@/components/anomalies-panel'
 import { callApi } from '@/lib/server'
 import { adminSession, sessionToken } from '@/lib/session'
 
 export const metadata: Metadata = { title: 'Admin · Car Wash Ledger' }
 export const dynamic = 'force-dynamic'
 
-async function anomalies(state: 'open' | 'resolved'): Promise<Anomaly[]> {
+async function anomalies(state: 'open' | 'resolved'): Promise<AnomalyView[]> {
   const token = await sessionToken()
   if (!token) return []
   try {
     const reply = await callApi('GET', `/v1/admin/anomalies?state=${state}&limit=50`, token)
-    return reply.status === 200 ? (reply.body.data as Anomaly[]) : []
+    return reply.status === 200 ? AnomalyList.parse(reply.body).data : []
   } catch {
     return []
   }

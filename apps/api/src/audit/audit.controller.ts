@@ -1,5 +1,15 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ORIGIN, toHex } from '@carwash/audit'
+import type {
+  AuditHeadView,
+  CheckpointList,
+  CheckpointView,
+  ConsistencyProofView,
+  InclusionProofView,
+  JournalView,
+  LeafView,
+  VerificationRunView,
+} from '@carwash/contracts'
 import { Database } from '../db/database.ts'
 import { invalidInput, notFound } from '../domain-errors.ts'
 import { findJournal, latestCheckpoint, leafByJournal, leafBySeq, recentCheckpoints } from './audit.repository.ts'
@@ -25,20 +35,20 @@ export class AuditController {
   }
 
   @Get('audit/verification')
-  async verification() {
+  async verification(): Promise<VerificationRunView> {
     const latest = await this.#runs.latest()
     if (!latest) throw notFound('a verification run')
     return runView(latest)
   }
 
   @Get('audit/head')
-  async head() {
+  async head(): Promise<AuditHeadView> {
     const current = await head(this.#db.pool)
     return { object: 'audit_head', tree_size: current.size, root: toHex(current.root), chain: toHex(current.chain) }
   }
 
   @Get('audit/checkpoint')
-  async checkpoint() {
+  async checkpoint(): Promise<CheckpointView> {
     const latest = await latestCheckpoint(this.#db.pool)
     if (!latest) throw notFound('a witnessed checkpoint')
     return {
@@ -53,13 +63,13 @@ export class AuditController {
   }
 
   @Get('audit/checkpoints')
-  async checkpoints() {
+  async checkpoints(): Promise<CheckpointList> {
     const rows = await recentCheckpoints(this.#db.pool)
     return { object: 'list', data: rows.map((r) => ({ tree_size: Number(r.size), root: toHex(new Uint8Array(r.root)), signed_at: r.signed_at.toISOString() })) }
   }
 
   @Get('audit/leaves/:seq')
-  async leaf(@Param('seq') seq: string) {
+  async leaf(@Param('seq') seq: string): Promise<LeafView> {
     const at = size(seq, 'seq')
     const found = await leafBySeq(this.#db.pool, at)
     if (!found) throw notFound(`seq ${at} in the audit log`)
@@ -67,7 +77,7 @@ export class AuditController {
   }
 
   @Get('journals/:id')
-  async journal(@Param('id') id: string) {
+  async journal(@Param('id') id: string): Promise<JournalView> {
     if (!/^\d{1,18}$/.test(id)) throw invalidInput('the journal id must be a number')
     const journal = await findJournal(this.#db.pool, id)
     if (!journal) throw notFound(`journal ${id}`)
@@ -83,7 +93,7 @@ export class AuditController {
   }
 
   @Get('journals/:id/proof')
-  async inclusion(@Param('id') id: string, @Query('tree_size') requested?: string) {
+  async inclusion(@Param('id') id: string, @Query('tree_size') requested?: string): Promise<InclusionProofView> {
     if (!/^\d{1,18}$/.test(id)) throw invalidInput('the journal id must be a number')
     const sequenced = await leafByJournal(this.#db.pool, id)
     if (!sequenced) throw notFound(`a sequenced journal ${id}`)
@@ -104,7 +114,7 @@ export class AuditController {
   }
 
   @Get('audit/consistency')
-  async consistency(@Query('first') first?: string, @Query('second') second?: string) {
+  async consistency(@Query('first') first?: string, @Query('second') second?: string): Promise<ConsistencyProofView> {
     const current = await treeSize(this.#db.pool)
     const from = size(first, 'first')
     const to = size(second, 'second') ?? current

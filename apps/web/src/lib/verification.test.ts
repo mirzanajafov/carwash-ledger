@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isOpen, percentDone, startedBeforeTamper, type VerificationRun } from './verification'
+import type { VerificationRunView as VerificationRun } from '@carwash/contracts'
+import { isOpen, percentDone, startedBeforeTamper } from './verification'
 
 function run(status: VerificationRun['status'], progress: VerificationRun['progress'] = null): VerificationRun {
   return {
+    object: 'verification_run',
     id: '1',
     status,
     requested_at: '2026-10-21T18:00:00.000Z',
@@ -20,7 +22,18 @@ function finished(startedAt: string, findings: number): VerificationRun {
     ...run('done'),
     started_at: startedAt,
     finished_at: startedAt,
-    report: { size: 40, journals: 40, witnessed: 16, findings, firstSeq: null, examples: [], ms: { read: 1, compute: 1, total: 2 } },
+    report: {
+      mode: 'full',
+      from: 0,
+      size: 40,
+      journals: 40,
+      witnessed: 16,
+      findings,
+      firstSeq: null,
+      examples: [],
+      ms: { read: 1, compute: 1, yielded: 0, total: 2 },
+      root: null,
+    },
   }
 }
 

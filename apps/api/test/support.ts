@@ -22,7 +22,7 @@ export type Caller = keyof typeof KEYS | 'nobody'
 
 export interface Reply {
   status: number
-  body: any
+  body: unknown
   replayed: boolean
   retryAfter: string | null
 }
@@ -112,7 +112,7 @@ export async function startApi(config: ApiConfig, port = 0): Promise<{ app: Nest
   })
   configureApp(app, config)
   await app.listen(port, '127.0.0.1')
-  return { app, url: `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}` }
+  return { app, url: await app.getUrl() }
 }
 
 export async function call(base: string, method: string, path: string, options: CallOptions = {}): Promise<Reply> {

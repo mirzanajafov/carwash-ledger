@@ -1,7 +1,8 @@
+import type { PayoutView } from '@carwash/contracts'
 import { unixSeconds } from '../unix-time.ts'
 import type { Payout } from './payout.ts'
 
-export function payoutView(o: Payout) {
+export function payoutView(o: Payout): PayoutView {
   return {
     id: o.id,
     object: 'payout',

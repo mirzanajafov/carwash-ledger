@@ -1,29 +1,5 @@
+import type { LiveBalance, LiveEvent, LiveJournal, LivePayment } from '@carwash/contracts'
 import { bookOf, type Side } from './accounts'
-
-export interface Balance {
-  code: string
-  type: string
-  currency: string
-  amount: string
-}
-
-export interface Journal {
-  id: string
-  external_ref: string
-  posted_at: string
-  entries: { account: string; amount: string }[]
-}
-
-export interface Payment {
-  id: string
-  merchant: string
-  amount: string
-  currency: string
-  status: string
-  captured_amount: string
-  refunded_amount: string
-  updated_at: string
-}
 
 export interface Posting {
   journal: string
@@ -34,16 +10,15 @@ export interface Posting {
 }
 
 export interface LiveState {
-  balances: Balance[]
-  journals: Journal[]
-  payments: Payment[]
+  balances: LiveBalance[]
+  journals: LiveJournal[]
+  payments: LivePayment[]
   postings: Record<string, Posting[]>
   fresh: Record<string, number>
   updatedAt: number | null
 }
 
-export type LiveAction =
-  { type: 'balances'; data: Balance[]; at: number } | { type: 'journal'; data: Journal; at: number } | { type: 'payment'; data: Payment; at: number }
+export type LiveAction = LiveEvent & { at: number }
 
 export const EMPTY: LiveState = { balances: [], journals: [], payments: [], postings: {}, fresh: {}, updatedAt: null }
 
@@ -85,7 +60,7 @@ export interface BookTotal {
   accounts: { code: string; amount: bigint }[]
 }
 
-export function totals(balances: readonly Balance[]): { books: Map<string, BookTotal>; net: bigint } {
+export function totals(balances: readonly LiveBalance[]): { books: Map<string, BookTotal>; net: bigint } {
   const books = new Map<string, BookTotal>()
   let net = 0n
   for (const balance of balances) {

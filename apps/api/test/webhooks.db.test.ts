@@ -1,12 +1,13 @@
 import { createHmac, randomUUID } from 'node:crypto'
-import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { PaymentView } from '@carwash/contracts'
 import { checkAgainstPsp, checkLedger, checkPayments, violations } from '@carwash/invariants'
 import { firstRow } from '@carwash/pg'
 import { NO_FAULTS } from '@carwash/psp'
 import type { INestApplication, INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as z from 'zod/mini'
 import { Database } from '../src/db/database.ts'
 import { findAttempt } from '../src/payments/attempts.repository.ts'
 import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
@@ -39,6 +40,8 @@ async function postWebhook(body: string, signature: string | undefined): Promise
   return { status: response.status, body: await response.json(), replayed: false, retryAfter: null }
 }
 
+const EventId = z.object({ id: z.string() })
+
 function event(attemptKey: string, extra: Record<string, unknown> = {}): string {
   return JSON.stringify({
     id: `evt_${randomUUID()}`,
@@ -60,7 +63,7 @@ async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 10_000
 }
 
 async function paymentStatus(id: string): Promise<string> {
-  return (await call('GET', `/v1/payments/${id}`)).body.status
+  return PaymentView.parse((await call('GET', `/v1/payments/${id}`)).body).status
 }
 
 async function paymentIdForKey(key: string): Promise<string> {
@@ -104,7 +107,7 @@ describe('webhooks', () => {
   })
 
   it('are recorded once per event however many times they arrive', async () => {
-    const payment = (await call('POST', '/v1/payments', { body: pay('tok_webhook_duplicate') })).body
+    const payment = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_webhook_duplicate') })).body)
     const { psp_charge_id: chargeId } = firstRow(
       await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [payment.id]),
     )
@@ -124,8 +127,8 @@ describe('webhooks', () => {
 
   it('refuse a missing, wrong, stale or tampered signature', async () => {
     const body = event(randomUUID())
-    const id = JSON.parse(body).id
-    expect((await postWebhook(body, undefined)).body.error.code).toBe('invalid_signature')
+    const { id } = EventId.parse(JSON.parse(body))
+    expect((await postWebhook(body, undefined)).body).toMatchObject({ error: { code: 'invalid_signature' } })
     expect((await postWebhook(body, sign(body, 'whsec_wrong'))).status).toBe(400)
     expect((await postWebhook(body, sign(body, WEBHOOK_SECRET, Math.floor(Date.now() / 1000) - 600))).status).toBe(400)
     expect((await postWebhook(body.replace('succeeded', 'declined'), sign(body))).status).toBe(400)
@@ -134,7 +137,7 @@ describe('webhooks', () => {
 
   it('park an event for an attempt the ledger does not know, and report it once it is overdue', async () => {
     const body = event(randomUUID())
-    const id = JSON.parse(body).id
+    const { id } = EventId.parse(JSON.parse(body))
     expect((await postWebhook(body, sign(body))).body).toEqual({ received: true, outcome: 'unmatched' })
     expect((await postWebhook(body, sign(body))).body).toEqual({ received: true, outcome: 'unmatched', duplicate: true })
     await stack.owner.query(`UPDATE webhook_events SET received_at = now() - interval '2 hours', checked_at = now() - interval '1 minute' WHERE id = $1`, [id])
@@ -145,7 +148,7 @@ describe('webhooks', () => {
   })
 
   it('are only a hint: a signed claim that the PSP cannot back changes nothing', async () => {
-    const payment = (await call('POST', '/v1/payments', { body: pay('tok_fail_capture', { capture: 'manual' }) })).body
+    const payment = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_fail_capture', { capture: 'manual' }) })).body)
     expect((await call('POST', `/v1/payments/${payment.id}/capture`, { body: {} })).status).toBe(503)
     const capture = await attemptOf(payment.id, 'capture')
     const body = event(capture, { kind: 'capture', amount: 1500, currency: 'EUR' })
@@ -186,7 +189,7 @@ describe('the recovery job', () => {
     })
     await live.listen(0, '127.0.0.1')
     try {
-      const base = `http://127.0.0.1:${(live.getHttpServer().address() as AddressInfo).port}`
+      const base = await live.getUrl()
       expect(await (await fetch(`${base}/health`)).json()).toMatchObject({ ok: true, pid: process.pid })
       for (const path of ['/v1/admin/anomalies', `/v1/payments/${randomUUID()}`, '/v1/reconciliation/days', '/v1/audit/head']) {
         expect((await fetch(`${base}${path}`)).status).toBe(404)
@@ -218,7 +221,7 @@ describe('the recovery job', () => {
 
   it('leaves an attempt whose answer it refused for a person, instead of asking again forever', async () => {
     const key = randomUUID()
-    expect((await call('POST', '/v1/payments', { key, body: pay('tok_wrong_amount_capture') })).body.error.code).toBe('psp_answer_rejected')
+    expect((await call('POST', '/v1/payments', { key, body: pay('tok_wrong_amount_capture') })).body).toMatchObject({ error: { code: 'psp_answer_rejected' } })
     const capture = await attemptOf(await paymentIdForKey(key), 'capture')
     const outcomes = await recovery.recoverPending(0)
     expect(outcomes.get('anomaly')).toBeUndefined()
@@ -232,7 +235,7 @@ describe('the recovery job', () => {
   it('counts an attempt as unknown while the PSP keeps failing before it does anything', async () => {
     stack.psp.faults.plan = { ...NO_FAULTS, fail: 1 }
     const key = randomUUID()
-    expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok') })).body.error.code).toBe('psp_unavailable')
+    expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok') })).body).toMatchObject({ error: { code: 'psp_unavailable' } })
     const attempt = await findAttempt(stack.admin, await attemptOf(await paymentIdForKey(key), 'authorize'))
     assert(attempt)
     expect(await recovery.recover(attempt)).toBe('unknown')

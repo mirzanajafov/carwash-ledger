@@ -1,29 +1,16 @@
 'use client'
 
+import { errorOf, type AnomalyView } from '@carwash/contracts'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
 
-export interface Anomaly {
-  id: string
-  kind: string
-  created_at: string
-  problems: string[]
-  attempt: { id: string; kind: string; status: string; amount: string; currency: string } | null
-  bank_amount: string | null
-  merchant: string | null
-  acceptable: boolean
-  resolution: string | null
-  resolved_at: string | null
-  resolved_by: string | null
-}
-
 function when(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
 }
 
-function describe(a: Anomaly): string {
+function describe(a: AnomalyView): string {
   if (!a.attempt) return a.kind.replaceAll('_', ' ')
   const asked = money(a.attempt.amount, a.attempt.currency)
   const where = a.merchant ? ` at ${merchantName(a.merchant)}` : ''
@@ -33,7 +20,7 @@ function describe(a: Anomaly): string {
   return `A ${a.attempt.kind} of ${asked}${where}: ${a.kind.replaceAll('_', ' ')}.`
 }
 
-export function AnomaliesPanel({ open, resolved }: { open: Anomaly[]; resolved: Anomaly[] }) {
+export function AnomaliesPanel({ open, resolved }: { open: AnomalyView[]; resolved: AnomalyView[] }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -43,8 +30,8 @@ export function AnomaliesPanel({ open, resolved }: { open: Anomaly[]; resolved: 
     setNote(null)
     try {
       const response = await fetch(`/api/admin/anomalies/${id}/${action}`, { method: 'POST' })
-      const body = await response.json().catch(() => null)
-      if (!response.ok) setNote(body?.error?.message ?? `The web server answered ${response.status}.`)
+      const body: unknown = await response.json().catch(() => null)
+      if (!response.ok) setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
       router.refresh()
     } catch {
       setNote('The web server stopped answering.')

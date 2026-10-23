@@ -1,7 +1,9 @@
 'use client'
 
+import { LiveBalance, LiveJournal, LivePayment } from '@carwash/contracts'
 import { useEffect, useReducer, useState } from 'react'
-import { EMPTY, reduce, type LiveAction } from './live'
+import * as z from 'zod/mini'
+import { EMPTY, reduce } from './live'
 
 export type Connection = 'connecting' | 'live' | 'reconnecting'
 
@@ -11,14 +13,18 @@ export function useLive() {
 
   useEffect(() => {
     const source = new EventSource('/api/live')
-    const on = (type: LiveAction['type']) => (event: MessageEvent<string>) => {
-      dispatch({ type, data: JSON.parse(event.data), at: Date.now() })
-    }
+    const read = (event: MessageEvent<string>): unknown => JSON.parse(event.data)
     source.addEventListener('open', () => setConnection('live'))
     source.addEventListener('error', () => setConnection('reconnecting'))
-    source.addEventListener('balances', on('balances'))
-    source.addEventListener('journal', on('journal'))
-    source.addEventListener('payment', on('payment'))
+    source.addEventListener('balances', (event: MessageEvent<string>) => {
+      dispatch({ type: 'balances', data: z.array(LiveBalance).parse(read(event)), at: Date.now() })
+    })
+    source.addEventListener('journal', (event: MessageEvent<string>) => {
+      dispatch({ type: 'journal', data: LiveJournal.parse(read(event)), at: Date.now() })
+    })
+    source.addEventListener('payment', (event: MessageEvent<string>) => {
+      dispatch({ type: 'payment', data: LivePayment.parse(read(event)), at: Date.now() })
+    })
     return () => source.close()
   }, [])
 

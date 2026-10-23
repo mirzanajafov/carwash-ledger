@@ -1,25 +1,9 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common'
+import type { LiveEvent } from '@carwash/contracts'
 import { readAllBalances } from '@carwash/ledger'
 import type pg from 'pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-
-export type LiveEvent =
-  | { type: 'balances'; data: { code: string; type: string; currency: string; amount: string }[] }
-  | { type: 'journal'; data: { id: string; external_ref: string; posted_at: string; entries: { account: string; amount: string }[] } }
-  | {
-      type: 'payment'
-      data: {
-        id: string
-        merchant: string
-        amount: string
-        currency: string
-        status: string
-        captured_amount: string
-        refunded_amount: string
-        updated_at: string
-      }
-    }
 
 type Listener = (event: LiveEvent) => void
 type JournalEvent = Extract<LiveEvent, { type: 'journal' }>

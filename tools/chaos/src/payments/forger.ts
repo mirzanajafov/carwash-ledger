@@ -83,8 +83,10 @@ export class Forger {
     const at = Math.floor(Date.now() / 1000)
     const body = forgedDecline(target, at)
     const signature = `t=${at},v1=${createHmac('sha256', this.#secret).update(`${at}.${body}`).digest('hex')}`
+    const api = live[Math.floor(this.#random() * live.length)]
+    if (api === undefined) return 'no api'
     try {
-      const response = await fetch(`${live[Math.floor(this.#random() * live.length)]}/webhooks/psp`, {
+      const response = await fetch(`${api}/webhooks/psp`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'psp-signature': signature },
         body,

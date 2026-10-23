@@ -1,8 +1,8 @@
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 const MinorUnits = z.int()
-const DecimalMinorUnits = z.string().regex(/^-?\d+$/)
-const DatabaseId = z.string().regex(/^\d+$/)
+const DecimalMinorUnits = z.string().check(z.regex(/^-?\d+$/))
+const DatabaseId = z.string().check(z.regex(/^\d+$/))
 
 export const PaymentEventData = z.object({
   id: z.uuid(),
@@ -15,7 +15,7 @@ export const PaymentEventData = z.object({
   captured_amount: MinorUnits,
   refunded_amount: MinorUnits,
   fee: MinorUnits,
-  failure_reason: z.string().nullable(),
+  failure_reason: z.nullable(z.string()),
   created: z.int(),
 })
 
@@ -28,7 +28,7 @@ export const RefundEventData = z.object({
   amount: MinorUnits,
   status: z.enum(['succeeded', 'failed']),
   fee_refund: MinorUnits,
-  failure_reason: z.string().nullable(),
+  failure_reason: z.nullable(z.string()),
   created: z.int(),
 })
 

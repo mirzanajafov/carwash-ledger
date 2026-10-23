@@ -1,3 +1,4 @@
+import { errorOf, SettlementDayList, SettlementDayView } from '@carwash/contracts'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { money } from '@/lib/money'
@@ -5,36 +6,6 @@ import { adminKey, callApi } from '@/lib/server'
 
 export const metadata: Metadata = { title: 'Reconciliation · Car Wash Ledger' }
 export const dynamic = 'force-dynamic'
-
-interface Day {
-  day: number
-  id: string
-  lines: number
-  gross: string
-  fee: string
-  net: string
-  journal_id: string | null
-  received_at: string
-  breaks: Record<string, number>
-}
-
-interface Line {
-  line: number
-  operation: string
-  reference: string
-  kind: string
-  gross: string
-  fee: string
-  net: string
-  break: string | null
-}
-
-interface Break {
-  class: string
-  line: number | null
-  journal_ref: string | null
-  detail: string
-}
 
 const CLASSES: Record<string, string> = {
   missing_line: 'in the books, not in the file',
@@ -53,16 +24,16 @@ function when(day: number, daySeconds: number | null): string {
 }
 
 async function load(requested: number | null) {
-  const days = await callApi('GET', '/v1/reconciliation/days?limit=14', adminKey())
-  if (days.status !== 200) return { error: days.body?.error?.message ?? `the API answered ${days.status}` }
-  const list = days.body.data as Day[]
-  const pick = requested ?? list[0]?.day ?? null
+  const reply = await callApi('GET', '/v1/reconciliation/days?limit=14', adminKey())
+  if (reply.status !== 200) return { error: errorOf(reply.body)?.message ?? `the API answered ${reply.status}` }
+  const days = SettlementDayList.parse(reply.body)
+  const pick = requested ?? days.data[0]?.day ?? null
   const detail = pick === null ? null : await callApi('GET', `/v1/reconciliation/days/${pick}`, adminKey())
   return {
-    list,
-    daySeconds: days.body.day_seconds as number | null,
+    list: days.data,
+    daySeconds: days.day_seconds,
     pick,
-    detail: detail?.status === 200 ? (detail.body as { file: Day | null; lines: Line[]; breaks: Break[] }) : null,
+    detail: detail?.status === 200 ? SettlementDayView.parse(detail.body) : null,
   }
 }
 

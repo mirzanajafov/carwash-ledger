@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@carwash/audit": "workspace:*",
+    "@carwash/contracts": "workspace:*",
     "next": "catalog:",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

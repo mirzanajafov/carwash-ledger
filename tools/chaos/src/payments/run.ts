@@ -6,6 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { verifyLog } from '@carwash/audit-pg'
+import { AnomalyList, AnomalyView, errorOf, VerificationRunView } from '@carwash/contracts'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool, firstRow, inSnapshot } from '@carwash/pg'
 import {
@@ -107,10 +108,6 @@ export interface PaymentsReport {
   harnessErrors: string[]
   violations: Violation[]
 }
-
-type VerificationRunAnswer = { id: string; requested_at: string; error: string | null } & (
-  { status: 'queued' | 'running' | 'failed'; report: null } | { status: 'done'; report: { findings: number; examples: unknown[] } }
-)
 
 const ROOT = new URL('../../../../', import.meta.url)
 const API_MAIN = fileURLToPath(new URL('apps/api/dist/main.js', ROOT))
@@ -403,7 +400,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
             report.postgres.kills++
             log(`postgres crash, down for ${fault.downMs} ms`)
             report.postgres.recoveryMs.push(await crashPostgres(postgres, fault.downMs))
-            log(`postgres back after ${report.postgres.recoveryMs.at(-1)} ms`)
+            log(`postgres back after ${String(report.postgres.recoveryMs.at(-1))} ms`)
           } finally {
             busy.postgres = false
           }
@@ -414,7 +411,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
             report.kafka.kills++
             log(`kafka crash, down for ${fault.downMs} ms`)
             report.kafka.recoveryMs.push(await crashKafka(kafka, fault.downMs))
-            log(`kafka back after ${report.kafka.recoveryMs.at(-1)} ms`)
+            log(`kafka back after ${String(report.kafka.recoveryMs.at(-1))} ms`)
           } finally {
             busy.kafka = false
           }
@@ -561,12 +558,13 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     report.witness = { checkpoints, size: witnessed, compared: 0 }
     report.verification.requested = askedRuns.size
     const finalRun = await finalVerificationRun(ADMIN_KEY)
+    const finalReport = finalRun?.status === 'done' ? finalRun.report : null
     found.add(
       'verify-job',
       'final',
       'a verification run in the worker, asked for once the faults stop, ends done and finds nothing',
-      finalRun?.status === 'done' ? finalRun.report.findings : 1,
-      finalRun?.status === 'done' ? finalRun.report.examples.slice(0, 5).map((finding) => JSON.stringify(finding)) : [JSON.stringify(finalRun)],
+      finalReport ? finalReport.findings : 1,
+      finalReport ? finalReport.examples.slice(0, 5).map((finding) => JSON.stringify(finding)) : [JSON.stringify(finalRun)],
     )
     const { rows: runs } = await owner.query<{ status: string; n: number; attempts: number }>(
       'SELECT status::text, count(*)::int AS n, max(attempts) AS attempts FROM verification_runs GROUP BY status',
@@ -585,7 +583,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     found.addResults(full, 'final')
     for (const result of full) {
       const count = resumed.find((r) => r.id === result.id)?.count
-      if (count !== result.count) report.harnessErrors.push(`the incremental ${result.id} found ${count}, the full one ${result.count}`)
+      if (count !== result.count) report.harnessErrors.push(`the incremental ${result.id} found ${String(count)}, the full one ${result.count}`)
     }
     found.addResults([await checkAgainstPsp(audit, psp), await checkSettled(audit)], 'final')
     found.addResults(await checkEvents(audit), 'final')
@@ -660,47 +658,47 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const headers = { authorization: `Bearer ${adminKey}` }
     const listed = await fetch(`${base}?state=open&limit=200`, { headers })
     if (listed.status !== 200) throw new Error(`listing anomalies: status ${listed.status}`)
-    const open = (await listed.json()).data as { id: string; acceptable: boolean }[]
+    const open = AnomalyList.parse(await listed.json()).data
     const result: PaymentsReport['anomalies'] = { open: open.length, accepted: 0, failed: [] }
     for (const anomaly of open.filter((a) => a.acceptable)) {
       const response = await fetch(`${base}/${anomaly.id}/accept`, { method: 'POST', headers })
-      const body = await response.json().catch(() => null)
+      const body: unknown = await response.json().catch(() => null)
       if (response.status !== 200) {
-        result.failed.push(`${anomaly.id}: ${response.status} ${body?.error?.message ?? ''}`)
+        result.failed.push(`${anomaly.id}: ${response.status} ${errorOf(body)?.message ?? ''}`)
         continue
       }
       result.accepted++
-      journeys.learnAccepted(body)
+      journeys.learnAccepted(AnomalyView.parse(body))
     }
     return result
   }
 
-  async function askForVerification(adminKey: string): Promise<VerificationRunAnswer | null> {
+  async function askForVerification(adminKey: string): Promise<VerificationRunView | null> {
     try {
       const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/admin/verify`, {
         method: 'POST',
         headers: { authorization: `Bearer ${adminKey}` },
         signal: AbortSignal.timeout(5000),
       })
-      return response.status === 202 ? ((await response.json()) as VerificationRunAnswer) : null
+      return response.status === 202 ? VerificationRunView.parse(await response.json()) : null
     } catch {
       return null
     }
   }
 
-  async function latestVerificationRun(adminKey: string): Promise<VerificationRunAnswer | null> {
+  async function latestVerificationRun(adminKey: string): Promise<VerificationRunView | null> {
     try {
       const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/audit/verification`, {
         headers: { authorization: `Bearer ${adminKey}` },
         signal: AbortSignal.timeout(5000),
       })
-      return response.status === 200 ? ((await response.json()) as VerificationRunAnswer) : null
+      return response.status === 200 ? VerificationRunView.parse(await response.json()) : null
     } catch {
       return null
     }
   }
 
-  async function finalVerificationRun(adminKey: string): Promise<VerificationRunAnswer | null> {
+  async function finalVerificationRun(adminKey: string): Promise<VerificationRunView | null> {
     const since = Date.now()
     const deadline = performance.now() + 120_000
     let id: string | undefined

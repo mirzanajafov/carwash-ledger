@@ -1,4 +1,5 @@
 import { Controller, Get, Param } from '@nestjs/common'
+import type { BalanceView } from '@carwash/contracts'
 import { findAccounts, readBalance } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
 import { notFound } from '../domain-errors.ts'
@@ -12,7 +13,7 @@ export class AccountsController {
   }
 
   @Get(':code/balance')
-  async balance(@Param('code') code: string) {
+  async balance(@Param('code') code: string): Promise<BalanceView> {
     const account = (await findAccounts(this.#db.pool, [code])).get(code)
     if (!account) throw notFound(`account ${code}`)
     return {
