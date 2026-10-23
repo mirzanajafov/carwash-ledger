@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { MerchantView } from '@carwash/contracts'
-import { insertAccount, readBalance, sqlStateOf } from '@carwash/ledger'
+import { insertAccount, readBalance } from '@carwash/ledger'
+import { sqlStateOf } from '@carwash/pg'
 import { Database } from '../db/database.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'

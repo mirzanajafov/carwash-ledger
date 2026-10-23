@@ -1,10 +1,9 @@
 import { failpoint } from '@carwash/failpoints'
-import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
+import { firstRow, withTransaction, type RetryOptions, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { pgAccountLoader, type AccountRegistry } from '../accounts.ts'
 import { InvalidJournalError } from '../errors.ts'
 import { deltaParams, entryParams, lockParams, planJournal, type JournalPlan } from '../plan.ts'
-import type { RetryOptions } from '../retry.ts'
 import { LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'
 import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal, Poster } from '../types.ts'
@@ -56,7 +55,7 @@ export class PgCtePoster implements Poster {
   }
 
   post(input: JournalInput): Promise<PostedJournal> {
-    return postWith(this.#registry, input, this.#retry, (plan) => this.#attempt(plan))
+    return postWith(this.#registry, input, (plan) => this.#attempt(plan), this.#retry)
   }
 
   async #attempt(plan: JournalPlan): Promise<bigint> {

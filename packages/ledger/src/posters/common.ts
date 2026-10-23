@@ -1,19 +1,19 @@
+import { DEFAULT_RETRY, withRetry, type RetryOptions } from '@carwash/pg'
 import type { AccountRegistry } from '../accounts.ts'
 import { LedgerRuleError } from '../errors.ts'
 import { planJournal, type JournalPlan } from '../plan.ts'
-import { DEFAULT_RETRY, withRetry, type RetryOptions } from '../retry.ts'
 import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal } from '../types.ts'
 
 export async function postWith(
   registry: AccountRegistry,
   input: JournalInput,
-  retry: RetryOptions | undefined,
   attempt: (plan: JournalPlan) => Promise<bigint>,
+  retry: RetryOptions = DEFAULT_RETRY,
 ): Promise<PostedJournal> {
   const plan = planJournal(input, await registry.resolve(input.entries.map((e) => e.accountId)))
   try {
-    const { value, attempts } = await withRetry(() => attempt(plan), retry ?? DEFAULT_RETRY)
+    const { value, attempts } = await withRetry(() => attempt(plan), retry)
     return { id: value, externalRef: plan.externalRef, attempts }
   } catch (error) {
     throw translateError(error, plan)

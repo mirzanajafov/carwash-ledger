@@ -1,6 +1,6 @@
+import { errorText, sqlStateOf } from '@carwash/pg'
 import { AlreadyReversedError, DuplicateJournalError, LedgerError, LedgerRuleError } from './errors.ts'
 import type { JournalPlan } from './plan.ts'
-import { errorText, sqlStateOf } from './sql-state.ts'
 
 export function translateError(error: unknown, plan: JournalPlan): unknown {
   if (error instanceof LedgerError) return error

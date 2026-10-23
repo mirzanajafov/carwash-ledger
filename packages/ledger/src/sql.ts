@@ -6,22 +6,6 @@ JOIN unnest($1::bigint[], $2::int[]) AS t(account_id, shard)
 ORDER BY b.account_id, b.shard
 FOR UPDATE OF b`
 
-export const INSERT_JOURNAL = `
-INSERT INTO journals (external_ref, reverses_id)
-VALUES ($1, $2::bigint)
-RETURNING id`
-
-export const INSERT_ENTRIES = `
-INSERT INTO entries (journal_id, account_id, amount)
-SELECT $1::bigint, t.account_id, t.amount
-FROM unnest($2::bigint[], $3::bigint[]) AS t(account_id, amount)`
-
-export const APPLY_DELTAS = `
-UPDATE balances AS b
-SET amount = b.amount + t.delta, version = b.version + 1
-FROM unnest($1::bigint[], $2::int[], $3::bigint[]) AS t(account_id, shard, delta)
-WHERE b.account_id = t.account_id AND b.shard = t.shard`
-
 export const POST_JOURNAL = `
 WITH journal AS (
   INSERT INTO journals (external_ref, reverses_id)

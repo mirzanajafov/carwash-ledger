@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { FailedPayment } from '@carwash/contracts'
-import { sqlStateOf } from '@carwash/ledger'
+import { sqlStateOf } from '@carwash/pg'
 import type { ApiClientIdentity } from '../auth/api-keys.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, notFound } from '../domain-errors.ts'

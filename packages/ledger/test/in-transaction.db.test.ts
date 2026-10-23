@@ -2,7 +2,15 @@ import { checkLedger, violations } from '@carwash/invariants'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { AccountRegistry, DuplicateJournalError, InvalidJournalError, pgAccountLoader, postInTransaction } from '../src/index.ts'
+import {
+  AccountRegistry,
+  DuplicateJournalError,
+  InvalidJournalError,
+  lockStoredBalances,
+  pgAccountLoader,
+  postInTransaction,
+  readBalance,
+} from '../src/index.ts'
 import { capture, createModeAccounts, openLedger, sqlState, type LedgerFixture, type ModeAccounts } from './support.ts'
 
 let ledger: LedgerFixture
@@ -107,6 +115,24 @@ describe('postInTransaction', () => {
       await expect(postInTransaction(client, registry, { externalRef: 'tx:serializable', entries: capture(serializable, 0, 100n, 1n) })).rejects.toBeInstanceOf(
         InvalidJournalError,
       )
+    })
+  })
+})
+
+describe('lockStoredBalances', () => {
+  it('sums every shard of each account and holds their rows until the transaction ends', async () => {
+    await withTransaction(ledger.app, (client) => postInTransaction(client, registry, { externalRef: 'tx:to-lock', entries: capture(sharded, 3, 700n, 20n) }))
+    const [merchant] = sharded.merchants
+    assert(merchant)
+    await withTransaction(ledger.app, async (first) => {
+      const stored = await lockStoredBalances(first, [sharded.receivable.id, merchant.id])
+      expect(stored.get(sharded.receivable.id)).toBe(await readBalance(ledger.app, sharded.receivable))
+      expect(stored.get(merchant.id)).toBe(await readBalance(ledger.app, merchant))
+      const blocked = inRollback(ledger.app, async (second) => {
+        await second.query(`SET LOCAL lock_timeout = '200ms'`)
+        return lockStoredBalances(second, [sharded.receivable.id])
+      })
+      expect(await sqlState(blocked)).toBe('55P03')
     })
   })
 })

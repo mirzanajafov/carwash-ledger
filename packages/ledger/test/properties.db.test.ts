@@ -86,16 +86,14 @@ describe('ledger properties', () => {
     const model = new Map<bigint, bigint>()
     await fc.assert(
       fc.asyncProperty(
-        fc.array(fc.record({ shape: journalShape, poster: fc.nat({ max: 3 }), snapshot: fc.boolean() }), {
+        fc.array(fc.record({ shape: journalShape, snapshot: fc.boolean() }), {
           minLength: 1,
           maxLength: 12,
         }),
         async (journals) => {
           for (const journal of journals) {
             const entries = balancedEntries(journal.shape)
-            const poster = ledger.posters[journal.poster]
-            assert(poster)
-            await poster.post({ externalRef: nextRef('balanced'), entries })
+            await ledger.poster.post({ externalRef: nextRef('balanced'), entries })
             for (const e of entries) model.set(e.accountId, (model.get(e.accountId) ?? 0n) + e.amount)
             if (journal.snapshot) await takeSnapshots(ledger.app)
           }

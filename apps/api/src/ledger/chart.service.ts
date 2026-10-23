@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common'
-import { AccountRegistry, createAccount, findAccounts, pgAccountLoader, sqlStateOf, type Account, type AccountType, type BalanceMode } from '@carwash/ledger'
+import { AccountRegistry, createAccount, findAccounts, pgAccountLoader, type Account, type AccountType, type BalanceMode } from '@carwash/ledger'
+import { sqlStateOf } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError } from '../domain-errors.ts'

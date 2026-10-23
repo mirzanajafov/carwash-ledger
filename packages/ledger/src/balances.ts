@@ -1,5 +1,5 @@
 import { failpoint } from '@carwash/failpoints'
-import { firstRow, withTransaction, type Queryable } from '@carwash/pg'
+import { firstRow, withTransaction, type Queryable, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { DERIVED_BALANCE, SELECT_JOURNAL_ENTRIES, STORED_BALANCE, TAKE_SNAPSHOTS } from './sql.ts'
 import { InvalidJournalError } from './errors.ts'
@@ -10,6 +10,23 @@ export const SNAPSHOT_LOCK_KEY = 7_240_001
 export async function readBalance(db: Queryable, account: Account): Promise<bigint> {
   const sql = account.balanceMode === 'derived' ? DERIVED_BALANCE : STORED_BALANCE
   return BigInt(firstRow(await db.query<{ amount: string }>(sql, [account.id.toString()])).amount)
+}
+
+const LOCK_STORED_BALANCES = `
+SELECT b.account_id::text, b.amount::text
+FROM balances b
+WHERE b.account_id = ANY($1::bigint[])
+ORDER BY b.account_id, b.shard
+FOR UPDATE`
+
+export async function lockStoredBalances(client: Transaction, accountIds: readonly bigint[]): Promise<Map<bigint, bigint>> {
+  const { rows } = await client.query<{ account_id: string; amount: string }>(LOCK_STORED_BALANCES, [accountIds])
+  const balances = new Map<bigint, bigint>()
+  for (const row of rows) {
+    const id = BigInt(row.account_id)
+    balances.set(id, (balances.get(id) ?? 0n) + BigInt(row.amount))
+  }
+  return balances
 }
 
 export interface SnapshotRun {

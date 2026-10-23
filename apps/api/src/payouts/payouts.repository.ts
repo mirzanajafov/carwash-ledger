@@ -43,15 +43,6 @@ export async function lockPayout(client: Transaction, id: PayoutId): Promise<Pay
   return toPayout(firstRow(await client.query<PayoutRow>(`${PAYOUT} FOR UPDATE OF o`, [id]), `payout ${id} does not exist`))
 }
 
-export async function lockPayoutBalances(client: Transaction, merchantAccountId: bigint, bankAccountId: bigint): Promise<bigint | undefined> {
-  const { rows } = await client.query<{ account_id: string; amount: string }>(
-    `SELECT b.account_id::text, b.amount::text FROM balances b WHERE b.account_id = ANY($1::bigint[]) ORDER BY b.account_id, b.shard FOR UPDATE`,
-    [[merchantAccountId, bankAccountId]],
-  )
-  const merchant = rows.filter((row) => BigInt(row.account_id) === merchantAccountId)
-  return merchant.length === 0 ? undefined : merchant.reduce((sum, row) => sum + BigInt(row.amount), 0n)
-}
-
 export interface NewPayout {
   merchantId: string
   amount: bigint
