@@ -1,5 +1,5 @@
-import { setTimeout as sleep } from 'node:timers/promises'
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
+import { linearBackoff, retryUntilStopped } from '@carwash/jobs'
 import { EventConsumer, ensureTopics, kafkaClient, topicSpecs } from '@carwash/outbox'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -37,32 +37,15 @@ export class EventConsumers implements OnApplicationBootstrap, OnModuleDestroy {
     await Promise.all(this.#consumers.map((consumer) => consumer.stop().catch(() => undefined)))
   }
 
-  async prune(batch = 5000): Promise<number> {
-    let deleted = 0
-    for (;;) {
-      const result = await this.#db.pool.query(
-        `DELETE FROM inbox WHERE ctid IN (
-           SELECT ctid FROM inbox WHERE received_at < now() - make_interval(days => $1) LIMIT $2)`,
-        [this.#config.inboxRetentionDays, batch],
-      )
-      deleted += result.rowCount ?? 0
-      if ((result.rowCount ?? 0) < batch) return deleted
-    }
-  }
-
   async #start(): Promise<void> {
     const brokers = [...this.#config.kafkaBrokers]
     const prefix = this.#config.kafkaTopicPrefix
     const kafka = kafkaClient({ brokers, clientId: 'carwash-consumers' })
-    for (let attempt = 1; !this.#stop.signal.aborted; attempt++) {
-      try {
-        await this.#startConsumers(kafka, prefix)
-        return
-      } catch (error) {
-        if (attempt === 1 || attempt % 30 === 0) this.#logger.warn(`cannot start the consumers yet: ${error instanceof Error ? error.message : String(error)}`)
-        await sleep(Math.min(5000, 250 * attempt), undefined, { signal: this.#stop.signal }).catch(() => undefined)
-      }
-    }
+    await retryUntilStopped('cannot start the consumers yet', linearBackoff, () => this.#startConsumers(kafka, prefix), {
+      signal: this.#stop.signal,
+      log: (message) => this.#logger.warn(message),
+      logEvery: 30,
+    })
   }
 
   async #startConsumers(kafka: ReturnType<typeof kafkaClient>, prefix: string): Promise<void> {

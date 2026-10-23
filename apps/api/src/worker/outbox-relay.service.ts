@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
-import { setTimeout as sleep } from 'node:timers/promises'
+import { linearBackoff, retryUntilStopped } from '@carwash/jobs'
 import { ensureTopics, kafkaClient, KafkaPublisher, Relay, topicSpecs } from '@carwash/outbox'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -40,17 +40,20 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async #start(brokers: string[]): Promise<void> {
-    for (let attempt = 1; !this.#stop.signal.aborted; attempt++) {
+    const start = async () => {
       try {
         await this.#startRelay(brokers)
-        return
       } catch (error) {
         await this.#publisher?.close().catch(() => undefined)
         this.#publisher = undefined
-        if (attempt === 1 || attempt % 30 === 0) this.#logger.warn(`cannot reach Kafka yet: ${error instanceof Error ? error.message : String(error)}`)
-        await sleep(Math.min(5000, 250 * attempt), undefined, { signal: this.#stop.signal }).catch(() => undefined)
+        throw error
       }
     }
+    await retryUntilStopped('cannot reach Kafka yet', linearBackoff, start, {
+      signal: this.#stop.signal,
+      log: (message) => this.#logger.warn(message),
+      logEvery: 30,
+    })
   }
 
   async #startRelay(brokers: string[]): Promise<void> {
@@ -67,18 +70,5 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
       this.#logger.warn(message),
     )
     this.#relay.start()
-  }
-
-  async prune(batch = 5000): Promise<number> {
-    let deleted = 0
-    for (;;) {
-      const result = await this.#db.pool.query(
-        `DELETE FROM outbox WHERE id IN (
-           SELECT id FROM outbox WHERE published_at < now() - make_interval(hours => $1) ORDER BY id LIMIT $2)`,
-        [this.#config.outboxRetentionHours, batch],
-      )
-      deleted += result.rowCount ?? 0
-      if ((result.rowCount ?? 0) < batch) return deleted
-    }
   }
 }

@@ -17,6 +17,7 @@ COPY packages/audit/package.json packages/audit/
 COPY packages/audit-pg/package.json packages/audit-pg/
 COPY packages/pg/package.json packages/pg/
 COPY packages/invariants/package.json packages/invariants/
+COPY packages/jobs/package.json packages/jobs/
 COPY packages/testkit/package.json packages/testkit/
 COPY apps/api/package.json apps/api/
 COPY apps/psp/package.json apps/psp/

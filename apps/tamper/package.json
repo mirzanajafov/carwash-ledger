@@ -20,6 +20,7 @@
     "@carwash/contracts": "workspace:*",
     "@carwash/env": "workspace:*",
     "@carwash/http": "workspace:*",
+    "@carwash/jobs": "workspace:*",
     "@carwash/pg": "workspace:*",
     "pg": "catalog:",
     "zod": "catalog:"

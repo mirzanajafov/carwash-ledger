@@ -40,6 +40,16 @@ export function firstRow<R extends pg.QueryResultRow>(result: pg.QueryResult<R>,
   return row
 }
 
+export async function deleteInBatches(batch: number, deleteUpTo: (limit: number) => Promise<pg.QueryResult>): Promise<number> {
+  if (!Number.isSafeInteger(batch) || batch < 1) throw new RangeError(`the batch must be a positive integer, not ${batch}`)
+  let deleted = 0
+  for (;;) {
+    const { rowCount } = await deleteUpTo(batch)
+    deleted += rowCount ?? 0
+    if ((rowCount ?? 0) < batch) return deleted
+  }
+}
+
 export interface Checkout {
   readonly client: pg.PoolClient
   readonly failed: boolean

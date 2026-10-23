@@ -1,7 +1,7 @@
 import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
 import { requestHash } from '@carwash/http'
-import { firstRow, type Transaction } from '@carwash/pg'
+import { deleteInBatches, firstRow, type Transaction } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
@@ -187,16 +187,13 @@ export class IdempotencyService {
     if (deleted.rowCount === 0) await this.release(owned)
   }
 
-  async sweep(batch = 1000): Promise<number> {
-    let deleted = 0
-    for (;;) {
-      const result = await this.#db.pool.query(
+  sweep(): Promise<number> {
+    return deleteInBatches(1000, (limit) =>
+      this.#db.pool.query(
         `DELETE FROM idempotency_keys WHERE (client_id, key) IN (
            SELECT client_id, key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
-        [this.#config.idempotencyWindowSeconds, batch],
-      )
-      deleted += result.rowCount ?? 0
-      if ((result.rowCount ?? 0) < batch) return deleted
-    }
+        [this.#config.idempotencyWindowSeconds, limit],
+      ),
+    )
   }
 }

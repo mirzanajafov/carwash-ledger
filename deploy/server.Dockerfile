@@ -10,6 +10,7 @@ COPY packages/env/package.json packages/env/
 COPY packages/failpoints/package.json packages/failpoints/
 COPY packages/http/package.json packages/http/
 COPY packages/invariants/package.json packages/invariants/
+COPY packages/jobs/package.json packages/jobs/
 COPY packages/ledger/package.json packages/ledger/
 COPY packages/outbox/package.json packages/outbox/
 COPY packages/pg/package.json packages/pg/

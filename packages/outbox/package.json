@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@carwash/failpoints": "workspace:*",
+    "@carwash/jobs": "workspace:*",
     "@carwash/pg": "workspace:*",
     "@confluentinc/kafka-javascript": "1.10.1",
     "pg": "catalog:",

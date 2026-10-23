@@ -17,6 +17,7 @@
     "@carwash/failpoints": "workspace:*",
     "@carwash/http": "workspace:*",
     "@carwash/invariants": "workspace:*",
+    "@carwash/jobs": "workspace:*",
     "@carwash/ledger": "workspace:*",
     "@carwash/outbox": "workspace:*",
     "@carwash/pg": "workspace:*",
