@@ -1,16 +1,9 @@
 import { OpenedSessionView } from '@carwash/contracts'
-import { cookies } from 'next/headers'
 import * as z from 'zod/mini'
 import { callApi, readBody, refuse, relay, unreachable } from '@/lib/server'
-import { adminSession, cookieOptions, SESSION_COOKIE, sessionToken } from '@/lib/session'
+import { forgetSession, rememberSession, sessionToken } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
-
-export async function GET(): Promise<Response> {
-  const session = await adminSession()
-  if (!session && (await sessionToken())) (await cookies()).delete(SESSION_COOKIE)
-  return Response.json(session ? { admin: true, client: session.client, expires_at: session.expiresAt } : { admin: false })
-}
 
 const LoginBody = z.object({ key: z.string() })
 
@@ -22,7 +15,7 @@ export async function POST(request: Request): Promise<Response> {
     if (reply.status === 401 || reply.status === 403) return refuse(401, 'unauthorized', 'that key is not an admin key here')
     if (reply.status !== 201) return relay(reply)
     const session = OpenedSessionView.parse(reply.body)
-    ;(await cookies()).set(SESSION_COOKIE, session.token, cookieOptions(session.expires_at))
+    await rememberSession(session.token, session.expires_at)
     return Response.json({ admin: true, client: session.client, expires_at: session.expires_at }, { status: 201 })
   } catch {
     return unreachable()
@@ -31,7 +24,8 @@ export async function POST(request: Request): Promise<Response> {
 
 export async function DELETE(): Promise<Response> {
   const token = await sessionToken()
-  if (token) await callApi('DELETE', '/v1/admin/sessions/current', token).catch(() => null)
-  ;(await cookies()).delete(SESSION_COOKIE)
-  return Response.json({ admin: false })
+  await forgetSession()
+  if (token === null) return Response.json({ admin: false, revoked: false })
+  const reply = await callApi('DELETE', '/v1/admin/sessions/current', token).catch(() => null)
+  return Response.json({ admin: false, revoked: reply?.status === 200 || reply?.status === 401 })
 }
