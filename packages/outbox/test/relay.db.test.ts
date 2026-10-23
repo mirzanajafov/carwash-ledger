@@ -193,7 +193,7 @@ describe('relayOnce', () => {
 
 describe('Relay', () => {
   it('only waits its poll interval when no lane has work, so a steady stream never queues up', async () => {
-    const relay = new Relay(app, new Recorder(), { workers: 1, batch: 500, pollMs: 200 })
+    const relay = new Relay(app, new Recorder(), { workers: 1, batch: 500, pollMs: 200, idleMaxMs: 200 })
     relay.start()
     try {
       for (let n = 0; n < 100; n++) {
