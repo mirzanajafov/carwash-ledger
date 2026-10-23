@@ -15,7 +15,7 @@ import { fileExists, insertFile, settledSoFar, settlementsKey } from './settleme
 export type IngestOutcome = SettlementView['outcome']
 
 function failureIn(currency: string, error: unknown): Error {
-  return new Error(`${currency}: ${errorText(error)}`, { cause: error })
+  return new Error(`${currency}: ${errorText(error) || String(error)}`, { cause: error })
 }
 
 @Injectable()
@@ -94,8 +94,9 @@ export class SettlementIngestService {
 
   async #ingestClosedDays(currency: string, calendar: Extract<CalendarReply, { kind: 'answer' }>): Promise<number> {
     const { latest, first } = await settledSoFar(this.#db.pool, currency, calendar.daySeconds)
+    const start = latest === null ? (first ?? calendar.currentDay) : latest + 1
     let ingested = 0
-    for (let day = latest === null ? (first ?? calendar.currentDay) : latest + 1; day < calendar.currentDay; day++) {
+    for (let day = start; day < calendar.currentDay; day++) {
       const outcome = await this.ingest(day, currency)
       if (outcome === 'not_ready') break
       if (outcome === 'ingested') ingested++

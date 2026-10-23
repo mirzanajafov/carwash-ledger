@@ -10,7 +10,7 @@ import { ReconciliationService } from '../src/settlement/reconciliation.service.
 import { SettlementIngestService } from '../src/settlement/settlement-ingest.service.ts'
 import { settlementsKey } from '../src/settlement/settlements.repository.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
-import { count, invalid, startStack, type Stack } from './support.ts'
+import { count, invalid, startStack, testConfig, type Stack } from './support.ts'
 
 let stack: Stack
 let today: number
@@ -185,6 +185,22 @@ describe('settlement', () => {
     expect(await count(stack.admin, duplicates)).toBe(0)
   })
 
+  it('leaves the breaks alone when a reconcile that saw more files has written them', async () => {
+    const reconciliation = stack.app.get(ReconciliationService)
+    const files = await count(stack.admin, "SELECT count(*)::int AS n FROM settlement_files WHERE currency = 'EUR'")
+    const written = "SELECT count(*)::int AS n FROM recon_breaks WHERE detail = 'from a reconcile that saw more files'"
+    await stack.admin.query(
+      "INSERT INTO recon_breaks (currency, day, class, detail) VALUES ('EUR', $1, 'unknown_line', 'from a reconcile that saw more files')",
+      [await latestDay()],
+    )
+    await stack.admin.query("UPDATE recon_cursors SET files = $1 WHERE currency = 'EUR'", [files + 1])
+    await reconciliation.reconcile('EUR', 86_400)
+    expect(await count(stack.admin, written)).toBe(1)
+    await stack.admin.query("UPDATE recon_cursors SET files = $1 WHERE currency = 'EUR'", [files])
+    await reconciliation.reconcile('EUR', 86_400)
+    expect(await count(stack.admin, written)).toBe(0)
+  })
+
   it('refuses a query it cannot use, and says which parameter is wrong', async () => {
     const get = (path: string) => stack.call('GET', path, { as: 'admin' })
     expect(await get('/v1/reconciliation/days?limit=0')).toEqual(invalid('limit must be between 1 and 60'))
@@ -238,7 +254,7 @@ describe('settlement', () => {
       latest,
     ])
     await stack.psp.settlements.close(latest + 1)
-    const config = { ...stack.config, core: { ...stack.config.core, currencies: ['USD', 'EUR'] } }
+    const config = testConfig({ ...stack.env, CURRENCIES: 'USD,EUR' })
     await withWorker(
       latest + 2,
       async (worker) => {

@@ -142,6 +142,8 @@ export async function linesForMatching(db: Queryable, currency: string, from: nu
 
 export async function saveReconciliation(client: Transaction, currency: string, span: Window, breaks: readonly Break[], files: number): Promise<void> {
   await takeAdvisoryLock(client, settlementsKey(currency))
+  const { rows } = await client.query<{ files: number }>('SELECT files FROM recon_cursors WHERE currency = $1', [currency])
+  if ((rows[0]?.files ?? 0) > files) return
   await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, span.keepFrom, span.keepThrough])
   await client.query('INSERT INTO recon_cursors (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
     currency,

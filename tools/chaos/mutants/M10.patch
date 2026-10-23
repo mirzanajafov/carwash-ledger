@@ -1,6 +1,6 @@
 --- a/apps/api/src/settlement/settlement-ingest.service.ts
 +++ b/apps/api/src/settlement/settlement-ingest.service.ts
-@@ -42,8 +42,7 @@
+@@ -46,8 +46,7 @@
        await takeAdvisoryLock(client, settlementsKey(currency))
        if (await fileExists(client, file.id)) return 'already'
        const entries: EntryInput[] = [
