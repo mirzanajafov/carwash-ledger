@@ -54,8 +54,8 @@ const LINES_FOR_MATCHING = `
   WHERE f.currency = $1 AND f.day BETWEEN $2 AND $3
   ORDER BY f.day, l.line`
 
-export async function lockSettlements(client: Transaction, currency: string): Promise<void> {
-  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`settlements:${currency}`])
+export function settlementsKey(currency: string): string {
+  return `settlements:${currency}`
 }
 
 export async function fileExists(client: Transaction, id: string): Promise<boolean> {
@@ -100,13 +100,16 @@ export async function filesSoFar(db: Queryable, currency: string): Promise<{ cou
 }
 
 export async function recordReconciliation(client: Transaction, currency: string, files: number): Promise<void> {
-  await client.query('INSERT INTO reconciliation_runs (currency, files) VALUES ($1, $2)', [currency, files])
+  await client.query('INSERT INTO reconciliations (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
+    currency,
+    files,
+  ])
 }
 
 export async function reconciliationDue(db: Queryable, currency: string): Promise<boolean> {
   return firstRow(
     await db.query<{ due: boolean }>(
-      `SELECT (SELECT count(*) FROM settlement_files WHERE currency = $1) > coalesce((SELECT max(files) FROM reconciliation_runs WHERE currency = $1), 0) AS due`,
+      `SELECT (SELECT count(*) FROM settlement_files WHERE currency = $1) > coalesce((SELECT files FROM reconciliations WHERE currency = $1), 0) AS due`,
       [currency],
     ),
   ).due

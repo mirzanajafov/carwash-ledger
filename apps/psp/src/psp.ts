@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { HttpError } from '@carwash/http'
-import { deleteInBatches, firstRow, withTransaction, type Transaction } from '@carwash/pg'
+import { deleteInBatches, firstRow, takeAdvisoryLock, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Behaviour, Faults, OperationKind, TokenEffect } from './faults.ts'
 
@@ -140,7 +140,7 @@ export class Psp {
     const behaviour = this.#faults.behaviour(request.key, request.kind, request.token)
     if (behaviour.slowMs > 0) await sleep(behaviour.slowMs)
     return withTransaction(this.#pool, async (client): Promise<Answer> => {
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [request.key])
+      await takeAdvisoryLock(client, request.key)
       const stored = await client.query<{ request_hash: Buffer; http_status: number; response: unknown }>(
         `SELECT request_hash, http_status, response FROM idempotency_keys
          WHERE key = $1 AND created_at > now() - make_interval(secs => $2)`,

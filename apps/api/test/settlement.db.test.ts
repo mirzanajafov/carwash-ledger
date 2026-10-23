@@ -1,12 +1,14 @@
 import { BreakList, PaymentView, SettlementDayView, SettlementView } from '@carwash/contracts'
 import { checkLedger, checkSettlement, violations } from '@carwash/invariants'
-import { firstRow } from '@carwash/pg'
+import { firstRow, inRollback, takeAdvisoryLock, withTransaction } from '@carwash/pg'
 import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp'
+import type { INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PspClient } from '../src/psp/psp.client.ts'
 import { ReconciliationService } from '../src/settlement/reconciliation.service.ts'
 import { SettlementIngestService } from '../src/settlement/settlement-ingest.service.ts'
+import { settlementsKey } from '../src/settlement/settlements.repository.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
 import { invalid, startStack, type Stack } from './support.ts'
 
@@ -33,15 +35,22 @@ async function latestDay(): Promise<number> {
   return firstRow(await stack.admin.query<{ day: number }>('SELECT max(day)::int AS day FROM settlement_files')).day
 }
 
-async function withWorker(currentDay: number, work: (ingest: SettlementIngestService) => Promise<void>): Promise<void> {
+async function withWorker(currentDay: number, work: (worker: INestApplicationContext) => Promise<void>): Promise<void> {
   const calendar = vi.spyOn(PspClient.prototype, 'calendar').mockResolvedValue({ kind: 'answer', daySeconds: 86_400, currentDay })
   const worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
   try {
-    await work(worker.get(SettlementIngestService))
+    await work(worker)
   } finally {
     calendar.mockRestore()
     await worker.close()
   }
+}
+
+async function waitingForTheLock(): Promise<number> {
+  const waiting = await stack.admin.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+  )
+  return firstRow(waiting).n
 }
 
 function only(fault: SettlementFault) {
@@ -130,16 +139,25 @@ describe('settlement', () => {
     expect(listed.data.map((b) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
   })
 
-  it('ingests a file once and keeps one copy of each break when two ingests of it race', async () => {
+  it('makes an ingest wait for one in progress of the same currency, so the second answers already and each break is kept once', async () => {
     const day = (await latestDay()) + 1
     stack.psp.faults.plan = only('wrongAmount')
-    const payment = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(1500) })).body)
-    await stack.psp.settlements.close(day)
-    const replies = await Promise.all([1, 2].map(() => stack.call('POST', `/v1/settlements/${day}/ingest`, { as: 'admin' })))
-    stack.psp.faults.plan = NO_FAULTS
-    expect(replies.map((reply) => reply.status)).toEqual([201, 201])
-    expect(replies.map((reply) => SettlementView.parse(reply.body).outcome).sort()).toEqual(['already', 'ingested'])
-    expect(await breaksFor(payment.id)).toEqual(['wrong_amount'])
+    try {
+      const payment = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(1500) })).body)
+      await stack.psp.settlements.close(day)
+      let replies: Promise<Awaited<ReturnType<Stack['call']>>[]> = Promise.resolve([])
+      await inRollback(stack.admin, async (client) => {
+        await takeAdvisoryLock(client, settlementsKey('EUR'))
+        replies = Promise.all([1, 2].map(() => stack.call('POST', `/v1/settlements/${day}/ingest`, { as: 'admin' })))
+        await vi.waitFor(async () => expect(await waitingForTheLock()).toBe(2), { timeout: 10_000 })
+      })
+      const answered = await replies
+      expect(answered.map((reply) => reply.status)).toEqual([201, 201])
+      expect(answered.map((reply) => SettlementView.parse(reply.body).outcome).sort()).toEqual(['already', 'ingested'])
+      expect(await breaksFor(payment.id)).toEqual(['wrong_amount'])
+    } finally {
+      stack.psp.faults.plan = NO_FAULTS
+    }
   })
 
   it('refuses a query it cannot use, and says which parameter is wrong', async () => {
@@ -159,7 +177,8 @@ describe('settlement', () => {
     const latest = await latestDay()
     const days = [latest + 1, latest + 2]
     for (const day of days) await stack.psp.settlements.close(day)
-    await withWorker(latest + 3, async (ingest) => {
+    await withWorker(latest + 3, async (worker) => {
+      const ingest = worker.get(SettlementIngestService)
       expect(await ingest.catchUp()).toBe(2)
       const { rows } = await stack.admin.query<{ day: number }>('SELECT day::int AS day FROM settlement_files WHERE day = ANY($1) ORDER BY day', [days])
       expect(rows.map((row) => row.day)).toEqual(days)
@@ -172,8 +191,9 @@ describe('settlement', () => {
     await stack.psp.settlements.close(latest + 1)
     const reconcile = vi.spyOn(ReconciliationService.prototype, 'reconcile').mockRejectedValueOnce(new Error('the database went away'))
     try {
-      await withWorker(latest + 2, async (ingest) => {
-        await expect(ingest.catchUp()).rejects.toThrow('the database went away')
+      await withWorker(latest + 2, async (worker) => {
+        const ingest = worker.get(SettlementIngestService)
+        await expect(ingest.catchUp()).rejects.toThrow('EUR: the database went away')
         expect(await ingest.catchUp()).toBe(0)
         expect(reconcile).toHaveBeenCalledTimes(2)
         expect(await ingest.catchUp()).toBe(0)
@@ -182,5 +202,22 @@ describe('settlement', () => {
     } finally {
       reconcile.mockRestore()
     }
+  })
+
+  it('makes a reconcile wait for an ingest in progress, and match with the file it brought', async () => {
+    const day = (await latestDay()) + 1
+    await withWorker(day + 1, async (worker) => {
+      let reconciled: ReturnType<ReconciliationService['reconcile']> = Promise.resolve(undefined)
+      await withTransaction(stack.admin, async (client) => {
+        await takeAdvisoryLock(client, settlementsKey('EUR'))
+        reconciled = worker.get(ReconciliationService).reconcile('EUR', 86_400)
+        await vi.waitFor(async () => expect(await waitingForTheLock()).toBe(1), { timeout: 10_000 })
+        await client.query(`INSERT INTO settlement_files (id, day, currency, lines, gross, fee, net) VALUES ($1, $2, 'EUR', 0, 0, 0, 0)`, [
+          `stl_EUR_${day}`,
+          day,
+        ])
+      })
+      expect((await reconciled)?.through).toBe(day)
+    })
   })
 })

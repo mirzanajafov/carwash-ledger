@@ -79,10 +79,13 @@ export async function checkout(pool: pg.Pool): Promise<Checkout> {
   }
 }
 
-async function transaction<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>, options: TransactionOptions, end: 'COMMIT' | 'ROLLBACK'): Promise<T> {
-  const lease = await checkout(pool)
-  const { client } = lease
-  let broken = false
+async function within<T>(
+  client: pg.ClientBase,
+  work: (client: Transaction) => Promise<T>,
+  options: TransactionOptions,
+  end: 'COMMIT' | 'ROLLBACK',
+  onBroken: () => void,
+): Promise<T> {
   try {
     await client.query(begin(options))
     const value = await work(opened(client))
@@ -90,10 +93,18 @@ async function transaction<T>(pool: pg.Pool, work: (client: Transaction) => Prom
     if (ended.command !== end) throw new Error('the transaction was rolled back at COMMIT because a statement in it had failed')
     return value
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {
+    await client.query('ROLLBACK').catch(onBroken)
+    throw error
+  }
+}
+
+async function transaction<T>(pool: pg.Pool, work: (client: Transaction) => Promise<T>, options: TransactionOptions, end: 'COMMIT' | 'ROLLBACK'): Promise<T> {
+  const lease = await checkout(pool)
+  let broken = false
+  try {
+    return await within(lease.client, work, options, end, () => {
       broken = true
     })
-    throw error
   } finally {
     lease.release(broken)
   }
@@ -109,4 +120,30 @@ export function inRollback<T>(pool: pg.Pool, work: (client: Transaction) => Prom
 
 export function inSnapshot<T>(pool: pg.Pool, read: (client: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(pool, read, { isolation: 'repeatable read', readOnly: true })
+}
+
+export function inTransaction<T>(client: pg.ClientBase, work: (client: Transaction) => Promise<T>): Promise<T> {
+  return within(client, work, {}, 'COMMIT', ignore)
+}
+
+export async function takeAdvisoryLock(client: Transaction, key: string): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key])
+}
+
+export async function withAdvisoryLock<T>(pool: pg.Pool, key: string, work: (client: pg.ClientBase) => Promise<T>): Promise<T> {
+  const lease = await checkout(pool)
+  let locked = false
+  try {
+    await lease.client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [key])
+    locked = true
+    return await work(lease.client)
+  } finally {
+    const unlocked =
+      locked &&
+      (await lease.client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [key]).then(
+        () => true,
+        () => false,
+      ))
+    lease.release(!unlocked)
+  }
 }

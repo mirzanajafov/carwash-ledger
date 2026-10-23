@@ -1,9 +1,7 @@
-diff --git a/apps/api/src/settlement/settlement-ingest.service.ts b/apps/api/src/settlement/settlement-ingest.service.ts
-index 7003fba..ee4ff9b 100644
 --- a/apps/api/src/settlement/settlement-ingest.service.ts
 +++ b/apps/api/src/settlement/settlement-ingest.service.ts
-@@ -41,8 +41,7 @@ export class SettlementIngestService {
-       await lockSettlements(client, currency)
+@@ -42,8 +42,7 @@
+       await takeAdvisoryLock(client, settlementsKey(currency))
        if (await fileExists(client, file.id)) return 'already'
        const entries: EntryInput[] = [
 -        { accountId: accounts.bank.id, amount: file.net },

@@ -449,14 +449,11 @@ model ReconBreak {
   @@map("recon_breaks")
 }
 
-model ReconciliationRun {
-  id        BigInt   @id @default(autoincrement())
-  currency  String   @db.Char(3)
-  files     Int
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+model Reconciliation {
+  currency String @id @db.Char(3)
+  files    Int
 
-  @@index([currency, files])
-  @@map("reconciliation_runs")
+  @@map("reconciliations")
 }
 
 model AuditQueue {
