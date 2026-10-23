@@ -2,8 +2,8 @@
 
 import { WeatherView } from '@carwash/contracts'
 import { useEffect, useState } from 'react'
-import { postJson, refusal, useAction } from '@/lib/use-action'
-import { useNow } from '@/lib/use-live'
+import { requestJson, refusal, useAction } from '@/lib/use-action'
+import { useNow } from '@/lib/use-now'
 import { describePlan, PRESETS, secondsLeft, type Preset } from '@/lib/weather'
 
 function clock(seconds: number): string {
@@ -35,7 +35,7 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
 
   function send(name: Preset['name'] | 'custom', payload: unknown) {
     run(name, async () => {
-      const answer = await postJson('/api/weather', payload)
+      const answer = await requestJson('POST', '/api/weather', payload)
       if (answer.ok) setState(WeatherView.parse(answer.body))
       return refusal(answer)
     })

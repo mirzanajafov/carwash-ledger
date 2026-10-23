@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
 import { CRASH_POINTS, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
-import { postJson, refusal, useAction } from '@/lib/use-action'
+import { readAnswer, refusal, requestJson, useAction } from '@/lib/use-action'
 import { ChecksTable } from './checks-table'
 
 function seconds(ms: number): string {
@@ -81,7 +81,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
     setSteps([])
     run('pull', async () => {
       const response = await fetch('/api/plug', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ failpoint: point }) })
-      if (!response.ok || !response.body) return `The web server answered ${response.status}.`
+      if (!response.ok || response.body === null) return refusal(await readAnswer(response))
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
       let buffer = ''
       for (;;) {
@@ -97,7 +97,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
 
   function check() {
     run('check', async () => {
-      const answer = await postJson('/api/checks')
+      const answer = await requestJson('POST', '/api/checks')
       if (!answer.ok) return refusal(answer)
       const checks = InvariantChecksView.parse(answer.body)
       setChecks({ ms: checks.ms, scope: checks.payment_checks, results: checks.results })

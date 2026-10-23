@@ -3,8 +3,12 @@ import { WitnessKeyView } from '@carwash/contracts'
 import * as z from 'zod/mini'
 import type { Reply } from './plug'
 
+function baseUrl(name: string): string | undefined {
+  return process.env[name]?.replace(/\/+$/, '') || undefined
+}
+
 export function apiUrl(): string {
-  return (process.env.API_URL ?? 'http://127.0.0.1:3140').replace(/\/+$/, '')
+  return baseUrl('API_URL') ?? 'http://127.0.0.1:3140'
 }
 
 function secret(name: string): string {
@@ -38,7 +42,7 @@ interface Upstream {
 }
 
 async function send(upstream: Upstream, method: string, path: string, options: CallOptions): Promise<Reply> {
-  const response = await fetch(`${upstream.url.replace(/\/+$/, '')}${path}`, {
+  const response = await fetch(`${upstream.url}${path}`, {
     method,
     cache: 'no-store',
     headers: {
@@ -65,32 +69,24 @@ export function callApi(method: string, path: string, key: string | null, option
   return send({ url: apiUrl(), token: key, timeoutMs: 15_000 }, method, path, options)
 }
 
-export async function callTamper(method: string, path: string, body?: unknown): Promise<Reply> {
-  const url = process.env.TAMPER_URL
+export async function callTamper(method: string, path: string, options: CallOptions = {}): Promise<Reply> {
+  const url = baseUrl('TAMPER_URL')
   if (!url) return notConfigured('the tamper service')
-  return send({ url, token: secret('TAMPER_TOKEN'), timeoutMs: 30_000 }, method, path, { body })
+  return send({ url, token: secret('TAMPER_TOKEN'), timeoutMs: 30_000 }, method, path, options)
 }
 
-export async function callPsp(method: string, path: string, body?: unknown): Promise<Reply> {
-  const url = process.env.PSP_URL
+export async function callPsp(method: string, path: string, options: CallOptions = {}): Promise<Reply> {
+  const url = baseUrl('PSP_URL')
   if (!url) return notConfigured('the bank')
-  return send({ url, token: secret('PSP_ADMIN_KEY'), timeoutMs: 5000 }, method, path, { body })
-}
-
-export function witnessUrl(): string | null {
-  return process.env.WITNESS_URL ? process.env.WITNESS_URL.replace(/\/+$/, '') : null
+  return send({ url, token: secret('PSP_ADMIN_KEY'), timeoutMs: 5000 }, method, path, options)
 }
 
 export async function witnessKey(): Promise<string | null> {
-  const url = witnessUrl()
+  const url = baseUrl('WITNESS_URL')
   if (!url) return null
-  try {
-    const response = await fetch(`${url}/v1/key`, { cache: 'no-store', signal: AbortSignal.timeout(3000) })
-    if (!response.ok) return null
-    return WitnessKeyView.parse(await response.json()).public_key
-  } catch {
-    return null
-  }
+  const reply = await send({ url, token: null, timeoutMs: 3000 }, 'GET', '/v1/key', {}).catch(() => null)
+  if (reply?.status !== 200) return null
+  return WitnessKeyView.safeParse(reply.body).data?.public_key ?? null
 }
 
 export async function readBody<T>(request: Request, schema: z.ZodMiniType<T>): Promise<T | undefined> {

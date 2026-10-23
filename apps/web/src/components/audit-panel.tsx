@@ -1,12 +1,11 @@
 'use client'
 
-import { errorOf } from '@carwash/contracts'
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { AuditState, EMPTY, reduce } from '@/lib/audit'
-import { postJson, refusal, useAction } from '@/lib/use-action'
+import { requestJson, refusal, useAction } from '@/lib/use-action'
 import { isOpen } from '@/lib/verification'
 import { checkJournal, JournalEvidence, type Verdict } from '@/lib/verify-journal'
-import { Mark as Drawn } from './mark'
+import { Mark } from './mark'
 import { VerificationRun } from './verification-run'
 
 const CLASSES = [
@@ -22,23 +21,14 @@ const LABELS: Record<Verdict['name'], string> = {
   inclusion: 'The leaf is in the signed tree',
 }
 
-function Mark({ ok }: { ok: boolean | null }) {
-  if (ok === null) return <span className="text-warn">?</span>
-  return (
-    <span className={ok ? 'text-ok' : 'text-bad'}>
-      <Drawn ok={ok} label={ok ? 'holds' : 'fails'} />
-    </span>
-  )
-}
-
 export function AuditPanel() {
   const [{ server, seq }, dispatch] = useReducer(reduce, EMPTY)
   const { busy, note, run } = useAction<'restore' | 'tamper' | 'check' | 'verify'>()
   const [verdicts, setVerdicts] = useState<{ seq: number; journalId: string; verdicts: Verdict[] } | null>(null)
 
   const refresh = useCallback(async () => {
-    const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    const state = response.ok ? AuditState.safeParse(await response.json()) : undefined
+    const answer = await requestJson('GET', '/api/audit/state').catch(() => null)
+    const state = answer?.ok ? AuditState.safeParse(answer.body) : undefined
     if (state?.success) dispatch({ type: 'loaded', server: state.data })
   }, [])
 
@@ -53,7 +43,7 @@ export function AuditPanel() {
   function act(label: 'restore' | 'tamper' | 'verify', url: string, body?: unknown) {
     run(label, async () => {
       try {
-        return refusal(await postJson(url, body))
+        return refusal(await requestJson('POST', url, body))
       } finally {
         void refresh()
       }
@@ -62,16 +52,15 @@ export function AuditPanel() {
 
   function check() {
     setVerdicts(null)
+    const witnessKey = server?.witnessKey
     run('check', async () => {
-      const response = await fetch(`/api/audit/seq/${encodeURIComponent(seq)}`, { cache: 'no-store' })
-      const answer: unknown = await response.json()
-      if (!response.ok || !server?.witnessKey) {
-        return errorOf(answer)?.message ?? (server?.witnessKey ? `The web server answered ${response.status}.` : 'The witness key is not available.')
-      }
-      const evidence = JournalEvidence.safeParse(answer)
+      if (!witnessKey) return 'The witness key is not available.'
+      const answer = await requestJson('GET', `/api/audit/seq/${encodeURIComponent(seq)}`)
+      if (!answer.ok) return refusal(answer)
+      const evidence = JournalEvidence.safeParse(answer.body)
       if (!evidence.success) return 'That answer did not have the shape of a journal with its proof.'
       const input = evidence.data
-      setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: server.witnessKey }) })
+      setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey }) })
       return undefined
     })
   }

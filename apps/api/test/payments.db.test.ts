@@ -284,22 +284,27 @@ describe('payments API', () => {
 
   it('does not apply a PSP answer that does not match the request, and records it', async () => {
     const liar: Server = createServer((request, response) => {
-      void text(request).then((raw) => {
-        const body = PspRequest.parse(JSON.parse(raw))
-        response.writeHead(200, { 'content-type': 'application/json' }).end(
-          JSON.stringify({
-            id: `op_${randomUUID()}`,
-            object: 'operation',
-            idempotency_key: request.headers['idempotency-key'],
-            kind: 'authorize',
-            status: 'succeeded',
-            reason: null,
-            amount: body.amount + 100,
-            currency: body.currency,
-            charge: { id: `ch_${randomUUID()}`, authorized_amount: body.amount + 100 },
-          }),
-        )
-      })
+      void text(request)
+        .then((raw) => {
+          const body = PspRequest.parse(JSON.parse(raw))
+          response.writeHead(200, { 'content-type': 'application/json' }).end(
+            JSON.stringify({
+              id: `op_${randomUUID()}`,
+              object: 'operation',
+              idempotency_key: request.headers['idempotency-key'],
+              kind: 'authorize',
+              status: 'succeeded',
+              reason: null,
+              amount: body.amount + 100,
+              currency: body.currency,
+              charge: { id: `ch_${randomUUID()}`, authorized_amount: body.amount + 100 },
+            }),
+          )
+        })
+        .catch((error: unknown) => {
+          response.destroy()
+          throw error
+        })
     })
     liar.listen(0, '127.0.0.1')
     await once(liar, 'listening')

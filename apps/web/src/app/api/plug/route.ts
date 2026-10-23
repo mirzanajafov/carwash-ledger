@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { HealthView } from '@carwash/contracts'
-import { CRASH_POINTS, pullThePlug, type CrashPoint } from '@/lib/plug'
 import * as z from 'zod/mini'
+import { CRASH_POINTS, pullThePlug, type CrashPoint } from '@/lib/plug'
 import { callApi, clientKey, demoMerchant, readBody, refuse } from '@/lib/server'
 import { credential } from '@/lib/session'
 

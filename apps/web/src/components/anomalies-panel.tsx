@@ -4,7 +4,7 @@ import type { AnomalyView } from '@carwash/contracts'
 import { useRouter } from 'next/navigation'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
-import { postJson, refusal, useAction } from '@/lib/use-action'
+import { requestJson, refusal, useAction } from '@/lib/use-action'
 
 function when(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
@@ -26,7 +26,7 @@ export function AnomaliesPanel({ open, resolved }: { open: AnomalyView[]; resolv
 
   function act(id: string, action: 'accept' | 'dispute') {
     run(`${id}:${action}`, async () => {
-      const answer = await postJson(`/api/admin/anomalies/${id}/${action}`)
+      const answer = await requestJson('POST', `/api/admin/anomalies/${id}/${action}`)
       router.refresh()
       return refusal(answer)
     })

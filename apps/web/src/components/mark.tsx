@@ -1,6 +1,7 @@
-export function Mark({ ok, label }: { ok: boolean; label?: string }) {
+export function Mark({ ok }: { ok: boolean | null }) {
+  if (ok === null) return <span className="text-warn">?</span>
   return (
-    <svg viewBox="0 0 16 16" className="size-4" aria-label={label} aria-hidden={label === undefined}>
+    <svg viewBox="0 0 16 16" className={`size-4 ${ok ? 'text-ok' : 'text-bad'}`} aria-label={ok ? 'holds' : 'fails'}>
       {ok ? (
         <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" />
       ) : (

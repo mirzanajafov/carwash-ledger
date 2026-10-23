@@ -83,10 +83,15 @@ beforeAll(async () => {
   cleanup.defer(() => sql.end())
   received = []
   const receiver = createServer((request, response) => {
-    void text(request).then((body) => {
-      received.push({ signature: String(request.headers['psp-signature']), body })
-      response.writeHead(answerWith(body)).end()
-    })
+    void text(request)
+      .then((body) => {
+        received.push({ signature: String(request.headers['psp-signature']), body })
+        response.writeHead(answerWith(body)).end()
+      })
+      .catch((error: unknown) => {
+        response.destroy()
+        throw error
+      })
   })
   receiver.listen(0, '127.0.0.1')
   await once(receiver, 'listening')

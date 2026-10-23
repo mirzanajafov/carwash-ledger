@@ -4,5 +4,7 @@ import { credential } from '@/lib/session'
 export const dynamic = 'force-dynamic'
 
 export async function POST(): Promise<Response> {
-  return callApi('POST', '/v1/admin/verify', await credential()).then(relay, unreachable)
+  return credential()
+    .then((key) => callApi('POST', '/v1/admin/verify', key))
+    .then(relay, unreachable)
 }

@@ -1,7 +1,7 @@
 import { OpenedSessionView } from '@carwash/contracts'
 import { cookies } from 'next/headers'
 import * as z from 'zod/mini'
-import { callApi, readBody, refuse, unreachable } from '@/lib/server'
+import { callApi, readBody, refuse, relay, unreachable } from '@/lib/server'
 import { adminSession, cookieOptions, SESSION_COOKIE, sessionToken } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +20,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const reply = await callApi('POST', '/v1/admin/sessions', key)
     if (reply.status === 401 || reply.status === 403) return refuse(401, 'unauthorized', 'that key is not an admin key here')
-    if (reply.status !== 201) return Response.json(reply.body, { status: reply.status })
+    if (reply.status !== 201) return relay(reply)
     const session = OpenedSessionView.parse(reply.body)
     ;(await cookies()).set(SESSION_COOKIE, session.token, cookieOptions(session.expires_at))
     return Response.json({ admin: true, client: session.client, expires_at: session.expires_at }, { status: 201 })

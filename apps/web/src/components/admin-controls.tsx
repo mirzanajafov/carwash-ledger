@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type SubmitEvent } from 'react'
-import { postJson, refusal, useAction } from '@/lib/use-action'
+import { requestJson, refusal, useAction } from '@/lib/use-action'
 
 export function AdminLogin() {
   const router = useRouter()
@@ -12,7 +12,7 @@ export function AdminLogin() {
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     run('login', async () => {
-      const answer = await postJson('/api/admin/session', { key })
+      const answer = await requestJson('POST', '/api/admin/session', { key })
       if (answer.ok) {
         setKey('')
         router.refresh()
@@ -50,24 +50,27 @@ export function AdminLogin() {
 
 export function AdminLogout() {
   const router = useRouter()
-  const { busy, run } = useAction<'logout'>()
+  const { busy, note, run } = useAction<'logout'>()
 
   function logout() {
     run('logout', async () => {
-      await fetch('/api/admin/session', { method: 'DELETE' })
-      router.refresh()
-      return undefined
+      const answer = await requestJson('DELETE', '/api/admin/session')
+      if (answer.ok) router.refresh()
+      return refusal(answer)
     })
   }
 
   return (
-    <button
-      type="button"
-      onClick={logout}
-      disabled={busy !== null}
-      className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50"
-    >
-      {busy ? 'Logging out…' : 'Log out'}
-    </button>
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        onClick={logout}
+        disabled={busy !== null}
+        className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50"
+      >
+        {busy ? 'Logging out…' : 'Log out'}
+      </button>
+      {note ? <p className="text-sm text-warn">{note}</p> : null}
+    </div>
   )
 }
