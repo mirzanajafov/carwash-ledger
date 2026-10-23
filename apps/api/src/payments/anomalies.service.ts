@@ -7,7 +7,7 @@ import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
-import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
+import { answeredAmount, checkAnswer, type AttemptKind, type ExpectedAnswer, type PspAnswer } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { pspUnavailable } from '../psp/psp.errors.ts'
 import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyAttempt, type AnomalyRow } from './anomalies.repository.ts'
@@ -19,8 +19,14 @@ const ACCEPTABLE: ReadonlySet<AttemptKind> = new Set(['capture', 'refund', 'payo
 
 type Acceptance = { ok: true; amount: bigint; answer: PspAnswer } | { ok: false; reason: string }
 
-function pendingMismatch(row: AnomalyRow): row is AnomalyRow & { attempt: AnomalyAttempt } {
+type PendingMismatch = AnomalyRow & { attempt: AnomalyAttempt }
+
+function pendingMismatch(row: AnomalyRow): row is PendingMismatch {
   return row.kind === 'answer_mismatch' && row.resolved_at === null && row.attempt?.status === 'pending' && ACCEPTABLE.has(row.attempt.kind)
+}
+
+function expectedFor({ attempt, charge_id }: PendingMismatch): ExpectedAnswer {
+  return { attemptId: attempt.id, kind: attempt.kind, amount: BigInt(attempt.amount), currency: attempt.currency, chargeId: charge_id }
 }
 
 function acceptance(expected: ExpectedAnswer, body: unknown): Acceptance {
@@ -34,9 +40,7 @@ function acceptance(expected: ExpectedAnswer, body: unknown): Acceptance {
 }
 
 export function acceptable(row: AnomalyRow): boolean {
-  if (!pendingMismatch(row)) return false
-  const { id, kind, amount, currency } = row.attempt
-  return acceptance({ attemptId: id, kind, amount: BigInt(amount), currency, chargeId: row.charge_id }, row.details?.answer).ok
+  return pendingMismatch(row) && acceptance(expectedFor(row), row.details?.answer).ok
 }
 
 function refuse(message: string): DomainError {
@@ -74,7 +78,7 @@ export class AnomaliesService {
     const reply = await this.#psp.pull(attempt.id)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
     if (reply.kind === 'none') throw refuse('the bank has no record of this operation')
-    const accepted = acceptance(expectedFrom(await this.#attempts.callFor(attempt)), reply.body)
+    const accepted = acceptance(expectedFor(row), reply.body)
     if (!accepted.ok) throw refuse(accepted.reason)
     const { amount, answer } = accepted
     await this.#db.transaction(async (client) => {

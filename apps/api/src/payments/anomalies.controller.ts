@@ -2,9 +2,13 @@ import { Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/comm
 import type { AnomalyList, AnomalyView } from '@carwash/contracts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
 import { AnomaliesQuery, AnomalyParams } from '../http/dto.ts'
-import { answeredAmount } from '../psp/answers.ts'
 import type { AnomalyRow } from './anomalies.repository.ts'
 import { AnomaliesService, acceptable } from './anomalies.service.ts'
+
+function bankAmount(row: AnomalyRow): string | null {
+  const amount = row.details?.answer?.amount
+  return Number.isSafeInteger(amount) ? String(amount) : null
+}
 
 function view(row: AnomalyRow): AnomalyView {
   return {
@@ -14,7 +18,7 @@ function view(row: AnomalyRow): AnomalyView {
     created_at: row.created_at.toISOString(),
     problems: row.details?.problems ?? [],
     attempt: row.attempt,
-    bank_amount: answeredAmount(row.details?.answer)?.toString() ?? null,
+    bank_amount: bankAmount(row),
     payment_id: row.payment_id,
     refund_id: row.refund_id,
     payout_id: row.payout_id,
