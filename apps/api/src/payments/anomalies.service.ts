@@ -18,7 +18,9 @@ import { correctRefundAmount } from './payments.repository.ts'
 const ACCEPTABLE: ReadonlySet<AttemptKind> = new Set(['capture', 'refund', 'payout'])
 
 export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt: AnomalyAttempt } {
-  return row.kind === 'answer_mismatch' && row.resolved_at === null && row.attempt?.status === 'pending' && ACCEPTABLE.has(row.attempt.kind)
+  if (row.kind !== 'answer_mismatch' || row.resolved_at !== null || row.attempt?.status !== 'pending' || !ACCEPTABLE.has(row.attempt.kind)) return false
+  const answered = answeredAmount(row.details?.answer)
+  return answered !== undefined && answered <= BigInt(row.attempt.amount)
 }
 
 function refuse(message: string): DomainError {
