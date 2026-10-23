@@ -139,17 +139,17 @@ describe('settlement', () => {
     expect(listed.data.map((b) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
   })
 
-  it('makes an ingest wait for one in progress of the same currency, so the second answers already and each break is kept once', async () => {
+  it('makes an ingest wait for one in progress of the same currency, so the second answers already', async () => {
     const day = (await latestDay()) + 1
     stack.psp.faults.plan = only('wrongAmount')
     try {
       const payment = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(1500) })).body)
       await stack.psp.settlements.close(day)
-      let replies: Promise<Awaited<ReturnType<Stack['call']>>[]> = Promise.resolve([])
-      await inRollback(stack.admin, async (client) => {
+      const { replies } = await inRollback(stack.admin, async (client) => {
         await takeAdvisoryLock(client, settlementsKey('EUR'))
-        replies = Promise.all([1, 2].map(() => stack.call('POST', `/v1/settlements/${day}/ingest`, { as: 'admin' })))
+        const replies = Promise.all([1, 2].map(() => stack.call('POST', `/v1/settlements/${day}/ingest`, { as: 'admin' })))
         await vi.waitFor(async () => expect(await waitingForTheLock()).toBe(2), { timeout: 10_000 })
+        return { replies }
       })
       const answered = await replies
       expect(answered.map((reply) => reply.status)).toEqual([201, 201])
@@ -158,6 +158,21 @@ describe('settlement', () => {
     } finally {
       stack.psp.faults.plan = NO_FAULTS
     }
+  })
+
+  it('makes a reconcile wait for another one of the same currency to write, so each break is kept once', async () => {
+    const reconciliation = stack.app.get(ReconciliationService)
+    const duplicates = `SELECT count(*)::int AS n FROM (
+      SELECT 1 FROM recon_breaks GROUP BY currency, day, class, file_id, line, journal_ref, attempt_id, detail HAVING count(*) > 1) d`
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM recon_breaks')).toBeGreaterThan(0)
+    const { reconciled } = await inRollback(stack.admin, async (client) => {
+      await takeAdvisoryLock(client, settlementsKey('EUR'))
+      const reconciled = Promise.all([1, 2].map(() => reconciliation.reconcile('EUR', 86_400)))
+      await vi.waitFor(async () => expect(await waitingForTheLock()).toBe(2), { timeout: 10_000 })
+      return { reconciled }
+    })
+    await reconciled
+    expect(await count(stack.admin, duplicates)).toBe(0)
   })
 
   it('refuses a query it cannot use, and says which parameter is wrong', async () => {
@@ -202,20 +217,5 @@ describe('settlement', () => {
     } finally {
       reconcile.mockRestore()
     }
-  })
-
-  it('keeps what a newer reconcile wrote when an older one finishes after it', async () => {
-    const day = await latestDay()
-    const written = "INSERT INTO recon_breaks (currency, day, class, detail) VALUES ('EUR', $1, 'unknown_line', 'written by a newer reconcile')"
-    await stack.admin.query(written, [day])
-    await stack.admin.query("UPDATE reconciliations SET read_at = now() + interval '1 hour' WHERE currency = 'EUR'")
-    try {
-      await stack.app.get(ReconciliationService).reconcile('EUR', 86_400)
-      expect(await count(stack.admin, "SELECT count(*)::int AS n FROM recon_breaks WHERE detail = 'written by a newer reconcile'")).toBe(1)
-    } finally {
-      await stack.admin.query("UPDATE reconciliations SET read_at = now() WHERE currency = 'EUR'")
-    }
-    await stack.app.get(ReconciliationService).reconcile('EUR', 86_400)
-    expect(await count(stack.admin, "SELECT count(*)::int AS n FROM recon_breaks WHERE detail = 'written by a newer reconcile'")).toBe(0)
   })
 })

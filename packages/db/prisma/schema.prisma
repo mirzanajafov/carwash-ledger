@@ -449,12 +449,11 @@ model ReconBreak {
   @@map("recon_breaks")
 }
 
-model Reconciliation {
-  currency String   @id @db.Char(3)
+model ReconCursor {
+  currency String @id @db.Char(3)
   files    Int
-  readAt   DateTime @map("read_at") @db.Timestamptz(6)
 
-  @@map("reconciliations")
+  @@map("recon_cursors")
 }
 
 model AuditQueue {

@@ -90,35 +90,26 @@ export async function insertFile(client: Transaction, file: ParsedFile, journalI
   )
 }
 
-export interface FilesSoFar {
-  count: number
-  latest: number | null
-  readAt: string
-}
-
-export async function filesSoFar(db: Queryable, currency: string): Promise<FilesSoFar> {
+export async function filesSoFar(db: Queryable, currency: string): Promise<{ count: number; latest: number | null }> {
   return firstRow(
-    await db.query<FilesSoFar>(
-      'SELECT count(*)::int AS count, max(day)::int AS latest, clock_timestamp()::text AS "readAt" FROM settlement_files WHERE currency = $1',
+    await db.query<{ count: number; latest: number | null }>(
+      'SELECT count(*)::int AS count, max(day)::int AS latest FROM settlement_files WHERE currency = $1',
       [currency],
     ),
   )
 }
 
-export async function recordReconciliation(client: Transaction, currency: string, files: FilesSoFar): Promise<boolean> {
-  const recorded = await client.query(
-    `INSERT INTO reconciliations (currency, files, read_at) VALUES ($1, $2, $3)
-     ON CONFLICT (currency) DO UPDATE SET files = excluded.files, read_at = excluded.read_at
-     WHERE reconciliations.read_at < excluded.read_at`,
-    [currency, files.count, files.readAt],
-  )
-  return recorded.rowCount === 1
+export async function recordReconciliation(client: Transaction, currency: string, files: number): Promise<void> {
+  await client.query('INSERT INTO recon_cursors (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
+    currency,
+    files,
+  ])
 }
 
 export async function reconciliationDue(db: Queryable, currency: string): Promise<boolean> {
   return firstRow(
     await db.query<{ due: boolean }>(
-      `SELECT (SELECT count(*) FROM settlement_files WHERE currency = $1) > coalesce((SELECT files FROM reconciliations WHERE currency = $1), 0) AS due`,
+      `SELECT (SELECT count(*) FROM settlement_files WHERE currency = $1) > coalesce((SELECT files FROM recon_cursors WHERE currency = $1), 0) AS due`,
       [currency],
     ),
   ).due
@@ -127,9 +118,12 @@ export async function reconciliationDue(db: Queryable, currency: string): Promis
 export async function settledSoFar(db: Queryable, currency: string, daySeconds: number): Promise<{ latest: number | null; first: number | null }> {
   return firstRow(
     await db.query<{ latest: number | null; first: number | null }>(
-      `SELECT (SELECT max(day)::int FROM settlement_files WHERE currency = $1) AS latest,
-              (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
-               WHERE currency = $1 AND kind IN ('capture', 'refund') AND status = 'succeeded') AS first`,
+      `SELECT latest,
+              CASE WHEN latest IS NULL THEN
+                (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
+                 WHERE currency = $1 AND kind IN ('capture', 'refund') AND status = 'succeeded')
+              END AS first
+       FROM (SELECT max(day)::int AS latest FROM settlement_files WHERE currency = $1) files`,
       [currency, daySeconds],
     ),
   )
