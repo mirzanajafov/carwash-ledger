@@ -5,7 +5,7 @@ function toJson(data: unknown, indent?: number): string {
   return JSON.stringify(data, (_key: string, value: unknown) => (typeof value === 'bigint' ? value.toString() : value), indent)
 }
 
-export function createResultsDir(dir: string, suffix: string): string {
+export function createResultsDir(dir: string, suffix = ''): string {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
   const target = join(dir, suffix === '' ? stamp : `${stamp}-${suffix}`)
   mkdirSync(target, { recursive: true })
@@ -21,6 +21,6 @@ export function writeJson(file: string, data: unknown): string {
   return file
 }
 
-export function campaignFailed(summary: { runsWithViolations: number; harnessErrors: number }): boolean {
-  return summary.runsWithViolations > 0 || summary.harnessErrors > 0
+export function writeResults(dir: string, data: unknown): string {
+  return writeJson(join(createResultsDir(dir), 'results.json'), data)
 }

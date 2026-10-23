@@ -1,8 +1,8 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import type { Random } from '@carwash/lab'
 import type { ToxicKind } from './plan.ts'
 import type { LocalKafka } from './kafka.ts'
 import type { LocalPostgres } from './postgres.ts'
-import type { Random } from './random.ts'
 import { toxicFor, type Toxiproxy } from './toxiproxy.ts'
 
 export async function crashPostgres(postgres: LocalPostgres, downMs: number): Promise<number> {

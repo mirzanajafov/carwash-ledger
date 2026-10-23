@@ -25,11 +25,6 @@ export class Violations {
   }
 }
 
-export function median(xs: readonly number[]): number {
-  const sorted = [...xs].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN
-}
-
 export function byInvariant(runs: readonly { violations: readonly Violation[] }[]): Record<string, { runs: number; count: number }> {
   const found: Record<string, { runs: number; count: number }> = {}
   for (const run of runs) {

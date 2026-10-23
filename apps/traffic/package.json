@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@carwash/contracts": "workspace:*",
-    "@carwash/env": "workspace:*"
+    "@carwash/env": "workspace:*",
+    "@carwash/lab": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

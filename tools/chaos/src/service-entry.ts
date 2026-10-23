@@ -1,8 +1,9 @@
 import { writeSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { optional, required } from '@carwash/env'
 import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
 
-armFailpoints(parseFailpoints(process.env.CHAOS_FAILPOINTS ?? ''), (name) => {
+armFailpoints(parseFailpoints(optional(process.env, 'CHAOS_FAILPOINTS') ?? ''), (name) => {
   writeSync(4, `failpoint ${name}\n`)
   process.kill(process.pid, 'SIGKILL')
 })
@@ -12,7 +13,5 @@ process.on('message', (message: { type?: string }) => {
 })
 process.on('disconnect', () => process.exit(0))
 
-const entry = process.env.CHAOS_ENTRY
-if (!entry) throw new Error('CHAOS_ENTRY is required')
-await import(pathToFileURL(entry).href)
+await import(pathToFileURL(required(process.env, 'CHAOS_ENTRY')).href)
 process.send?.({ type: 'ready' })

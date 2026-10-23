@@ -1,3 +1,5 @@
+import { PROGRAMS } from '@carwash/contracts'
+
 export type Side = 'debit' | 'credit'
 
 export interface Book {
@@ -29,16 +31,8 @@ export function merchantName(code: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
 
-const PROGRAMS = new Map<number, string>([
-  [900, 'Basic'],
-  [1500, 'Foam'],
-  [2400, 'Deluxe'],
-  [3500, 'Ceramic'],
-  [4900, 'Full detail'],
-])
-
 export function programOf(amount: string | number): string {
-  return PROGRAMS.get(Number(amount)) ?? 'Custom'
+  return PROGRAMS.find((program) => program.price === Number(amount))?.name ?? 'Custom'
 }
 
 export function journalKind(ref: string): string {

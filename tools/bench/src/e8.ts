@@ -2,10 +2,11 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { verifyLog, type VerifyReport } from '@carwash/audit-pg'
 import { checkAudit, checkLedger, checkPaymentsIn, checkSequenced, violations, type InvariantResult, type WitnessView } from '@carwash/invariants'
+import { appendJsonLine, createResultsDir, median, writeJson } from '@carwash/lab'
 import { createPool, inSnapshot } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { appendJsonLine, createResultsDir, describeEnvironment, median, writeJson } from './env.ts'
+import { describeEnvironment } from './environment.ts'
 import { addTraffic, seedProductionLedger, type ProductionLedger } from './production-seed.ts'
 
 const { values } = parseArgs({

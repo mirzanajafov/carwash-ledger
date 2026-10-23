@@ -1,8 +1,9 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { errorOf, PaymentView, PayoutView } from '@carwash/contracts'
 import { nonNegativeInteger, optional, positiveNumber, required } from '@carwash/env'
+import { mulberry32, pick } from '@carwash/lab'
 import { ApiClient } from './client.ts'
-import { gapMs, mulberry32, pick, visit, type Visit } from './visits.ts'
+import { gapMs, visit, type Visit } from './visits.ts'
 
 const env = process.env
 const url = optional(env, 'API_URL') ?? 'http://127.0.0.1:3140'

@@ -1,8 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { between, type Random } from '@carwash/lab'
 import type { ToxicKind } from './plan.ts'
-import type { Random } from './random.ts'
-import { between } from './random.ts'
 
 export interface Toxic {
   name: string

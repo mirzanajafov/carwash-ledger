@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import { setImmediate as yieldToLoop, setTimeout as sleep } from 'node:timers/promises'
-import { percentile } from './env.ts'
+import { mulberry32, percentile } from '@carwash/lab'
 
 export type Outcome = 'ok' | 'gave-up'
 
@@ -35,23 +35,6 @@ export interface LoadResult {
   firstError?: string
 }
 
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-export function pick<T>(random: () => number, items: readonly T[]): T {
-  const item = items[Math.floor(random() * items.length)]
-  if (item === undefined) throw new Error('cannot pick from an empty list')
-  return item
-}
-
 export function poissonSchedule(rate: number, totalMs: number, seed: number): Float64Array {
   const random = mulberry32(seed)
   const times: number[] = []
@@ -64,7 +47,7 @@ export function poissonSchedule(rate: number, totalMs: number, seed: number): Fl
   return Float64Array.from(times)
 }
 
-function distribution(values: number[]): Distribution {
+function quantiles(values: number[]): Distribution {
   const sorted = Float64Array.from(values).sort()
   return {
     p50: percentile(sorted, 50),
@@ -161,8 +144,8 @@ export async function runOpenLoop(options: LoadOptions): Promise<LoadResult> {
     errors,
     dropped,
     achievedPerSecond: completedInWindow / (options.durationMs / 1000),
-    latencyMs: distribution(latencies),
-    lagMs: distribution(lags),
+    latencyMs: quantiles(latencies),
+    lagMs: quantiles(lags),
     generatorCpuPercent: ((cpu.user + cpu.system) / 1000 / Math.max(1, wallAtEnd - wallAtStart)) * 100,
     ...(firstError === undefined ? {} : { firstError }),
   }

@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { WebhookReceipt } from '@carwash/contracts'
+import type { Random } from '@carwash/lab'
 import type pg from 'pg'
-import type { Random } from '../random.ts'
 import type { Endpoints } from './client.ts'
 
 interface Target {

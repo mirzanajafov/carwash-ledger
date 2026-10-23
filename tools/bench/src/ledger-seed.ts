@@ -1,10 +1,11 @@
+import { PROGRAMS } from '@carwash/contracts'
 import { firstRow } from '@carwash/pg'
 import { withTriggersOff } from '@carwash/testkit'
 import type pg from 'pg'
 
 export const MERCHANTS = 50
 const BATCH = 50_000
-const PRICES = [900, 1500, 2400, 3500, 4900]
+const PRICES = PROGRAMS.map((program) => program.price)
 
 export interface SeedAccounts {
   receivable: string

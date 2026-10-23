@@ -2,9 +2,10 @@ import { join } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
 import { verifyLog } from '@carwash/audit-pg'
+import { appendJsonLine, createResultsDir, median, writeJson } from '@carwash/lab'
 import { createPool, inSnapshot } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate } from '@carwash/testkit'
-import { appendJsonLine, createResultsDir, describeEnvironment, median, writeJson } from './env.ts'
+import { describeEnvironment } from './environment.ts'
 import { seedProductionLedger } from './production-seed.ts'
 
 const { values } = parseArgs({

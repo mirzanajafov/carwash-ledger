@@ -257,6 +257,9 @@ importers:
       '@carwash/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@carwash/lab':
+        specifier: workspace:*
+        version: link:../../packages/lab
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -522,6 +525,18 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
 
+  packages/lab:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
   packages/ledger:
     dependencies:
       '@carwash/failpoints':
@@ -664,12 +679,21 @@ importers:
       '@carwash/audit-pg':
         specifier: workspace:*
         version: link:../../packages/audit-pg
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@carwash/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@carwash/invariants':
         specifier: workspace:*
         version: link:../../packages/invariants
+      '@carwash/lab':
+        specifier: workspace:*
+        version: link:../../packages/lab
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
@@ -719,6 +743,9 @@ importers:
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@carwash/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@carwash/failpoints':
         specifier: workspace:*
         version: link:../../packages/failpoints
@@ -728,6 +755,9 @@ importers:
       '@carwash/invariants':
         specifier: workspace:*
         version: link:../../packages/invariants
+      '@carwash/lab':
+        specifier: workspace:*
+        version: link:../../packages/lab
       '@carwash/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
@@ -762,6 +792,9 @@ importers:
       '@carwash/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@carwash/lab':
+        specifier: workspace:*
+        version: link:../../packages/lab
       '@carwash/recon':
         specifier: workspace:*
         version: link:../../packages/recon

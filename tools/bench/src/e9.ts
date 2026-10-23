@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { checkpointBody, ORIGIN } from '@carwash/audit'
+import { appendJsonLine, createResultsDir, median, writeJson } from '@carwash/lab'
 import { Witness } from '@carwash/witness'
-import { appendJsonLine, createResultsDir, median, writeJson } from './env.ts'
 
 const { values } = parseArgs({
   options: {
