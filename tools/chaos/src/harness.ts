@@ -149,6 +149,8 @@ async function main(): Promise<void> {
         console.log(describePaymentsRun(i + 1, report as PaymentsReport))
       }
       for (const v of report.violations) for (const example of v.examples) console.log(`  ${v.id}: ${example}`)
+      for (const error of report.harnessErrors.slice(0, 5)) console.log(`  harness: ${error.split('\n')[0] ?? error}`)
+      if (report.harnessErrors.length > 5) console.log(`  harness: and ${report.harnessErrors.length - 5} more in runs.jsonl`)
       if (values['until-violation'] && report.violations.length > 0) break
     }
   } finally {

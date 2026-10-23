@@ -37,6 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name != 'pull_request'
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
-      - run: chmod a+w tools/chaos/results && CHAOS_CPUS=$(nproc) sh tools/chaos/run.sh --runs 3 --duration 30 --fail-on-violation
+      - run: chmod a+w tools/chaos/results && CHAOS_CPUS=$(nproc) sh tools/chaos/run.sh --runs 3 --duration 30 --fail-on-violation --out /app/tools/chaos/results/ci
+      - if: failure() || cancelled()
+        uses: actions/upload-artifact@v5
+        with:
+          name: chaos-results-${{ github.run_attempt }}
+          path: tools/chaos/results/ci
+          retention-days: 7
