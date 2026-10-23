@@ -19,13 +19,13 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "pg": "catalog:"
+    "dotenv": "^18.0.3",
+    "pg": "catalog:",
+    "prisma": "^7.10.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "@types/pg": "catalog:",
-    "dotenv": "^18.0.3",
-    "prisma": "^7.10.0"
+    "@types/pg": "catalog:"
   }
 }

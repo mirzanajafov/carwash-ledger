@@ -178,9 +178,7 @@ services:
   worker:
     <<: *server
     image: carwash-api:latest
-    build:
-      <<: *build
-      target: api
+    pull_policy: never
     container_name: carwash-worker
     command: ["node", "dist/worker.js"]
     environment:

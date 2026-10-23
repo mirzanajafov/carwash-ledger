@@ -36,8 +36,7 @@ COPY apps/tamper apps/tamper
 COPY apps/traffic apps/traffic
 RUN pnpm --filter @carwash/db generate \
   && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..." build \
-  && for app in api psp witness tamper traffic; do pnpm --config.inject-workspace-packages=true --filter "@carwash/$app" deploy --prod "/out/$app"; done \
-  && pnpm --config.inject-workspace-packages=true --filter @carwash/db deploy /out/db
+  && for app in api psp witness tamper traffic db; do pnpm --config.inject-workspace-packages=true --filter "@carwash/$app" deploy --prod "/out/$app"; done
 
 FROM base AS runtime
 RUN install -d -o node -g node /var/lib/witness

@@ -25,7 +25,7 @@ healthy() {
 
 release() {
   say "Building the images and starting the stack"
-  "${compose[@]}" build -q && "${compose[@]}" up -d --remove-orphans
+  "${compose[@]}" build -q api && "${compose[@]}" build -q && "${compose[@]}" up -d --remove-orphans
 }
 
 previous=$(git rev-parse HEAD)
