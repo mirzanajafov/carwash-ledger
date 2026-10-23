@@ -10,16 +10,14 @@ import { Violations } from '../violations.ts'
 import { askForVerification, currentPspFaults, setPspFaults } from './admin.ts'
 import { Clients } from './client.ts'
 import { activity, pendingAttempts } from './activity.ts'
-import { checkWhenStopped, countWhatHappened, runFinalVerification } from './final-checks.ts'
+import { checkWhenStopped, runFinalVerification } from './final-checks.ts'
 import { Forger } from './forger.ts'
 import { Journeys } from './journeys.ts'
 import { planPayments, type PaymentFault } from './plan.ts'
 import type { PaymentsOptions } from './options.ts'
-import { newPaymentsReport, type PaymentsReport } from './report.ts'
+import { countWhatHappened, newPaymentsReport, type PaymentsReport } from './report.ts'
 import { acceptOpenAnomalies, hasSettled, settleDays, waitForDelivery } from './settle.ts'
 import { PaymentsStack, WEBHOOK_SECRET, WITNESS_URL } from './stack.ts'
-
-const SETTLED_EVERY_MS = 500
 
 export async function runPayments(lab: Lab, options: PaymentsOptions, seed: number): Promise<PaymentsReport> {
   const { postgres } = lab
@@ -29,23 +27,23 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
   const found = new Violations()
   const report = newPaymentsReport(seed, options.durationMs, plan, found.list)
   const supervisor = new Supervisor()
-  const stack = await PaymentsStack.create(lab, options, seed, log)
+  const events: ServiceEvents = {
+    failpoint: (_service, name) => {
+      report.kills.failpoints[name] = (report.kills.failpoints[name] ?? 0) + 1
+    },
+    log,
+    exit: (service, kind, detail) => {
+      report.exits[kind]++
+      log(`${service.name} exited (${kind}, ${detail})`)
+      if (kind === 'crash' && report.crashes.length < 20) report.crashes.push(`${service.name} ${detail}`)
+      if (kind === 'boot') supervisor.restartAfterFailedBoot(service)
+      else if (kind !== 'stopped') supervisor.restart(service)
+    },
+  }
+  const stack = await PaymentsStack.create(lab, options, seed, log, events)
   try {
     const { audit, psp } = stack
-    const events: ServiceEvents = {
-      failpoint: (_service, name) => {
-        report.kills.failpoints[name] = (report.kills.failpoints[name] ?? 0) + 1
-      },
-      log,
-      exit: (service, kind, detail) => {
-        report.exits[kind]++
-        log(`${service.name} exited (${kind}, ${detail})`)
-        if (kind === 'crash' && report.crashes.length < 20) report.crashes.push(`${service.name} ${detail}`)
-        if (kind === 'boot') supervisor.restartAfterFailedBoot(service)
-        else if (kind !== 'stopped') supervisor.restart(service)
-      },
-    }
-    await stack.start(events)
+    await stack.start()
 
     const endpoints = stack.endpoints()
     const clients = new Clients(endpoints, stack.keys, random, log)
@@ -63,7 +61,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     )
     const forger = new Forger(audit, endpoints, WEBHOOK_SECRET, mulberry32(seed ^ 0x77656268))
 
-    const outages = new Outages(lab, seed, log, { withKafka: true })
+    const outages = new Outages(lab, seed, log)
     const applyFault = async (fault: PaymentFault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
@@ -111,9 +109,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     let nextPayout = 0
     let nextFault = 0
     let nextForgery = 0
+    let loggedAt = 0
     const driven = await drive(
       startClock(),
-      { durationMs: options.durationMs, settleMs: options.settleMs, checkEveryMs: options.checkEveryMs, settledEveryMs: SETTLED_EVERY_MS },
+      { durationMs: options.durationMs, settleMs: options.settleMs, checkEveryMs: options.checkEveryMs, settledEveryMs: 500 },
       {
         startDue: (t) => {
           for (let journey = plan.journeys[nextJourney]; journey !== undefined && journey.at <= t; journey = plan.journeys[++nextJourney])
@@ -137,7 +136,8 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         check: periodicCheck,
         settled: async (settlingMs) => {
           const done = await hasSettled(tasks, journeys.probes, audit)
-          if (Math.floor(settlingMs / 5000) !== Math.floor((settlingMs - SETTLED_EVERY_MS) / 5000)) {
+          if (settlingMs - loggedAt >= 5000) {
+            loggedAt = settlingMs
             log(`settling: ${clients.unanswered()} requests open, ${await pendingAttempts(audit)} attempts pending`)
             log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, stack.ledgerDb.name)}`)
           }
@@ -158,8 +158,9 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     await stack.stopServices()
     await driven.lastCheck
 
+    report.harnessErrors.push(...driven.checkErrors.map((error) => `check: ${String(error)}`))
     await checkWhenStopped(stack, report, found, { witness, clients, journeys })
-    Object.assign(report, await countWhatHappened(stack, lab, { clients, journeys, forger }))
+    Object.assign(report, await countWhatHappened(stack, { clients, journeys, forger }))
     return report
   } finally {
     supervisor.stopRestarting()

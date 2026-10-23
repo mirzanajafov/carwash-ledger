@@ -13,15 +13,11 @@ import {
   readWitnessHistory,
   type WitnessView,
 } from '@carwash/invariants'
-import { kafkaClient } from '@carwash/outbox'
-import { firstRow, inSnapshot } from '@carwash/pg'
-import type pg from 'pg'
-import type { Lab } from '../lab.ts'
+import { inSnapshot } from '@carwash/pg'
 import type { Violations } from '../violations.ts'
-import { finalVerificationRun } from './admin.ts'
+import { completedVerificationRun } from './admin.ts'
 import { checkKeys, compareBeliefs, readState, unanswered } from './checks.ts'
 import type { Clients } from './client.ts'
-import type { Forger } from './forger.ts'
 import type { Journeys } from './journeys.ts'
 import type { PaymentsReport } from './report.ts'
 import { SETTLEMENT_DAY_SECONDS, WITNESS_URL, type PaymentsStack } from './stack.ts'
@@ -44,7 +40,7 @@ export async function runFinalVerification(
   const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
   report.witness = { checkpoints, size: witnessed, compared: 0 }
   report.verification.requested = askedRuns.size
-  const finalRun = await finalVerificationRun()
+  const finalRun = await completedVerificationRun()
   const finalReport = finalRun?.status === 'done' ? finalRun.report : null
   found.add(
     'verify-job',
@@ -110,74 +106,4 @@ export async function checkWhenStopped(
   found.add('S8', 'final', 'the ledger holds what clients were told, and every refused answer left an anomaly', beliefs.count, beliefs.examples)
   const open = unanswered(clients.records.values(), clients.probes)
   found.add('L1', 'final', 'every request has a final answer once the faults stop', open.count, open.examples)
-}
-
-async function publishedMessages(broker: string): Promise<Record<string, number>> {
-  const admin = kafkaClient({ brokers: [broker], clientId: 'chaos-harness' }).admin()
-  try {
-    await admin.connect()
-    const counts: Record<string, number> = {}
-    for (const topic of ['payments', 'ledger']) {
-      const offsets = await admin.fetchTopicOffsets(topic)
-      counts[`kafka ${topic}`] = offsets.reduce((sum, p) => sum + Number(p.high) - Number(p.low), 0)
-    }
-    return counts
-  } catch {
-    return {}
-  } finally {
-    await admin.disconnect().catch(() => undefined)
-  }
-}
-
-async function countBy(pool: pg.Pool, sql: string): Promise<Record<string, number>> {
-  const { rows } = await pool.query<{ name: string; n: number }>(sql)
-  return Object.fromEntries(rows.map((row) => [row.name, row.n]))
-}
-
-type Counted = Pick<
-  PaymentsReport,
-  | 'outcomes'
-  | 'payoutOutcomes'
-  | 'requests'
-  | 'sends'
-  | 'duplicates'
-  | 'probes'
-  | 'answers'
-  | 'surprises'
-  | 'forged'
-  | 'starts'
-  | 'ledger'
-  | 'pspOperations'
-  | 'events'
->
-
-export async function countWhatHappened(
-  stack: PaymentsStack,
-  lab: Lab,
-  { clients, journeys, forger }: { clients: Clients; journeys: Journeys; forger: Forger },
-): Promise<Counted> {
-  const { audit, psp } = stack
-  return {
-    outcomes: journeys.outcomes,
-    payoutOutcomes: journeys.payoutOutcomes,
-    requests: clients.stats.requests,
-    sends: clients.stats.sends,
-    duplicates: clients.stats.duplicates,
-    probes: clients.probes.length,
-    answers: clients.stats.answers,
-    surprises: journeys.surprises,
-    forged: forger.outcomes,
-    starts: Object.fromEntries(stack.services.map((s) => [s.name, s.starts])),
-    ledger: {
-      anomalies: await countBy(audit, 'SELECT kind AS name, count(*)::int AS n FROM anomalies GROUP BY kind'),
-      webhooks: await countBy(audit, 'SELECT outcome AS name, count(*)::int AS n FROM webhook_events GROUP BY outcome'),
-    },
-    pspOperations: await countBy(psp, `SELECT kind || ' ' || status AS name, count(*)::int AS n FROM operations GROUP BY 1`),
-    events: {
-      ...(await countBy(audit, `SELECT 'outbox ' || topic AS name, count(*)::int AS n FROM outbox GROUP BY topic`)),
-      ...(await countBy(audit, `SELECT 'inbox ' || consumer AS name, count(*)::int AS n FROM inbox GROUP BY consumer`)),
-      receipts: firstRow(await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM receipts')).n,
-      ...(await publishedMessages(lab.kafka.directBroker)),
-    },
-  }
 }

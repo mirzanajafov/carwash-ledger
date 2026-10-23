@@ -166,7 +166,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
     }
 
-    const outages = new Outages(lab, seed, log, { withKafka: false })
+    const outages = new Outages(lab, seed, log)
     const applyFault = async (fault: Fault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
@@ -232,6 +232,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     await Promise.all(workers.map((w) => w.stop()))
     report.workerStarts = workers.reduce((sum, w) => sum + w.starts, 0)
     await driven.lastCheck
+    report.harnessErrors.push(...driven.checkErrors.map((error) => `check: ${String(error)}`))
 
     found.addResults(await checkLedger(audit), 'final')
     const ledger = compareWithClient(client.ops.values(), await fetchJournals(audit))

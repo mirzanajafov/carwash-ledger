@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { createReadStream, createWriteStream, mkdirSync, rmSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -65,10 +65,11 @@ function failpointRate(probability: number): (name: FailpointName) => number {
   }
 }
 
-async function keepLogs(from: string, to: string, seed: number): Promise<void> {
+async function keepLogs(from: string, to: string, seed: number, names: readonly string[]): Promise<void> {
   mkdirSync(to, { recursive: true })
-  for (const name of ['psp', 'witness', 'api-0', 'api-1', 'worker', 'kafka']) {
-    await pipeline(createReadStream(join(from, `${name}.log`)), createGzip(), createWriteStream(join(to, `seed-${seed}-${name}.log.gz`)))
+  for (const name of names) {
+    const file = join(from, `${name}.log`)
+    if (existsSync(file)) await pipeline(createReadStream(file), createGzip(), createWriteStream(join(to, `seed-${seed}-${name}.log.gz`)))
   }
   rmSync(from, { recursive: true, force: true })
 }
@@ -96,7 +97,15 @@ export class PaymentsStack {
   readonly #logs: string
   readonly #witnessDir: string
 
-  private constructor(lab: Lab, options: PaymentsOptions, seed: number, log: (line: string) => void, ledgerDb: TestDatabase, pspDb: ScratchDatabase) {
+  private constructor(
+    lab: Lab,
+    options: PaymentsOptions,
+    seed: number,
+    log: (line: string) => void,
+    events: ServiceEvents,
+    ledgerDb: TestDatabase,
+    pspDb: ScratchDatabase,
+  ) {
     this.#lab = lab
     this.#options = options
     this.#seed = seed
@@ -113,19 +122,24 @@ export class PaymentsStack {
     mkdirSync(this.#logs, { recursive: true })
     this.#witnessDir = `/tmp/chaos-witness/seed-${seed}`
     rmSync(this.#witnessDir, { recursive: true, force: true })
+    this.#defineServices(events)
   }
 
-  static async create(lab: Lab, options: PaymentsOptions, seed: number, log: (line: string) => void): Promise<PaymentsStack> {
+  static async create(lab: Lab, options: PaymentsOptions, seed: number, log: (line: string) => void, events: ServiceEvents): Promise<PaymentsStack> {
     const ledgerDb = await createTestDatabase()
     let pspDb: ScratchDatabase | undefined
     try {
       pspDb = await createScratchDatabase('psp')
-      return new PaymentsStack(lab, options, seed, log, ledgerDb, pspDb)
+      return new PaymentsStack(lab, options, seed, log, events, ledgerDb, pspDb)
     } catch (error) {
-      await pspDb?.drop()
-      await ledgerDb.drop()
+      await pspDb?.drop().catch(() => undefined)
+      await ledgerDb.drop().catch(() => undefined)
       throw error
     }
+  }
+
+  get kafkaBroker(): string {
+    return this.#lab.kafka.directBroker
   }
 
   get services(): Service[] {
@@ -143,9 +157,8 @@ export class PaymentsStack {
     return { live: () => apis.filter((a) => a.service.ready).map((a) => a.url) }
   }
 
-  async start(events: ServiceEvents): Promise<void> {
+  async start(): Promise<void> {
     const lab = this.#lab
-    const options = this.#options
     for (const [name, key] of Object.entries(this.keys)) {
       await this.owner.query('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope)', [
         name,
@@ -161,6 +174,33 @@ export class PaymentsStack {
     await lab.toxiproxy.reset()
     for (const proxy of PROXIES) await lab.toxiproxy.replaceProxy(proxy, PROXY_PORTS[proxy], PROXY_UPSTREAMS[proxy])
 
+    for (const name of ['psp', 'witness', 'api-0']) {
+      this.service(name).start()
+      await until(() => this.service(name).ready, 60_000, name)
+    }
+    this.service('api-1').start()
+    this.service('worker').start()
+    await until(() => this.service('api-1').ready && this.service('worker').ready, 60_000, 'api-1 and the worker')
+  }
+
+  async stopServices(): Promise<void> {
+    await Promise.all(this.services.map((s) => s.stop()))
+  }
+
+  async close(): Promise<void> {
+    const log = this.#log
+    await this.stopServices().catch(() => undefined)
+    await this.#lab.kafka.stop().catch(() => undefined)
+    await this.psp.end().catch(() => undefined)
+    await keepLogs(this.#logs, join(this.#lab.dir, 'logs'), this.#seed, [...this.#services.keys(), 'kafka']).catch((error: unknown) =>
+      log(`could not keep the service logs: ${String(error)}`),
+    )
+    await this.pspDb.drop().catch((error: unknown) => log(`psp drop failed: ${String(error)}`))
+    await this.ledgerDb.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
+  }
+
+  #defineServices(events: ServiceEvents): void {
+    const options = this.#options
     const ledgerUrl = (proxy: ProxyName) => withPort(this.ledgerDb.url('ledger_app'), PROXY_PORTS[proxy])
     const shared = {
       PSP_URL: `http://127.0.0.1:${PROXY_PORTS.psp}`,
@@ -223,27 +263,6 @@ export class PaymentsStack {
       },
       events,
     )
-    for (const name of ['psp', 'witness', 'api-0']) {
-      this.service(name).start()
-      await until(() => this.service(name).ready, 60_000, name)
-    }
-    this.service('api-1').start()
-    this.service('worker').start()
-    await until(() => this.service('api-1').ready && this.service('worker').ready, 60_000, 'api-1 and the worker')
-  }
-
-  async stopServices(): Promise<void> {
-    await Promise.all(this.services.map((s) => s.stop()))
-  }
-
-  async close(): Promise<void> {
-    const log = this.#log
-    await this.stopServices().catch(() => undefined)
-    await this.#lab.kafka.stop().catch(() => undefined)
-    await this.psp.end().catch(() => undefined)
-    await keepLogs(this.#logs, join(this.#lab.dir, 'logs'), this.#seed).catch((error: unknown) => log(`could not keep the service logs: ${String(error)}`))
-    await this.pspDb.drop().catch((error: unknown) => log(`psp drop failed: ${String(error)}`))
-    await this.ledgerDb.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
   }
 
   #logFile(name: string): string {

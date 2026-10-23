@@ -1,0 +1,156 @@
+{
+  "mode": "payments",
+  "mutant": null,
+  "runs": 5,
+  "journeys": 2249,
+  "payouts": 290,
+  "outcomes": {
+    "captured": 1398,
+    "canceled": 141,
+    "part refunded": 387,
+    "refunded": 238,
+    "declined": 72,
+    "refused": 13
+  },
+  "payoutOutcomes": {
+    "succeeded": 204,
+    "nothing to pay out": 79,
+    "failed": 7
+  },
+  "requests": 4610,
+  "sends": 14049,
+  "duplicates": 101,
+  "probes": 66,
+  "answers": {
+    "200": 4367,
+    "409 nothing_to_pay_out": 79,
+    "503 psp_unavailable": 749,
+    "422 idempotency_key_reused": 66,
+    "409 request_in_progress": 2666,
+    "network error": 2834,
+    "503 database_unavailable": 2862,
+    "409 payment_not_capturable": 47,
+    "402 card_declined": 72,
+    "timeout": 294,
+    "502 psp_answer_rejected": 13
+  },
+  "surprises": 0,
+  "forged": {
+    "nothing pending": 3,
+    "capture already": 13,
+    "capture not_at_psp": 29,
+    "capture not delivered": 20,
+    "no api": 10,
+    "capture applied": 13,
+    "payout already": 6,
+    "capture http 503": 16,
+    "payout http 503": 1,
+    "no database": 14,
+    "capture anomaly": 6,
+    "payout not delivered": 3,
+    "payout not_at_psp": 1,
+    "payout applied": 1
+  },
+  "randomKills": {
+    "api-0": 11,
+    "api-1": 4,
+    "worker": 17,
+    "witness": 9
+  },
+  "failpointKills": {
+    "transaction.after_commit": 11,
+    "request.before_finish": 4,
+    "checkpoint.after_sign": 3,
+    "attempt.after_psp": 15,
+    "transaction.before_commit": 8,
+    "consumer.before_offset": 2,
+    "consumer.before_commit": 2,
+    "relay.after_produce": 1,
+    "post.after_lock": 1
+  },
+  "exits": {
+    "killed": 41,
+    "failpoint": 47,
+    "boot": 7,
+    "crash": 0,
+    "stopped": 25
+  },
+  "starts": {
+    "psp": 5,
+    "witness": 14,
+    "api-0": 36,
+    "api-1": 33,
+    "worker": 32
+  },
+  "postgresKills": 8,
+  "postgresRecoveryMsMedian": 743,
+  "kafkaKills": 5,
+  "settlementBreaks": {
+    "missing_line": 0,
+    "duplicate_line": 0,
+    "wrong_amount": 0,
+    "fee_difference": 0,
+    "unknown_line": 0
+  },
+  "kafkaRecoveryMsMedian": 3349,
+  "periodicChecks": 41,
+  "periodicChecksResumed": 38,
+  "witnessCheckpoints": 77,
+  "witnessRootsCompared": 74,
+  "verificationRequests": 10,
+  "verificationRuns": {
+    "done": 17
+  },
+  "verificationMaxAttempts": 2,
+  "events": {
+    "outbox ledger": 10195,
+    "outbox payments": 5885,
+    "inbox statements": 10195,
+    "inbox receipts": 5885,
+    "receipts": 2036,
+    "kafka payments": 6030,
+    "kafka ledger": 10496
+  },
+  "toxics": {
+    "latency": 6,
+    "timeout": 8,
+    "reset_peer": 2,
+    "limit_data": 7,
+    "down": 14
+  },
+  "toxicsByProxy": {
+    "api-0-db": 4,
+    "api-1-db": 3,
+    "worker-db": 2,
+    "psp": 15,
+    "webhooks": 8,
+    "worker-kafka": 2,
+    "witness": 3
+  },
+  "anomalies": {
+    "answer_mismatch": 13
+  },
+  "anomaliesAccepted": 13,
+  "anomaliesNotAccepted": 0,
+  "webhooks": {
+    "applied": 147,
+    "already": 5457,
+    "not_at_psp": 30,
+    "anomaly": 19
+  },
+  "pspOperations": {
+    "cancel succeeded": 141,
+    "authorize succeeded": 2177,
+    "authorize declined": 72,
+    "payout declined": 7,
+    "capture succeeded": 2036,
+    "payout succeeded": 204,
+    "refund succeeded": 1221
+  },
+  "settleMsMedian": 11643,
+  "settleMsMax": 27443,
+  "runsWithViolations": 0,
+  "violationsByInvariant": {},
+  "firstViolatingRun": null,
+  "harnessErrors": 0
+}

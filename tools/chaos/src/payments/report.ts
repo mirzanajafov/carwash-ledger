@@ -1,8 +1,15 @@
 import { median } from '@carwash/lab'
+import { kafkaClient } from '@carwash/outbox'
+import { firstRow } from '@carwash/pg'
+import type pg from 'pg'
 import type { ToxicKind } from '../plan.ts'
 import type { ExitKind } from '../service.ts'
 import { addCounts, byInvariant, type Violation } from '../violations.ts'
+import type { Clients } from './client.ts'
+import type { Forger } from './forger.ts'
+import type { Journeys } from './journeys.ts'
 import type { PaymentsPlan, ProxyName, ServiceName } from './plan.ts'
+import type { PaymentsStack } from './stack.ts'
 
 export interface PaymentsReport {
   seed: number
@@ -77,6 +84,75 @@ export function newPaymentsReport(seed: number, faultPhaseMs: number, plan: Paym
     verification: { requested: 0, runs: {}, maxAttempts: 0 },
     harnessErrors: [],
     violations,
+  }
+}
+
+async function publishedMessages(broker: string): Promise<Record<string, number>> {
+  const admin = kafkaClient({ brokers: [broker], clientId: 'chaos-harness' }).admin()
+  try {
+    await admin.connect()
+    const counts: Record<string, number> = {}
+    for (const topic of ['payments', 'ledger']) {
+      const offsets = await admin.fetchTopicOffsets(topic)
+      counts[`kafka ${topic}`] = offsets.reduce((sum, p) => sum + Number(p.high) - Number(p.low), 0)
+    }
+    return counts
+  } catch {
+    return {}
+  } finally {
+    await admin.disconnect().catch(() => undefined)
+  }
+}
+
+async function countBy(pool: pg.Pool, sql: string): Promise<Record<string, number>> {
+  const { rows } = await pool.query<{ name: string; n: number }>(sql)
+  return Object.fromEntries(rows.map((row) => [row.name, row.n]))
+}
+
+type Counted = Pick<
+  PaymentsReport,
+  | 'outcomes'
+  | 'payoutOutcomes'
+  | 'requests'
+  | 'sends'
+  | 'duplicates'
+  | 'probes'
+  | 'answers'
+  | 'surprises'
+  | 'forged'
+  | 'starts'
+  | 'ledger'
+  | 'pspOperations'
+  | 'events'
+>
+
+export async function countWhatHappened(
+  stack: PaymentsStack,
+  { clients, journeys, forger }: { clients: Clients; journeys: Journeys; forger: Forger },
+): Promise<Counted> {
+  const { audit, psp } = stack
+  return {
+    outcomes: journeys.outcomes,
+    payoutOutcomes: journeys.payoutOutcomes,
+    requests: clients.stats.requests,
+    sends: clients.stats.sends,
+    duplicates: clients.stats.duplicates,
+    probes: clients.probes.length,
+    answers: clients.stats.answers,
+    surprises: journeys.surprises,
+    forged: forger.outcomes,
+    starts: Object.fromEntries(stack.services.map((s) => [s.name, s.starts])),
+    ledger: {
+      anomalies: await countBy(audit, 'SELECT kind AS name, count(*)::int AS n FROM anomalies GROUP BY kind'),
+      webhooks: await countBy(audit, 'SELECT outcome AS name, count(*)::int AS n FROM webhook_events GROUP BY outcome'),
+    },
+    pspOperations: await countBy(psp, `SELECT kind || ' ' || status AS name, count(*)::int AS n FROM operations GROUP BY 1`),
+    events: {
+      ...(await countBy(audit, `SELECT 'outbox ' || topic AS name, count(*)::int AS n FROM outbox GROUP BY topic`)),
+      ...(await countBy(audit, `SELECT 'inbox ' || consumer AS name, count(*)::int AS n FROM inbox GROUP BY consumer`)),
+      receipts: firstRow(await audit.query<{ n: number }>('SELECT count(*)::int AS n FROM receipts')).n,
+      ...(await publishedMessages(stack.kafkaBroker)),
+    },
   }
 }
 

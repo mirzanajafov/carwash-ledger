@@ -38,16 +38,15 @@ export class Outages {
   readonly #lab: Lab
   readonly #seed: number
   readonly #log: (line: string) => void
-  readonly #withKafka: boolean
   readonly #busy = new Set<'postgres' | 'kafka'>()
+  readonly #crashed = new Set<'postgres' | 'kafka'>()
   readonly #faults: Promise<void>[] = []
   #toxics = 0
 
-  constructor(lab: Lab, seed: number, log: (line: string) => void, { withKafka }: { withKafka: boolean }) {
+  constructor(lab: Lab, seed: number, log: (line: string) => void) {
     this.#lab = lab
     this.#seed = seed
     this.#log = log
-    this.#withKafka = withKafka
   }
 
   get postgresUp(): boolean {
@@ -65,7 +64,7 @@ export class Outages {
       this.#lab.postgres.start()
       await this.#lab.postgres.waitReady()
     }
-    if (this.#withKafka && !this.#lab.kafka.running) {
+    if (this.#crashed.has('kafka') && !this.#lab.kafka.running) {
       this.#lab.kafka.start()
       await this.#lab.kafka.waitReady()
     }
@@ -87,6 +86,7 @@ export class Outages {
   async #exclusively(name: 'postgres' | 'kafka', downMs: number, outage: Outage, target: Crashable): Promise<void> {
     if (this.#busy.has(name)) return
     this.#busy.add(name)
+    this.#crashed.add(name)
     try {
       outage.kills++
       this.#log(`${name} crash, down for ${downMs} ms`)

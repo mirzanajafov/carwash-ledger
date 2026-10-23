@@ -60,4 +60,29 @@ describe('the fault phase and the settling after it', () => {
     expect(driven.settled).toBe(false)
     expect(driven.settleMs).toBeGreaterThanOrEqual(20)
   })
+
+  it('hands back the check still running when it returns, so the final checks can wait for it, and the errors of failed checks', async () => {
+    let finished = false
+    const driven = await drive(
+      startClock(),
+      { ...OPTIONS, durationMs: 10, checkEveryMs: 1 },
+      {
+        ...phases().recorded,
+        check: async () => {
+          await sleep(100)
+          finished = true
+        },
+        settled: () => Promise.resolve(true),
+      },
+    )
+    expect(finished).toBe(false)
+    await driven.lastCheck
+    expect(finished).toBe(true)
+    expect(driven.checkErrors).toEqual([])
+
+    const failing = await drive(startClock(), OPTIONS, { ...phases().recorded, check: () => Promise.reject(new Error('the audit pool is gone')) })
+    await failing.lastCheck
+    expect(failing.checkErrors.length).toBeGreaterThan(0)
+    expect(String(failing.checkErrors[0])).toContain('the audit pool is gone')
+  })
 })

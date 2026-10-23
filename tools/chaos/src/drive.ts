@@ -27,6 +27,7 @@ export interface Driven {
   settleMs: number
   settled: boolean
   lastCheck: Promise<void>
+  checkErrors: unknown[]
 }
 
 export async function drive(now: Clock, options: DriveOptions, phases: Phases): Promise<Driven> {
@@ -35,6 +36,7 @@ export async function drive(now: Clock, options: DriveOptions, phases: Phases): 
   let settledAt = 0
   let settleStarted: number | undefined
   let settled = true
+  const checkErrors: unknown[] = []
   for (;;) {
     const t = now()
     if (settleStarted === undefined) {
@@ -42,14 +44,20 @@ export async function drive(now: Clock, options: DriveOptions, phases: Phases): 
       if (t >= options.durationMs) {
         await phases.endFaults()
         settleStarted = now()
+        continue
       }
     }
     phases.tick?.(t)
     if (checking === undefined && phases.canCheck() && t - checkedAt >= options.checkEveryMs) {
       checkedAt = t
-      checking = phases.check().finally(() => {
-        checking = undefined
-      })
+      checking = phases
+        .check()
+        .catch((error: unknown) => {
+          checkErrors.push(error)
+        })
+        .finally(() => {
+          checking = undefined
+        })
     }
     if (settleStarted !== undefined && t - settledAt >= options.settledEveryMs) {
       settledAt = t
@@ -61,5 +69,5 @@ export async function drive(now: Clock, options: DriveOptions, phases: Phases): 
     }
     await sleep(5)
   }
-  return { settleMs: Math.round(now() - settleStarted), settled, lastCheck: checking ?? Promise.resolve() }
+  return { settleMs: Math.round(now() - settleStarted), settled, lastCheck: checking ?? Promise.resolve(), checkErrors }
 }
