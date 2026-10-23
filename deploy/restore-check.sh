@@ -17,16 +17,16 @@ docker exec -i "$name-db" pg_restore -U postgres --no-owner --no-privileges -d l
 
 tar -xzf "$witness" -C "$work"
 docker run -d --name "$name-witness" --network "$name" --user "$(id -u):$(id -g)" -v "$(cygpath -m "$work" 2>/dev/null || echo "$work"):/var/lib/witness" \
-  -e WITNESS_TOKEN=restore-check -e WITNESS_DIR=/var/lib/witness carwash-server:latest node apps/witness/dist/main.js > /dev/null
+  -e WITNESS_TOKEN=restore-check -e WITNESS_DIR=/var/lib/witness carwash-witness:latest node dist/main.js > /dev/null
 sleep 2
 
 run() {
   docker run --rm --network "$name" -e DATABASE_URL=postgresql://postgres:check@$name-db:5432/ledger -e WITNESS_URL=http://$name-witness:3145 \
-    carwash-server:latest node "$@"
+    carwash-api:latest node "$@"
 }
 
 echo "== The invariants on the restored ledger"
-run apps/api/dist/cli/check.js
+run dist/cli/check.js
 echo "== The audit log against the witness's signed roots"
-run apps/api/dist/cli/verify.js --full
+run dist/cli/verify.js --full
 echo "== The restore checks out"

@@ -25,8 +25,10 @@ healthy() {
 
 release() {
   say "Building the images and starting the stack"
-  docker build -q --label app=carwash -f deploy/server.Dockerfile -t carwash-server:latest . > /dev/null &&
-    docker build -q --label app=carwash -f apps/web/Dockerfile -t carwash-web:latest . > /dev/null &&
+  for app in api psp witness tamper traffic migrate; do
+    docker build -q --label app=carwash -f deploy/server.Dockerfile --target "$app" -t "carwash-$app:latest" . > /dev/null || return 1
+  done
+  docker build -q --label app=carwash -f apps/web/Dockerfile -t carwash-web:latest . > /dev/null &&
     "${compose[@]}" build -q backup &&
     "${compose[@]}" up -d --remove-orphans
 }

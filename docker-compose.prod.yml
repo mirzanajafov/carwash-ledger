@@ -1,7 +1,6 @@
 name: carwash
 
 x-server: &server
-  image: carwash-server:latest
   init: true
   restart: unless-stopped
   logging:
@@ -74,14 +73,15 @@ services:
 
   migrate:
     <<: *server
+    image: carwash-migrate:latest
     container_name: carwash-migrate
     restart: "no"
-    working_dir: /app/packages/db
+    working_dir: /app/db
     command:
       [
         "sh",
         "-c",
-        "node node_modules/prisma/build/index.js migrate deploy && cd /app/apps/api && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin",
+        "node node_modules/prisma/build/index.js migrate deploy && cd /app/api && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin",
       ]
     environment:
       DATABASE_URL: postgresql://ledger_owner:${LEDGER_OWNER_PASSWORD}@postgres:5432/ledger
@@ -97,8 +97,9 @@ services:
 
   psp:
     <<: *server
+    image: carwash-psp:latest
     container_name: carwash-psp
-    command: ["node", "apps/psp/dist/main.js"]
+    command: ["node", "dist/main.js"]
     environment:
       PSP_DATABASE_URL: postgresql://psp:${PSP_DB_PASSWORD}@postgres:5432/psp
       PSP_API_KEY: ${PSP_API_KEY}
@@ -120,8 +121,9 @@ services:
 
   witness:
     <<: *server
+    image: carwash-witness:latest
     container_name: carwash-witness
-    command: ["node", "apps/witness/dist/main.js"]
+    command: ["node", "dist/main.js"]
     environment:
       WITNESS_TOKEN: ${WITNESS_TOKEN:?set WITNESS_TOKEN}
       WITNESS_DIR: /var/lib/witness
@@ -139,8 +141,9 @@ services:
 
   api:
     <<: *server
+    image: carwash-api:latest
     container_name: carwash-api
-    command: ["node", "apps/api/dist/main.js"]
+    command: ["node", "dist/main.js"]
     environment:
       <<: *ledger
       AUDIT_DATABASE_URL: postgresql://ledger_audit:${LEDGER_AUDIT_PASSWORD}@postgres:5432/ledger
@@ -159,8 +162,9 @@ services:
 
   worker:
     <<: *server
+    image: carwash-api:latest
     container_name: carwash-worker
-    command: ["node", "apps/api/dist/worker.js"]
+    command: ["node", "dist/worker.js"]
     environment:
       <<: *ledger
       AUDIT_DATABASE_URL: postgresql://ledger_audit:${LEDGER_AUDIT_PASSWORD}@postgres:5432/ledger
@@ -184,8 +188,9 @@ services:
 
   tamper:
     <<: *server
+    image: carwash-tamper:latest
     container_name: carwash-tamper
-    command: ["node", "apps/tamper/dist/main.js"]
+    command: ["node", "dist/main.js"]
     environment:
       TAMPER_DATABASE_URL: postgresql://carwash:${POSTGRES_PASSWORD}@postgres:5432/ledger
       TAMPER_TOKEN: ${TAMPER_TOKEN:?set TAMPER_TOKEN}
@@ -199,8 +204,9 @@ services:
 
   traffic:
     <<: *server
+    image: carwash-traffic:latest
     container_name: carwash-traffic
-    command: ["node", "apps/traffic/dist/main.js"]
+    command: ["node", "dist/main.js"]
     environment:
       API_URL: http://api:3140
       CLIENT_KEY: ${TRAFFIC_KEY}

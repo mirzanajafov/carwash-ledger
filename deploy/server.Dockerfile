@@ -1,5 +1,10 @@
-FROM node:24-slim AS build
+FROM node:24-slim AS base
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+
+FROM base AS build
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/audit/package.json packages/audit/
@@ -30,15 +35,32 @@ COPY apps/witness apps/witness
 COPY apps/tamper apps/tamper
 COPY apps/traffic apps/traffic
 RUN pnpm --filter @carwash/db generate \
-  && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..." build
+  && pnpm --filter "@carwash/api..." --filter "@carwash/psp..." --filter "@carwash/witness..." --filter "@carwash/tamper..." --filter "@carwash/traffic..." build \
+  && for app in api psp witness tamper traffic; do pnpm --config.inject-workspace-packages=true --filter "@carwash/$app" deploy --prod "/out/$app"; done \
+  && pnpm --config.inject-workspace-packages=true --filter @carwash/db deploy /out/db
 
-FROM node:24-slim
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
-  && mkdir -p /var/lib/witness \
-  && chown node:node /var/lib/witness
-WORKDIR /app
-COPY --from=build --chown=node:node /app /app
+FROM base AS runtime
 ENV NODE_ENV=production
 USER node
+
+FROM runtime AS api
+COPY --from=build --chown=node:node /out/api /app
+
+FROM runtime AS psp
+COPY --from=build --chown=node:node /out/psp /app
+
+FROM runtime AS witness
+USER root
+RUN mkdir -p /var/lib/witness && chown node:node /var/lib/witness
+USER node
+COPY --from=build --chown=node:node /out/witness /app
+
+FROM runtime AS tamper
+COPY --from=build --chown=node:node /out/tamper /app
+
+FROM runtime AS traffic
+COPY --from=build --chown=node:node /out/traffic /app
+
+FROM runtime AS migrate
+COPY --from=build --chown=node:node /out/db /app/db
+COPY --from=build --chown=node:node /out/api /app/api
