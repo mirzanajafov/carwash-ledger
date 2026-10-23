@@ -5,7 +5,7 @@ import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
-import { Chart } from '../ledger/chart.service.ts'
+import { ChartService } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
 import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
@@ -30,9 +30,9 @@ export class AnomaliesService {
   readonly #db: Database
   readonly #attempts: AttemptsService
   readonly #psp: PspClient
-  readonly #chart: Chart
+  readonly #chart: ChartService
 
-  constructor(db: Database, attempts: AttemptsService, psp: PspClient, chart: Chart) {
+  constructor(db: Database, attempts: AttemptsService, psp: PspClient, chart: ChartService) {
     this.#db = db
     this.#attempts = attempts
     this.#psp = psp

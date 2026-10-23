@@ -11,14 +11,14 @@ import * as z from 'zod/mini'
 import { Database } from '../src/db/database.ts'
 import { findAttempt } from '../src/payments/attempts.repository.ts'
 import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
-import { Recovery } from '../src/worker/recovery.service.ts'
-import { Scheduler } from '../src/worker/scheduler.service.ts'
+import { RecoveryService } from '../src/worker/recovery.service.ts'
+import { SchedulerService } from '../src/worker/scheduler.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
 import { count, startStack, testConfig, WEBHOOK_SECRET, type CallOptions, type Reply, type Stack } from './support.ts'
 
 let stack: Stack
 let worker: INestApplicationContext
-let recovery: Recovery
+let recovery: RecoveryService
 
 function call(method: string, path: string, options?: CallOptions) {
   return stack.call(method, path, options)
@@ -82,7 +82,7 @@ beforeAll(async () => {
   cleanup.defer(() => stack.close())
   worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
   cleanup.defer(() => worker.close())
-  recovery = worker.get(Recovery)
+  recovery = worker.get(RecoveryService)
 })
 
 afterAll(() => cleanup.disposeAsync())
@@ -240,7 +240,7 @@ describe('the recovery job', () => {
 
 describe('the worker', () => {
   it('stops its loops before the database pools close when the worker shuts down', async () => {
-    const stopping = vi.spyOn(Scheduler.prototype, 'onModuleDestroy')
+    const stopping = vi.spyOn(SchedulerService.prototype, 'onModuleDestroy')
     const closing = vi.spyOn(Database.prototype, 'onModuleDestroy')
     try {
       const worker = await NestFactory.createApplicationContext(WorkerModule.register(testConfig({ ...stack.env, RECOVERY_EVERY_MS: '10' })), { logger: false })

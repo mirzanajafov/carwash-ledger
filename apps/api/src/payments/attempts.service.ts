@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { postInTransaction, reversalOf, type EntryInput } from '@carwash/ledger'
 import type { Transaction } from '@carwash/pg'
+import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { journalEvents, paymentEvent, refundEvent } from '../events/events.ts'
 import type { AttemptId, PaymentId } from '../ids.ts'
-import { Chart } from '../ledger/chart.service.ts'
+import { ChartService } from '../ledger/chart.service.ts'
 import { failPayout, loadPayout, lockPayout, succeedPayout } from '../payouts/payouts.repository.ts'
 import { checkAnswer, expectedFrom, type PspAnswer } from '../psp/answers.ts'
 import { PspClient, type PspCall } from '../psp/psp.client.ts'
@@ -13,7 +14,7 @@ import { PspAnswerRejectedError, pspUnavailable } from '../psp/psp.errors.ts'
 import { recordAnomaly } from './anomalies.repository.ts'
 import type { Attempt, PayoutAttempt, RefundAttempt } from './attempt.ts'
 import { attemptOutcome, insertAttempt, loadAttempt, resolveAttempt } from './attempts.repository.ts'
-import { feeRefund, platformFee } from './fees.ts'
+import { feeRefund, platformFee, type FeeSchedule } from './fees.ts'
 import type { Payment, PaymentStatus } from './payment.ts'
 import { resolveCardAttempt } from './payment-state.ts'
 import { failRefund, loadPayment, lockPayment, lockRefund, movePayment, setPaymentRefunded, succeedRefund, type PaymentChanges } from './payments.repository.ts'
@@ -27,13 +28,15 @@ function nonZero(entries: EntryInput[]): EntryInput[] {
 @Injectable()
 export class AttemptsService {
   readonly #db: Database
-  readonly #chart: Chart
+  readonly #chart: ChartService
   readonly #psp: PspClient
+  readonly #fees: FeeSchedule
 
-  constructor(db: Database, chart: Chart, psp: PspClient) {
+  constructor(db: Database, chart: ChartService, psp: PspClient, @Inject(CORE_CONFIG) config: CoreConfig) {
     this.#db = db
     this.#chart = chart
     this.#psp = psp
+    this.#fees = config.fees
   }
 
   async settle(attempt: Attempt): Promise<Applied> {
@@ -75,7 +78,7 @@ export class AttemptsService {
         await insertAttempt(client, { kind: 'capture', paymentId: payment.id, amount: payment.amount, currency: payment.currency })
       }
     } else if (attempt.kind === 'capture') {
-      const fee = platformFee(attempt.amount, this.#chart.feeSchedule)
+      const fee = platformFee(attempt.amount, this.#fees)
       const accounts = this.#chart.accounts(payment.currency)
       const journalId = await postInTransaction(client, this.#chart.registry, {
         externalRef: `capture:${payment.id}`,

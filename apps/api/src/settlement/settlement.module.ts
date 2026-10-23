@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common'
 import { LedgerModule } from '../ledger/ledger.module.ts'
 import { PspModule } from '../psp/psp.module.ts'
-import { Settlements } from './settlements.service.ts'
+import { SettlementIngestService } from './settlement-ingest.service.ts'
+import { ReconciliationService } from './reconciliation.service.ts'
 
-@Module({ imports: [LedgerModule, PspModule], providers: [Settlements], exports: [Settlements] })
+@Module({
+  imports: [LedgerModule, PspModule],
+  providers: [SettlementIngestService, ReconciliationService],
+  exports: [SettlementIngestService, ReconciliationService],
+})
 export class SettlementModule {}

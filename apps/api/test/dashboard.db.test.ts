@@ -21,7 +21,7 @@ import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
 import { VerificationJob } from '../src/audit/verification-job.ts'
 import { VerificationRuns } from '../src/audit/verification-runs.ts'
 import { Database } from '../src/db/database.ts'
-import { Chart } from '../src/ledger/chart.service.ts'
+import { ChartService } from '../src/ledger/chart.service.ts'
 import { PAYMENTS } from '../src/live/live-feed.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
 import { startApi, startStack, testConfig, type Stack } from './support.ts'
@@ -150,7 +150,7 @@ describe('the live feed', () => {
 
   it('keeps up when the log holds more than a batch of journals, and never replays old ones as new', async () => {
     const pool = stack.app.get(Database).pool
-    const chart = stack.app.get(Chart)
+    const chart = stack.app.get(ChartService)
     const accounts = chart.accounts('EUR')
     const poster = new PgCtePoster(pool, chart.registry)
     const before = BigInt(firstRow(await pool.query<{ id: string }>('SELECT coalesce(max(id), 0)::text AS id FROM journals')).id)

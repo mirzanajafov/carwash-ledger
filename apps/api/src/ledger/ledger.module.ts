@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common'
-import { Chart } from './chart.service.ts'
+import { ChartService } from './chart.service.ts'
 
-@Module({ providers: [Chart], exports: [Chart] })
+@Module({ providers: [ChartService], exports: [ChartService] })
 export class LedgerModule {}
