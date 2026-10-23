@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { HttpError } from '@carwash/http'
 import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
@@ -123,21 +123,6 @@ function operationCharge(row: OperationRow, id: string): ChargeRow {
     throw new Error(`operation ${row.id} points at charge ${id}, which has no row`)
   }
   return { id, status, currency, authorized_amount, captured_amount, refunded_amount, expires_at, expired }
-}
-
-export function requestHash(method: string, path: string, body: unknown): Buffer {
-  return createHash('sha256')
-    .update(`${method} ${path}\n${canonicalJson(body)}`)
-    .digest()
-}
-
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`
-  }
-  return JSON.stringify(value)
 }
 
 export class Psp {

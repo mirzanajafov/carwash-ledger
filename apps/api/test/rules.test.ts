@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { TokenBuckets } from '../src/auth/token-buckets.ts'
 import { dayTotals } from '../src/consumers/statements.ts'
 import { databaseUnavailable } from '../src/db/unavailable.ts'
-import { canonicalJson, requestHash } from '../src/idempotency/request-hash.ts'
 import { feeRefund, platformFee } from '../src/payments/fees.ts'
 import { resolveCardAttempt } from '../src/payments/payment-state.ts'
 import { checkAnswer, type ExpectedAnswer } from '../src/psp/answers.ts'
@@ -96,16 +95,6 @@ describe('checkAnswer', () => {
     expect(problems({ status: 'maybe' })).toEqual([expect.stringContaining('status')])
     expect(problems({ amount: 1499.5 })).toEqual(['amount is 1499.5, expected 1500'])
     expect(checkAnswer(expected, 'not json').ok).toBe(false)
-  })
-})
-
-describe('request hashing', () => {
-  it('ignores key order but not values or the path', () => {
-    expect(canonicalJson({ b: 1, a: [{ d: 1, c: 2 }] })).toBe('{"a":[{"c":2,"d":1}],"b":1}')
-    const hash = requestHash('POST', '/v1/payments', { amount: 1, currency: 'EUR' })
-    expect(requestHash('POST', '/v1/payments', { currency: 'EUR', amount: 1 }).equals(hash)).toBe(true)
-    expect(requestHash('POST', '/v1/payments', { currency: 'EUR', amount: 2 }).equals(hash)).toBe(false)
-    expect(requestHash('POST', '/v1/payouts', { currency: 'EUR', amount: 1 }).equals(hash)).toBe(false)
   })
 })
 

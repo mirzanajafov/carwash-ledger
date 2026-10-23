@@ -80,6 +80,9 @@ importers:
       '@carwash/failpoints':
         specifier: workspace:*
         version: link:../../packages/failpoints
+      '@carwash/http':
+        specifier: workspace:*
+        version: link:../../packages/http
       '@carwash/invariants':
         specifier: workspace:*
         version: link:../../packages/invariants
@@ -304,6 +307,9 @@ importers:
       '@carwash/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@carwash/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -351,6 +357,9 @@ importers:
       '@carwash/audit':
         specifier: workspace:*
         version: link:../audit
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@carwash/failpoints':
         specifier: workspace:*
         version: link:../failpoints
@@ -677,6 +686,9 @@ importers:
       '@carwash/failpoints':
         specifier: workspace:*
         version: link:../../packages/failpoints
+      '@carwash/http':
+        specifier: workspace:*
+        version: link:../../packages/http
       '@carwash/invariants':
         specifier: workspace:*
         version: link:../../packages/invariants

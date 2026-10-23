@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { errorOf } from '@carwash/contracts'
+import { canonicalJson } from '@carwash/http'
 import type { Random } from '../random.ts'
 
 export type RequestKind = 'create' | 'capture' | 'cancel' | 'refund' | 'payout' | 'merchant' | 'probe'
@@ -43,15 +44,6 @@ export function verdictOf(status: number, body: unknown): Verdict {
   if (status >= 500 || status === 429) return 'retry'
   if (status === 409 && errorOf(body)?.code === 'request_in_progress') return 'retry'
   return 'rejected'
-}
-
-export function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`
-  }
-  return JSON.stringify(value)
 }
 
 export function backoff(random: Random, attempts: number, retryAfterSeconds = 0): number {
@@ -150,7 +142,7 @@ export class Clients {
       const code = errorOf(body)?.code
       const label = `${response.status}${code ? ` ${code}` : ''}`
       this.#count(label)
-      if (verdict === 'stored') record.stored.push(`${response.status} ${canonical(body)}`)
+      if (verdict === 'stored') record.stored.push(`${response.status} ${canonicalJson(body)}`)
       if (verdict === 'retry') record.lastError = label
       const retryAfter = Number(response.headers.get('retry-after') ?? 0)
       return { status: response.status, body, verdict, retryAfter: verdict === 'retry' ? retryAfter : 0 }

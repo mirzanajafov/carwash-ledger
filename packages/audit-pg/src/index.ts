@@ -1,5 +1,7 @@
 export * from './log.ts'
 export * from './checkpointer.ts'
 export * from './witness-client.ts'
+export * from './witness-key.ts'
 export * from './verifier.ts'
 export * from './tamper.ts'
+export * from './reads.ts'

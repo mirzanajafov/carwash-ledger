@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { checkKeys, compareBeliefs, unanswered, type LedgerState } from '../src/payments/checks.ts'
-import { backoff, canonical, verdictOf, type RequestRecord } from '../src/payments/client.ts'
+import { backoff, verdictOf, type RequestRecord } from '../src/payments/client.ts'
 import type { PaymentBelief } from '../src/payments/journeys.ts'
 
 function request(overrides: Partial<RequestRecord> = {}): RequestRecord {
@@ -28,10 +28,6 @@ describe('the client', () => {
     expect(backoff(() => 0.999, 10)).toBeGreaterThan(1990)
     expect(backoff(() => 0.999, 10)).toBeLessThanOrEqual(2000)
     expect(backoff(() => 0, 0, 1)).toBe(1000)
-  })
-
-  it('compares answers whatever order their keys come back in', () => {
-    expect(canonical({ b: 1, a: [{ d: 2, c: 3 }] })).toBe(canonical({ a: [{ c: 3, d: 2 }], b: 1 }))
   })
 })
 

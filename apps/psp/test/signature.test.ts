@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { retryDelaySeconds } from '../src/delivery.ts'
-import { canonicalJson, requestHash } from '../src/psp.ts'
 import { signatureHeader, verifySignature } from '../src/signature.ts'
 
 describe('webhook signatures', () => {
@@ -16,16 +15,6 @@ describe('webhook signatures', () => {
     expect(verifySignature(secret, body, header, 1_700_000_301)).toBe(false)
     expect(verifySignature(secret, body, 't=1700000000', 1_700_000_000)).toBe(false)
     expect(verifySignature(secret, body, 'garbage', 1_700_000_000)).toBe(false)
-  })
-})
-
-describe('request hashing', () => {
-  it('ignores key order but not values or the path', () => {
-    expect(canonicalJson({ b: 1, a: { d: [2, { f: 1, e: 0 }], c: null } })).toBe('{"a":{"c":null,"d":[2,{"e":0,"f":1}]},"b":1}')
-    const hash = requestHash('POST', '/v1/charges', { amount: 1500, currency: 'EUR' })
-    expect(requestHash('POST', '/v1/charges', { currency: 'EUR', amount: 1500 }).equals(hash)).toBe(true)
-    expect(requestHash('POST', '/v1/charges', { currency: 'EUR', amount: 1501 }).equals(hash)).toBe(false)
-    expect(requestHash('POST', '/v1/payouts', { currency: 'EUR', amount: 1500 }).equals(hash)).toBe(false)
   })
 })
 

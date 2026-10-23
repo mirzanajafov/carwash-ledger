@@ -4,6 +4,8 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import * as z from 'zod/mini'
 
+export { canonicalJson, requestHash } from './request-hash.ts'
+
 export class HttpError extends Error {
   readonly status: number
   readonly code: string

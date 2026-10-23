@@ -1,4 +1,5 @@
 import 'server-only'
+import { WitnessKeyView } from '@carwash/contracts'
 import type { Reply } from './plug'
 
 export function apiUrl(): string {
@@ -80,7 +81,7 @@ export async function witnessKey(): Promise<string | null> {
   try {
     const response = await fetch(`${url}/v1/key`, { cache: 'no-store', signal: AbortSignal.timeout(3000) })
     if (!response.ok) return null
-    return ((await response.json()) as { public_key: string }).public_key
+    return WitnessKeyView.parse(await response.json()).public_key
   } catch {
     return null
   }

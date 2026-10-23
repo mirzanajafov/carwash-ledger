@@ -15,17 +15,8 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { checkpointBody, fromHex, verifyConsistency, type Checkpoint } from '@carwash/audit'
-
-export interface Signed extends Checkpoint {
-  signature: string
-  signed_at: string
-}
-
-export interface Submission extends Checkpoint {
-  from_size: number
-  proof: string[]
-}
+import { checkpointBody, fromHex, verifyConsistency } from '@carwash/audit'
+import { SignedCheckpointView, type CheckpointSubmission } from '@carwash/contracts'
 
 export class Refusal extends Error {
   readonly code: string
@@ -68,7 +59,7 @@ export class Witness {
   readonly #privateKey: KeyObject
   readonly #publicKey: KeyObject
   readonly #log: string
-  #latest: Signed | undefined
+  #latest: SignedCheckpointView | undefined
   #queue: Promise<unknown> = Promise.resolve()
 
   constructor(dir: string, origin: string) {
@@ -84,7 +75,7 @@ export class Witness {
     this.#log = join(dir, 'checkpoints.jsonl')
     const line = lastLine(this.#log)
     if (line === undefined) return
-    const signed = JSON.parse(line) as Signed
+    const signed = SignedCheckpointView.parse(JSON.parse(line))
     if (!this.verify(signed)) throw new Error(`the witness log ends with a checkpoint at size ${signed.size} that its own key did not sign`)
     this.#latest = signed
   }
@@ -99,7 +90,7 @@ export class Witness {
     return this.#origin
   }
 
-  latest(): Signed | undefined {
+  latest(): SignedCheckpointView | undefined {
     return this.#latest
   }
 
@@ -117,17 +108,17 @@ export class Witness {
     }
   }
 
-  verify(signed: Signed): boolean {
+  verify(signed: SignedCheckpointView): boolean {
     return verify(null, Buffer.from(checkpointBody(signed, this.#origin)), this.#publicKey, Buffer.from(signed.signature, 'base64'))
   }
 
-  submit(submission: Submission): Promise<{ signed: Signed; fresh: boolean }> {
+  submit(submission: CheckpointSubmission): Promise<{ signed: SignedCheckpointView; fresh: boolean }> {
     const result = this.#queue.then(() => this.#submit(submission))
     this.#queue = result.catch(() => undefined)
     return result
   }
 
-  #submit(submission: Submission): { signed: Signed; fresh: boolean } {
+  #submit(submission: CheckpointSubmission): { signed: SignedCheckpointView; fresh: boolean } {
     const body = checkpointBody(submission, this.#origin)
     const last = this.latest()
     if (last) {
@@ -141,7 +132,7 @@ export class Witness {
         throw new Refusal('inconsistent', `${submission.size} is not an extension of the log at ${last.size}`)
       }
     }
-    const signed: Signed = {
+    const signed: SignedCheckpointView = {
       size: submission.size,
       root: submission.root,
       signature: sign(null, Buffer.from(body), this.#privateKey).toString('base64'),

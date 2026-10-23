@@ -1,6 +1,7 @@
 import { leafHash, nodeHash, type Hash } from '@carwash/audit'
 import { firstRow, type Transaction } from '@carwash/pg'
-import { canonicalOf, SEQUENCER_LOCK, type JournalRow } from './log.ts'
+import { canonicalOf, readJournals } from './journals.ts'
+import { SEQUENCER_LOCK } from './log.ts'
 
 export type TamperClass = 1 | 2 | 3
 
@@ -10,13 +11,6 @@ export interface Tampered {
   journalId: string
   undo: { amounts?: { id: string; amount: string }[]; journal?: string; entries?: string }
 }
-
-const JOURNAL = `
-  SELECT j.id::text, j.external_ref, (extract(epoch FROM j.created_at) * 1000000)::bigint::text AS micros,
-         json_agg(json_build_array(e.id::text, e.account_id::text, e.amount::text) ORDER BY e.id) AS entries
-  FROM journals j JOIN entries e ON e.journal_id = j.id
-  WHERE j.id = $1
-  GROUP BY j.id`
 
 const RECHAIN = `
   WITH RECURSIVE rechained(seq, chain) AS (
@@ -42,7 +36,9 @@ async function moveCents(client: Transaction, journalId: string, cents: number):
 }
 
 async function rewriteHashes(client: Transaction, seq: number, journalId: string): Promise<void> {
-  let hash: Hash = leafHash(canonicalOf(firstRow(await client.query<JournalRow>(JOURNAL, [journalId]))))
+  const [journal] = await readJournals(client, [journalId])
+  if (!journal) throw new Error(`journal ${journalId} has no rows to hash`)
+  let hash: Hash = leafHash(canonicalOf(journal))
   await client.query('UPDATE audit_log SET leaf = $2 WHERE seq = $1', [seq, Buffer.from(hash)])
   await client.query(RECHAIN, [seq])
   await client.query('UPDATE audit_nodes SET hash = $2 WHERE level = 0 AND idx = $1', [seq, Buffer.from(hash)])

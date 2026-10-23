@@ -1,11 +1,11 @@
 import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
+import { requestHash } from '@carwash/http'
 import { firstRow, type Transaction } from '@carwash/pg'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
 import { asPaymentId, asPayoutId, asRefundId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
-import { requestHash } from './request-hash.ts'
 
 export interface OwnedKey {
   clientId: string

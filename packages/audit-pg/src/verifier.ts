@@ -1,21 +1,16 @@
-import { createPublicKey, verify } from 'node:crypto'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
-import { chainHash, checkpointBody, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash } from '@carwash/audit'
+import { chainHash, EMPTY_CHAIN, equal, Frontier, fromHex, leafHash, toHex, type FrontierState, type Hash, type SignedCheckpoint } from '@carwash/audit'
 import type { Queryable, Transaction } from '@carwash/pg'
-import { canonicalOf, rootAt, treeSize, type JournalRow } from './log.ts'
+import { canonicalOf, ENTRIES, MICROS, type JournalRow } from './journals.ts'
+import { rootAt, treeSize } from './log.ts'
+import { isSignedBy, witnessKey } from './witness-key.ts'
 
 const TURN_MS = 10
-
-export interface SignedRoot {
-  size: number
-  root: string
-  signature: string
-}
 
 export interface WitnessAnchor {
   origin: string
   publicKey: string
-  latest: SignedRoot | undefined
+  latest: SignedCheckpoint | undefined
 }
 
 export interface VerifierState extends FrontierState {
@@ -66,8 +61,7 @@ interface Row extends JournalRow {
 
 const ROWS = `
   SELECT a.seq::text, a.journal_id::text, a.leaf, a.chain, j.id IS NOT NULL AS present, j.id::text AS id, j.external_ref,
-         (extract(epoch FROM j.created_at) * 1000000)::bigint::text AS micros,
-         coalesce(json_agg(json_build_array(e.id::text, e.account_id::text, e.amount::text) ORDER BY e.id) FILTER (WHERE e.id IS NOT NULL), '[]') AS entries
+         ${MICROS} AS micros, coalesce(${ENTRIES} FILTER (WHERE e.id IS NOT NULL), '[]') AS entries
   FROM audit_log a
   LEFT JOIN journals j ON j.id = a.journal_id
   LEFT JOIN entries e ON e.journal_id = j.id
@@ -109,11 +103,11 @@ class Findings {
   }
 }
 
-async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number, through: number): Promise<SignedRoot[]> {
+async function claimedRoots(db: Queryable, witness: WitnessAnchor, above: number, through: number): Promise<SignedCheckpoint[]> {
   const { latest } = witness
   const { rows } = await db.query<{ size: string; root: Buffer; signature: Buffer }>(COPIES, [above, through, witness.publicKey])
   const roots = rows.map((row) => ({ size: Number(row.size), root: row.root.toString('hex'), signature: row.signature.toString('base64') }))
-  const isLatest = (root: SignedRoot) => root.size === latest?.size && root.root === latest.root && root.signature === latest.signature
+  const isLatest = (root: SignedCheckpoint) => root.size === latest?.size && root.root === latest.root && root.signature === latest.signature
   if (latest && latest.size > above && latest.size <= through && !roots.some(isLatest)) roots.push(latest)
   return roots.sort((a, b) => a.size - b.size)
 }
@@ -157,16 +151,13 @@ export async function verifyLog(db: Transaction, options: VerifyOptions = {}): P
     if (!stored || toHex(stored) !== options.from.root) findings.add({ kind: 'history', size: start, what: 'root' })
   }
 
-  const witness = options.witness && {
-    ...options.witness,
-    key: createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: options.witness.publicKey }, format: 'jwk' }),
-  }
-  const signedRoots = async (above: number, through: number): Promise<SignedRoot[]> => {
+  const witness = options.witness && { ...options.witness, key: witnessKey(options.witness.publicKey) }
+  const signedRoots = async (above: number, through: number): Promise<SignedCheckpoint[]> => {
     if (!witness) return []
-    const good: SignedRoot[] = []
+    const good: SignedCheckpoint[] = []
     for (const root of await timed(() => claimedRoots(db, witness, above, through))) {
       if (performance.now() - turnAt >= TURN_MS) await turn()
-      if (verify(null, Buffer.from(checkpointBody(root, witness.origin)), witness.key, Buffer.from(root.signature, 'base64'))) good.push(root)
+      if (isSignedBy(root, witness.key, witness.origin)) good.push(root)
       else findings.add({ kind: 'signature', size: root.size })
     }
     return good

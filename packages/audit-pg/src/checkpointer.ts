@@ -1,9 +1,10 @@
-import { createPublicKey, verify, type KeyObject } from 'node:crypto'
-import { checkpointBody, fromHex, ORIGIN, toHex } from '@carwash/audit'
+import type { KeyObject } from 'node:crypto'
+import { fromHex, ORIGIN, toHex } from '@carwash/audit'
 import { failpoint } from '@carwash/failpoints'
 import type pg from 'pg'
 import { proveConsistency, rootAt, treeSize } from './log.ts'
 import type { WitnessClient } from './witness-client.ts'
+import { isSignedBy, witnessKey } from './witness-key.ts'
 
 export type CheckpointOutcome =
   | { kind: 'empty' }
@@ -33,15 +34,14 @@ export class Checkpointer {
     const reply = await this.#witness.submit({ size, root, from_size: from, proof })
     if (reply.kind === 'refused') return { kind: 'refused', size, code: reply.code, message: reply.message }
     const signed = reply.checkpoint
-    const signature = Buffer.from(signed.signature, 'base64')
-    if (signed.size !== size || signed.root !== root || !verify(null, Buffer.from(checkpointBody(signed)), key.object, signature)) {
+    if (signed.size !== size || signed.root !== root || !isSignedBy(signed, key.object)) {
       throw new Error(`the witness answered size ${size} with a checkpoint that does not verify`)
     }
     failpoint('checkpoint.after_sign')
     await this.#pool.query(
       `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (size) DO NOTHING`,
-      [size, Buffer.from(fromHex(root)), signature, key.raw, signed.signed_at],
+      [size, Buffer.from(fromHex(root)), Buffer.from(signed.signature, 'base64'), key.raw, signed.signed_at],
     )
     return { kind: 'signed', size, fresh: reply.fresh }
   }
@@ -51,7 +51,7 @@ export class Checkpointer {
     const key = await this.#witness.key()
     if (key.origin !== ORIGIN) throw new Error(`the witness signs for ${key.origin}, not ${ORIGIN}`)
     if (key.algorithm !== 'ed25519') throw new Error(`the witness signs with ${key.algorithm}, not ed25519`)
-    this.#key = { raw: key.public_key, object: createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: key.public_key }, format: 'jwk' }) }
+    this.#key = { raw: key.public_key, object: witnessKey(key.public_key) }
     return this.#key
   }
 }
