@@ -6,7 +6,9 @@ COPY packages/audit/package.json packages/audit/
 COPY packages/audit-pg/package.json packages/audit-pg/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
+COPY packages/env/package.json packages/env/
 COPY packages/failpoints/package.json packages/failpoints/
+COPY packages/http/package.json packages/http/
 COPY packages/invariants/package.json packages/invariants/
 COPY packages/ledger/package.json packages/ledger/
 COPY packages/outbox/package.json packages/outbox/

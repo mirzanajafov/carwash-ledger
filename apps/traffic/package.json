@@ -9,7 +9,8 @@
     "start": "node --conditions=source src/main.ts"
   },
   "dependencies": {
-    "@carwash/contracts": "workspace:*"
+    "@carwash/contracts": "workspace:*",
+    "@carwash/env": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

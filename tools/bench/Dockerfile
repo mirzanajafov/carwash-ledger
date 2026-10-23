@@ -5,7 +5,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/audit/package.json packages/audit/
 COPY packages/audit-pg/package.json packages/audit-pg/
 COPY packages/db/package.json packages/db/
+COPY packages/env/package.json packages/env/
 COPY packages/failpoints/package.json packages/failpoints/
+COPY packages/http/package.json packages/http/
 COPY packages/ledger/package.json packages/ledger/
 COPY packages/outbox/package.json packages/outbox/
 COPY packages/pg/package.json packages/pg/

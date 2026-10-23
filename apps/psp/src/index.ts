@@ -2,7 +2,7 @@ export { startPsp, type RunningPsp } from './app.ts'
 export { loadConfig, type Config } from './config.ts'
 export {
   NO_FAULTS,
-  parseFaultPlan,
+  FaultPlanInput,
   parseToken,
   SETTLEMENT_FAULTS,
   type FaultPlan,

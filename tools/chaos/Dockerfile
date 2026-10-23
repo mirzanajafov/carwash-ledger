@@ -7,7 +7,9 @@ RUN corepack enable \
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
+COPY packages/env/package.json packages/env/
 COPY packages/failpoints/package.json packages/failpoints/
+COPY packages/http/package.json packages/http/
 COPY packages/ledger/package.json packages/ledger/
 COPY packages/outbox/package.json packages/outbox/
 COPY packages/recon/package.json packages/recon/
