@@ -1,12 +1,8 @@
 import { CheckpointView, errorOf, InclusionProofView, JournalView, LeafView } from '@carwash/contracts'
-import { callApi, clientKey, unreachable } from '@/lib/server'
+import { callApi, clientKey, refuse, unreachable } from '@/lib/server'
 import type { JournalEvidence } from '@/lib/verify-journal'
 
 export const dynamic = 'force-dynamic'
-
-function refuse(status: number, code: string, message: string): Response {
-  return Response.json({ error: { code, message } }, { status })
-}
 
 export async function GET(_request: Request, context: { params: Promise<{ seq: string }> }): Promise<Response> {
   const { seq } = await context.params

@@ -1,7 +1,9 @@
 'use client'
 
-import { errorOf, WeatherView } from '@carwash/contracts'
-import { useCallback, useEffect, useState } from 'react'
+import { WeatherView } from '@carwash/contracts'
+import { useEffect, useState } from 'react'
+import { requestJson, refusal, useAction } from '@/lib/use-action'
+import { useNow } from '@/lib/use-now'
 import { describePlan, PRESETS, secondsLeft, type Preset } from '@/lib/weather'
 
 function clock(seconds: number): string {
@@ -10,48 +12,37 @@ function clock(seconds: number): string {
 
 export function WeatherPanel({ admin = false }: { admin?: boolean }) {
   const [state, setState] = useState<WeatherView | null>(null)
-  const [now, setNow] = useState(() => Date.now())
-  const [busy, setBusy] = useState<Preset['name'] | 'custom' | null>(null)
-  const [note, setNote] = useState<string | null>(null)
+  const now = useNow()
+  const { busy, note, setNote, run } = useAction<Preset['name'] | 'custom'>()
   const [draft, setDraft] = useState<string | null>(null)
   const [minutes, setMinutes] = useState('10')
 
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch('/api/weather', { cache: 'no-store' })
-      if (response.ok) setState(WeatherView.parse(await response.json()))
-    } catch {
-      return
+  useEffect(() => {
+    const load = () => {
+      fetch('/api/weather', { cache: 'no-store' })
+        .then(async (response) => (response.ok ? WeatherView.parse(await response.json()) : null))
+        .then(
+          (weather) => {
+            if (weather) setState(weather)
+          },
+          () => undefined,
+        )
     }
+    load()
+    const poll = setInterval(load, 5000)
+    return () => clearInterval(poll)
   }, [])
 
-  useEffect(() => {
-    void load()
-    const poll = setInterval(load, 5000)
-    const tick = setInterval(() => setNow(Date.now()), 1000)
-    return () => {
-      clearInterval(poll)
-      clearInterval(tick)
-    }
-  }, [load])
-
-  async function send(name: Preset['name'] | 'custom', payload: unknown) {
-    setBusy(name)
-    setNote(null)
-    try {
-      const response = await fetch('/api/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
-      const body: unknown = await response.json().catch(() => null)
-      if (response.ok) setState(WeatherView.parse(body))
-      else setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
-    } catch {
-      setNote('The web server stopped answering.')
-    } finally {
-      setBusy(null)
-    }
+  function send(name: Preset['name'] | 'custom', payload: unknown) {
+    run(name, async () => {
+      const answer = await requestJson('POST', '/api/weather', payload)
+      if (answer.ok) setState(WeatherView.parse(answer.body))
+      return refusal(answer)
+    })
   }
 
   function choose(preset: Preset) {
-    return send(preset.name, { preset: preset.name })
+    send(preset.name, { preset: preset.name })
   }
 
   function apply() {
@@ -62,7 +53,7 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
       setNote('The plan is not valid JSON.')
       return
     }
-    return send('custom', { custom: { plan, minutes: Number(minutes) } })
+    send('custom', { custom: { plan, minutes: Number(minutes) } })
   }
 
   const weather = state?.weather && secondsLeft(state.weather.until, now) > 0 ? state.weather : null

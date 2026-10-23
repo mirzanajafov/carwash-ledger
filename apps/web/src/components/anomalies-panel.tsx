@@ -1,10 +1,10 @@
 'use client'
 
-import { errorOf, type AnomalyView } from '@carwash/contracts'
+import type { AnomalyView } from '@carwash/contracts'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
+import { requestJson, refusal, useAction } from '@/lib/use-action'
 
 function when(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
@@ -22,22 +22,14 @@ function describe(a: AnomalyView): string {
 
 export function AnomaliesPanel({ open, resolved }: { open: AnomalyView[]; resolved: AnomalyView[] }) {
   const router = useRouter()
-  const [busy, setBusy] = useState<string | null>(null)
-  const [note, setNote] = useState<string | null>(null)
+  const { busy, note, run } = useAction<string>()
 
-  async function act(id: string, action: 'accept' | 'dispute') {
-    setBusy(`${id}:${action}`)
-    setNote(null)
-    try {
-      const response = await fetch(`/api/admin/anomalies/${id}/${action}`, { method: 'POST' })
-      const body: unknown = await response.json().catch(() => null)
-      if (!response.ok) setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
+  function act(id: string, action: 'accept' | 'dispute') {
+    run(`${id}:${action}`, async () => {
+      const answer = await requestJson('POST', `/api/admin/anomalies/${id}/${action}`)
       router.refresh()
-    } catch {
-      setNote('The web server stopped answering.')
-    } finally {
-      setBusy(null)
-    }
+      return refusal(answer)
+    })
   }
 
   return (

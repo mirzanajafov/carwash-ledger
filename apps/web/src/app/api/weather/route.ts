@@ -1,4 +1,5 @@
-import { callPsp, relay, unreachable } from '@/lib/server'
+import * as z from 'zod/mini'
+import { callPsp, readBody, refuse, relay, unreachable } from '@/lib/server'
 import { adminSession } from '@/lib/session'
 import { presetNamed, Turn, VISITOR_EVERY_MS, VISITOR_SECONDS } from '@/lib/weather'
 
@@ -14,18 +15,18 @@ export async function GET(): Promise<Response> {
   }
 }
 
-function refuse(status: number, code: string, message: string, headers: Record<string, string> = {}): Response {
-  return Response.json({ error: { code, message } }, { status, headers })
-}
+const WeatherBody = z.object({ preset: z.optional(z.string()), custom: z.optional(z.unknown()) })
+
+const CustomWeather = z.object({ plan: z.unknown(), minutes: z.int().check(z.gte(1), z.lte(60)) })
 
 export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { preset?: unknown; custom?: { plan?: unknown; minutes?: unknown } | null } | null
+  const body = await readBody(request, WeatherBody)
   try {
     if (body?.custom !== undefined) {
       if (!(await adminSession())) return refuse(403, 'forbidden', 'only an admin session can set its own weather')
-      const minutes = Number(body.custom?.minutes)
-      if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) return refuse(400, 'invalid', 'minutes must be a whole number from 1 to 60')
-      return relay(await callPsp('PUT', '/admin/weather', { label: 'custom', plan: body.custom?.plan, seconds: minutes * 60 }))
+      const custom = CustomWeather.safeParse(body.custom)
+      if (!custom.success) return refuse(400, 'invalid', 'minutes must be a whole number from 1 to 60')
+      return relay(await callPsp('PUT', '/admin/weather', { body: { label: 'custom', plan: custom.data.plan, seconds: custom.data.minutes * 60 } }))
     }
     const preset = presetNamed(body?.preset)
     if (!preset) return refuse(400, 'invalid', 'pick one of the presets')
@@ -34,7 +35,7 @@ export async function POST(request: Request): Promise<Response> {
       const wait = turn.take(Date.now())
       if (wait > 0) return refuse(429, 'rate_limited', `the weather changed less than a minute ago, so try again in ${wait} s`, { 'retry-after': String(wait) })
     }
-    return relay(await callPsp('PUT', '/admin/weather', { label: preset.name, plan: preset.plan, seconds: VISITOR_SECONDS }))
+    return relay(await callPsp('PUT', '/admin/weather', { body: { label: preset.name, plan: preset.plan, seconds: VISITOR_SECONDS } }))
   } catch {
     return unreachable()
   }

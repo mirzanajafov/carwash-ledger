@@ -14,7 +14,12 @@ export default defineConfig({
       },
       {
         extends: true,
-        resolve: { alias: { '@': fileURLToPath(new URL('apps/web/src', import.meta.url)) } },
+        resolve: {
+          alias: {
+            '@': fileURLToPath(new URL('apps/web/src', import.meta.url)),
+            'server-only': fileURLToPath(new URL('apps/web/node_modules/server-only/empty.js', import.meta.url)),
+          },
+        },
         test: { name: 'web', include: ['apps/web/src/**/*.test.ts'] },
       },
       {

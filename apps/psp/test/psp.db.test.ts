@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
+import { text } from 'node:stream/consumers'
 import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createScratchDatabase } from '@carwash/testkit'
@@ -81,12 +82,16 @@ beforeAll(async () => {
   sql = new pg.Pool({ connectionString: db.url, max: 2 })
   cleanup.defer(() => sql.end())
   received = []
-  const receiver = createServer(async (request, response) => {
-    const chunks: Buffer[] = []
-    for await (const chunk of request) chunks.push(chunk as Buffer)
-    const body = Buffer.concat(chunks).toString('utf8')
-    received.push({ signature: String(request.headers['psp-signature']), body })
-    response.writeHead(answerWith(body)).end()
+  const receiver = createServer((request, response) => {
+    void text(request)
+      .then((body) => {
+        received.push({ signature: String(request.headers['psp-signature']), body })
+        response.writeHead(answerWith(body)).end()
+      })
+      .catch((error: unknown) => {
+        response.destroy()
+        throw error
+      })
   })
   receiver.listen(0, '127.0.0.1')
   await once(receiver, 'listening')

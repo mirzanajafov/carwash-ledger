@@ -33,11 +33,4 @@ export default defineConfig(
     extends: [reactHooks.configs.flat['recommended-latest'], nextPlugin.configs['core-web-vitals']],
     settings: { next: { rootDir: 'apps/web' } },
   },
-  {
-    name: 'pending',
-    rules: {
-      '@typescript-eslint/no-misused-promises': 'off',
-      'react-hooks/set-state-in-effect': 'off',
-    },
-  },
 )

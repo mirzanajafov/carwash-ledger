@@ -18,9 +18,11 @@ const relay = new Relay(pool, publisher, { workers: 4, batch: 500, pollMs: 50, p
 relay.start()
 console.log('e4-relay: ready')
 
-process.once('SIGTERM', async () => {
+async function shutdown(): Promise<void> {
   await relay.stop()
   await publisher.close()
   await pool.end()
   process.exit(0)
-})
+}
+
+process.once('SIGTERM', () => void shutdown())

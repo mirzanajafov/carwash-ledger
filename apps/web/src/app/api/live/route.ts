@@ -1,5 +1,5 @@
 import { clientIp, Streams } from '@/lib/limits'
-import { apiUrl } from '@/lib/server'
+import { apiUrl, refuse, unreachable } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,14 +7,14 @@ const streams = new Streams(3)
 
 export async function GET(request: Request): Promise<Response> {
   const release = streams.open(clientIp(request.headers.get('x-forwarded-for')))
-  if (!release) return Response.json({ error: { code: 'too_many_streams', message: 'this address already has three live pages open' } }, { status: 429 })
+  if (!release) return refuse(429, 'too_many_streams', 'this address already has three live pages open')
   request.signal.addEventListener('abort', release)
   let upstream: Response
   try {
     upstream = await fetch(`${apiUrl()}/v1/live`, { signal: request.signal, cache: 'no-store' })
   } catch {
     release()
-    return Response.json({ error: { code: 'api_unreachable', message: 'the ledger API is not answering' } }, { status: 502 })
+    return unreachable()
   }
   if (!upstream.ok || !upstream.body) {
     release()
