@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { FailedPayment, PaymentView, PayoutView, SettlementView } from '@carwash/contracts'
 import {
   checkAgainstPsp,
   checkEvents,
@@ -152,21 +153,21 @@ beforeAll(async () => {
   stack = await startStack()
   cleanup.defer(() => stack.close())
   const call = stack.call
-  payments.auto = (await call('POST', '/v1/payments', { body: pay('tok_ok') })).body.id
-  payments.manual = (await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body.id
+  payments.auto = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok') })).body).id
+  payments.manual = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body).id
   await call('POST', `/v1/payments/${payments.manual}/capture`, { body: { amount: 1200 } })
   await call('POST', `/v1/payments/${payments.manual}/refunds`, { body: { amount: 500 } })
-  payments.authorized = (await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body.id
-  payments.declined = (await call('POST', '/v1/payments', { body: pay('tok_decline') })).body.payment.id
+  payments.authorized = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body).id
+  payments.declined = FailedPayment.parse((await call('POST', '/v1/payments', { body: pay('tok_decline') })).body).payment.id
   expect((await call('POST', '/v1/payments', { body: pay('tok_wrong_amount_capture') })).status).toBe(502)
   await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2', amount: 3000 }) })
-  expect((await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_1', currency: 'EUR' } })).body.status).toBe('succeeded')
+  expect(PayoutView.parse((await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_1', currency: 'EUR' } })).body).status).toBe('succeeded')
   stack.psp.faults.plan = { ...NO_FAULTS, decline: 1 }
-  expect((await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })).body.status).toBe('failed')
+  expect(PayoutView.parse((await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })).body).status).toBe('failed')
   stack.psp.faults.plan = NO_FAULTS
   settledDay = stack.psp.settlements.calendar().current_day
   await stack.psp.settlements.close(settledDay)
-  expect((await call('POST', `/v1/settlements/${settledDay}/ingest`, { as: 'admin' })).body.outcome).toBe('ingested')
+  expect(SettlementView.parse((await call('POST', `/v1/settlements/${settledDay}/ingest`, { as: 'admin' })).body).outcome).toBe('ingested')
   const app = stack.app.get(Database).pool
   await deliver(app, [await outboxEvents(app)])
   const clean = await inSnapshot(stack.admin, (client) => checkPaymentsIn(client))
@@ -333,7 +334,7 @@ describe('the payment invariants, continued from the last clean run', () => {
     expect(quiet).toMatchObject({ payments: 0, entries: 0 })
     expect(quiet.since?.snapshot).toBe(first.base?.snapshot)
 
-    const paid = (await stack.call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2' }) })).body.id
+    const paid = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2' }) })).body).id
     const next = await checkPaymentsIncrementally(audit)
     expect(next).toMatchObject({ payments: 1, entries: 1 })
     await stack.admin.query('UPDATE payments SET captured_amount = captured_amount - 1 WHERE id = $1', [paid])
@@ -375,7 +376,7 @@ describe('the payment invariants, continued from the last clean run', () => {
     const merchant = await accountId('merchant_payable:wash_1')
     const receivable = await accountId('psp_receivable:EUR')
     const bank = await accountId('bank:EUR')
-    expect((await stack.call('POST', '/v1/payments', { body: pay('tok_ok') })).body.status).toBe('captured')
+    expect(PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay('tok_ok') })).body).status).toBe('captured')
     const clean = await withTransaction(stack.admin, async (open) => {
       await postJournal(open, 'debit-open-at-the-clean-run', [
         [merchant, 100],

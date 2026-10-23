@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { restore, tamper, type TamperClass, type Tampered } from '@carwash/audit-pg'
+import type { TamperView } from '@carwash/contracts'
 import { firstRow, withTransaction, type Queryable, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 
@@ -12,15 +13,6 @@ export class Conflict extends Error {
     super(message)
     this.code = code
   }
-}
-
-export interface Tamper {
-  tamper_class: TamperClass
-  seq: number
-  journal_id: string
-  witnessed_size: number
-  at: string
-  restores_at: string | null
 }
 
 type Undo = Tampered & { witnessedSize: number; at: Date }
@@ -80,16 +72,16 @@ export class TamperService {
     this.#autoRestoreMs = options.autoRestoreMs ?? 0
   }
 
-  async current(): Promise<Tamper | null> {
+  async current(): Promise<TamperView | null> {
     const current = await currentUndo(this.#pool)
     return current ? this.#view(current) : null
   }
 
-  tamper(tamperClass: TamperClass): Promise<Tamper> {
+  tamper(tamperClass: TamperClass): Promise<TamperView> {
     return this.#serial(async () => this.#view(await withTransaction(this.#pool, (client) => this.#tamper(client, tamperClass))))
   }
 
-  restore(): Promise<Tamper> {
+  restore(): Promise<TamperView> {
     return this.#serial(async () => {
       const restored = await this.#restore(lockCurrentUndo)
       if (!restored) throw new Conflict('nothing_to_restore', 'nothing is tampered with')
@@ -141,7 +133,7 @@ export class TamperService {
     })
   }
 
-  #view(current: Undo): Tamper {
+  #view(current: Undo): TamperView {
     return {
       tamper_class: current.tamperClass,
       seq: current.seq,

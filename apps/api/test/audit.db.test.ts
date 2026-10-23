@@ -1,4 +1,5 @@
 import { canonicalJournal, fromHex, leafHash, rootFromLeaves, toHex, verifyConsistency, verifyInclusion } from '@carwash/audit'
+import { AuditHeadView, ConsistencyProofView, InclusionProofView, JournalView, LeafView } from '@carwash/contracts'
 import { checkAudit, checkAuditIn, checkSequenced, violations } from '@carwash/invariants'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { sequenceBatch } from '@carwash/audit-pg'
@@ -46,28 +47,28 @@ describe('the audit log', () => {
     expect(await sequenceAll()).toBeGreaterThan(0)
     expect(violations([await checkAudit(stack.admin), await checkSequenced(stack.admin)])).toEqual([])
 
-    const first = (await stack.call('GET', '/v1/audit/head')).body
+    const first = AuditHeadView.parse((await stack.call('GET', '/v1/audit/head')).body)
     const { rows: leaves } = await stack.admin.query<{ leaf: Buffer }>('SELECT leaf FROM audit_log ORDER BY seq')
     expect(first.tree_size).toBe(leaves.length)
     expect(first.root).toBe(toHex(rootFromLeaves(leaves.map((l) => new Uint8Array(l.leaf)))))
 
     const { rows: journals } = await stack.admin.query<{ id: string }>(`SELECT id::text FROM journals WHERE external_ref LIKE 'capture:%' ORDER BY id`)
     for (const { id } of journals) {
-      const proof = (await stack.call('GET', `/v1/journals/${id}/proof`)).body
+      const proof = InclusionProofView.parse((await stack.call('GET', `/v1/journals/${id}/proof`)).body)
       expect(proof.root).toBe(first.root)
       expect(verifyInclusion(fromHex(proof.leaf), proof.seq, proof.tree_size, proof.proof.map(fromHex), fromHex(proof.root))).toBe(true)
     }
 
     for (const amount of [3500, 4900, 1500, 900]) await stack.call('POST', '/v1/payments', { body: pay(amount) })
     await sequenceAll()
-    const second = (await stack.call('GET', '/v1/audit/head')).body
+    const second = AuditHeadView.parse((await stack.call('GET', '/v1/audit/head')).body)
     expect(second.tree_size).toBeGreaterThan(first.tree_size)
-    const consistency = (await stack.call('GET', `/v1/audit/consistency?first=${first.tree_size}&second=${second.tree_size}`)).body
+    const consistency = ConsistencyProofView.parse((await stack.call('GET', `/v1/audit/consistency?first=${first.tree_size}&second=${second.tree_size}`)).body)
     expect(consistency.first_root).toBe(first.root)
     expect(verifyConsistency(first.tree_size, second.tree_size, fromHex(first.root), fromHex(second.root), consistency.proof.map(fromHex))).toBe(true)
     const [oldest] = journals
     assert(oldest)
-    const old = (await stack.call('GET', `/v1/journals/${oldest.id}/proof?tree_size=${first.tree_size}`)).body
+    const old = InclusionProofView.parse((await stack.call('GET', `/v1/journals/${oldest.id}/proof?tree_size=${first.tree_size}`)).body)
     expect(old.root).toBe(first.root)
     expect((await stack.call('GET', `/v1/journals/${oldest.id}/proof?tree_size=0`)).status).toBe(400)
   })
@@ -113,7 +114,7 @@ describe('the audit log', () => {
       'SELECT a.journal_id::text, a.seq::text, a.leaf FROM audit_log a ORDER BY a.seq DESC LIMIT 3',
     )
     for (const row of rows) {
-      const journal = (await stack.call('GET', `/v1/journals/${row.journal_id}`)).body
+      const journal = JournalView.parse((await stack.call('GET', `/v1/journals/${row.journal_id}`)).body)
       expect(journal).toMatchObject({ object: 'journal', id: row.journal_id, seq: Number(row.seq) })
       const leaf = leafHash(
         canonicalJournal({
@@ -131,7 +132,7 @@ describe('the audit log', () => {
     }
     const [newest] = rows
     assert(newest)
-    const top = (await stack.call('GET', `/v1/audit/leaves/${newest.seq}`)).body
+    const top = LeafView.parse((await stack.call('GET', `/v1/audit/leaves/${newest.seq}`)).body)
     expect(top).toEqual({ object: 'leaf', seq: Number(newest.seq), journal_id: newest.journal_id, leaf: toHex(new Uint8Array(newest.leaf)) })
     expect((await stack.call('GET', '/v1/audit/leaves/999999')).status).toBe(404)
     expect((await stack.call('GET', '/v1/journals/999999999')).status).toBe(404)

@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto'
+import { WebhookReceipt } from '@carwash/contracts'
 import type pg from 'pg'
 import type { Random } from '../random.ts'
 import type { Endpoints } from './client.ts'
@@ -83,15 +84,17 @@ export class Forger {
     const at = Math.floor(Date.now() / 1000)
     const body = forgedDecline(target, at)
     const signature = `t=${at},v1=${createHmac('sha256', this.#secret).update(`${at}.${body}`).digest('hex')}`
+    const api = live[Math.floor(this.#random() * live.length)]
+    if (api === undefined) return 'no api'
     try {
-      const response = await fetch(`${live[Math.floor(this.#random() * live.length)]}/webhooks/psp`, {
+      const response = await fetch(`${api}/webhooks/psp`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'psp-signature': signature },
         body,
         signal: AbortSignal.timeout(5000),
       })
-      const answer = (await response.json().catch(() => null)) as { outcome?: string } | null
-      return response.ok ? `${target.kind} ${answer?.outcome ?? 'no outcome'}` : `${target.kind} http ${response.status}`
+      const answer = WebhookReceipt.safeParse(await response.json().catch(() => null))
+      return response.ok ? `${target.kind} ${answer.data?.outcome ?? 'no outcome'}` : `${target.kind} http ${response.status}`
     } catch {
       return `${target.kind} not delivered`
     }

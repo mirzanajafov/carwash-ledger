@@ -7,11 +7,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkpointBody, fromHex, verifyInclusion } from '@carwash/audit'
+import { CheckpointList, CheckpointView, InclusionProofView, VerificationReport } from '@carwash/contracts'
 import { checkAudit, checkAuditIn, readWitness, readWitnessHistory, violations, type WitnessView } from '@carwash/invariants'
 import { firstRow, inRollback, type Transaction } from '@carwash/pg'
 import { inRollbackWithTriggersOff, withTriggersOff } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import * as z from 'zod/mini'
 import { sequenceBatch } from '@carwash/audit-pg'
 import { Sequencer } from '../src/audit/sequencer.service.ts'
 import { Database } from '../src/db/database.ts'
@@ -24,7 +26,9 @@ let stateFile: string
 
 const VERIFY = fileURLToPath(new URL('../src/cli/verify.ts', import.meta.url))
 
-function runVerify(args: string[]): Promise<{ code: number; report: any }> {
+const VerifyOutput = z.omit(VerificationReport, { root: true })
+
+function runVerify(args: string[]): Promise<{ code: number; report: z.infer<typeof VerifyOutput> }> {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
@@ -33,7 +37,7 @@ function runVerify(args: string[]): Promise<{ code: number; report: any }> {
       (error, stdout, stderr) => {
         const code = error ? (typeof error.code === 'number' ? error.code : -1) : 0
         if (code !== 0 && code !== 1) return reject(new Error(`verify exited with ${code}: ${stderr}`))
-        resolve({ code, report: JSON.parse(stdout) })
+        resolve({ code, report: VerifyOutput.parse(JSON.parse(stdout)) })
       },
     )
   })
@@ -155,27 +159,27 @@ describe('checkpoints and the witness', () => {
     const { rows } = await stack.admin.query<{ size: string }>('SELECT c.size::text FROM audit_checkpoints c ORDER BY c.size')
     expect(rows.map((r) => Number(r.size))).toEqual([first.size, second.size])
 
-    expect((await stack.call('GET', '/v1/audit/checkpoints')).body.data.map((c: { tree_size: number }) => c.tree_size)).toEqual([second.size, first.size])
+    expect(CheckpointList.parse((await stack.call('GET', '/v1/audit/checkpoints')).body).data.map((c) => c.tree_size)).toEqual([second.size, first.size])
     const bigger = 10 ** String(second.size).length
     await stack.admin.query(
       `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
        VALUES ($1, decode(repeat('ab', 32), 'hex'), decode(repeat('cd', 64), 'hex'), 'k', now())`,
       [bigger],
     )
-    expect((await stack.call('GET', '/v1/audit/checkpoints')).body.data.map((c: { tree_size: number }) => c.tree_size)).toEqual([
+    expect(CheckpointList.parse((await stack.call('GET', '/v1/audit/checkpoints')).body).data.map((c) => c.tree_size)).toEqual([
       bigger,
       second.size,
       first.size,
     ])
-    expect((await stack.call('GET', '/v1/audit/checkpoint')).body.tree_size).toBe(bigger)
+    expect(CheckpointView.parse((await stack.call('GET', '/v1/audit/checkpoint')).body).tree_size).toBe(bigger)
     await stack.admin.query('DELETE FROM audit_checkpoints WHERE size = $1', [bigger])
-    const checkpoint = (await stack.call('GET', '/v1/audit/checkpoint')).body
+    const checkpoint = CheckpointView.parse((await stack.call('GET', '/v1/audit/checkpoint')).body)
     expect(checkpoint).toMatchObject({ tree_size: second.size, witness_key: witness.publicKey })
     const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: checkpoint.witness_key }, format: 'jwk' })
     const body = checkpointBody({ size: checkpoint.tree_size, root: checkpoint.root }, checkpoint.origin)
     expect(verify(null, Buffer.from(body), key, Buffer.from(checkpoint.signature, 'base64'))).toBe(true)
     const journal = firstRow(await stack.admin.query<{ id: string }>('SELECT journal_id::text AS id FROM audit_log ORDER BY seq LIMIT 1'))
-    const proof = (await stack.call('GET', `/v1/journals/${journal.id}/proof?tree_size=${checkpoint.tree_size}`)).body
+    const proof = InclusionProofView.parse((await stack.call('GET', `/v1/journals/${journal.id}/proof?tree_size=${checkpoint.tree_size}`)).body)
     expect(proof.root).toBe(checkpoint.root)
     expect(verifyInclusion(fromHex(proof.leaf), proof.seq, proof.tree_size, proof.proof.map(fromHex), fromHex(checkpoint.root))).toBe(true)
 
@@ -256,7 +260,7 @@ describe('checkpoints and the witness', () => {
     expect(incremental.report.examples).toContainEqual({ kind: 'history', size: signed, what: 'chain' })
     const full = await runVerify(['--full'])
     expect(full.code).toBe(1)
-    expect(full.report.examples.every((f: { kind: string }) => f.kind === 'root')).toBe(true)
+    expect(full.report.examples.every((f) => f.kind === 'root')).toBe(true)
     expect((await sequencer.checkpoint())?.kind).toBe('refused')
     await stack.call('POST', '/v1/payments', { body: pay(1200) })
     await sequencer.drain()

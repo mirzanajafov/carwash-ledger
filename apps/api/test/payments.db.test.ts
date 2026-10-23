@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { BalanceView, FailedPayment, MerchantView, PaymentView } from '@carwash/contracts'
 import { checkAgainstPsp, checkLedger, checkPayments, checkSettled, violations } from '@carwash/invariants'
 import { firstRow } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
+import * as z from 'zod/mini'
 import { Database } from '../src/db/database.ts'
 import { IdempotencyService, type Begun, type OwnedKey } from '../src/idempotency/idempotency.service.ts'
 import { requestHash } from '../src/idempotency/request-hash.ts'
@@ -26,9 +28,14 @@ function owned(begun: Begun): OwnedKey {
   return begun.owned
 }
 
+const PspRequest = z.object({ amount: z.number(), currency: z.string() })
+
+async function merchantPayable(): Promise<number> {
+  return MerchantView.parse((await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body).payable
+}
+
 async function balance(code: string): Promise<number> {
-  const reply = await call('GET', `/v1/accounts/${encodeURIComponent(code)}/balance`)
-  return reply.body.balance
+  return BalanceView.parse((await call('GET', `/v1/accounts/${encodeURIComponent(code)}/balance`)).body).balance
 }
 
 const cleanup = new AsyncDisposableStack()
@@ -44,18 +51,19 @@ describe('payments API', () => {
   it('authorizes and captures a payment, and posts one balanced capture journal', async () => {
     const reply = await call('POST', '/v1/payments', { body: pay('tok_ok') })
     expect(reply.status).toBe(200)
-    expect(reply.body).toMatchObject({ object: 'payment', status: 'captured', amount: 1500, captured_amount: 1500, fee: 40 })
+    const payment = PaymentView.parse(reply.body)
+    expect(payment).toMatchObject({ object: 'payment', status: 'captured', amount: 1500, captured_amount: 1500, fee: 40 })
     const { rows } = await stack.admin.query<{ account: string; amount: string }>(
       `SELECT a.code AS account, e.amount::text FROM journals j JOIN entries e ON e.journal_id = j.id JOIN accounts a ON a.id = e.account_id
        WHERE j.external_ref = $1 ORDER BY a.code`,
-      [`capture:${reply.body.id}`],
+      [`capture:${payment.id}`],
     )
     expect(rows).toEqual([
       { account: 'merchant_payable:wash_1', amount: '-1460' },
       { account: 'platform_fee_revenue:EUR', amount: '-40' },
       { account: 'psp_receivable:EUR', amount: '1500' },
     ])
-    expect((await call('GET', `/v1/payments/${reply.body.id}`)).body).toEqual(reply.body)
+    expect((await call('GET', `/v1/payments/${payment.id}`)).body).toEqual(payment)
   })
 
   it('replays the stored answer for the same key and refuses the same key with a different body', async () => {
@@ -64,8 +72,7 @@ describe('payments API', () => {
     const second = await call('POST', '/v1/payments', { key, body: { token: 'tok_ok', merchant: 'wash_1', currency: 'EUR', amount: 1500 } })
     expect(second).toMatchObject({ status: 200, replayed: true, body: first.body })
     const reused = await call('POST', '/v1/payments', { key, body: pay('tok_ok', { amount: 1501 }) })
-    expect(reused.status).toBe(422)
-    expect(reused.body.error.code).toBe('idempotency_key_reused')
+    expect(reused).toMatchObject({ status: 422, body: { error: { code: 'idempotency_key_reused' } } })
   })
 
   it('makes one payment out of 20 concurrent requests with one key', async () => {
@@ -75,13 +82,14 @@ describe('payments API', () => {
     expect(replies.every((r) => r.status === 200 || (r.status === 409 && r.retryAfter === '1'))).toBe(true)
     const done = replies.filter((r) => r.status === 200)
     expect(done.length).toBeGreaterThanOrEqual(1)
-    expect(new Set(done.map((r) => r.body.id)).size).toBe(1)
-    const [paid] = done
+    const ids = new Set(done.map((r) => PaymentView.parse(r.body).id))
+    expect(ids.size).toBe(1)
+    const [paid] = ids
     assert(paid)
     const settled = await call('POST', '/v1/payments', { key, body })
-    expect(settled).toMatchObject({ status: 200, replayed: true, body: { id: paid.body.id } })
+    expect(settled).toMatchObject({ status: 200, replayed: true, body: { id: paid } })
     expect(await count(stack.admin, `SELECT count(*)::int AS n FROM idempotency_keys WHERE key = $1`, [key])).toBe(1)
-    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref = $1`, [`capture:${paid.body.id}`])).toBe(1)
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM journals WHERE external_ref = $1`, [`capture:${paid}`])).toBe(1)
   })
 
   it('stores a decline as a 402 and replays it', async () => {
@@ -90,7 +98,9 @@ describe('payments API', () => {
     expect(declined.status).toBe(402)
     expect(declined.body).toMatchObject({ error: { code: 'card_declined' }, payment: { status: 'failed', failure_reason: 'card_declined' } })
     expect(await call('POST', '/v1/payments', { key, body: pay('tok_decline') })).toMatchObject({ status: 402, replayed: true })
-    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${declined.body.payment.id}`])).toBe(0)
+    expect(
+      await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${FailedPayment.parse(declined.body).payment.id}`]),
+    ).toBe(0)
   })
 
   it('answers 503 when the PSP captures and then hangs, and the retry finishes the same capture once', async () => {
@@ -100,12 +110,11 @@ describe('payments API', () => {
     expect(first).toMatchObject({ status: 503, retryAfter: '1', body: { error: { code: 'psp_unavailable' } } })
     const second = await call('POST', '/v1/payments', { key, body })
     expect(second).toMatchObject({ status: 200, replayed: false, body: { status: 'captured' } })
+    const { id } = PaymentView.parse(second.body)
     expect(await call('POST', '/v1/payments', { key, body })).toMatchObject({ status: 200, replayed: true })
-    const { psp_charge_id: chargeId } = firstRow(
-      await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [second.body.id]),
-    )
+    const { psp_charge_id: chargeId } = firstRow(await stack.admin.query<{ psp_charge_id: string }>('SELECT psp_charge_id FROM payments WHERE id = $1', [id]))
     expect(await count(stack.pspSql, `SELECT count(*)::int AS n FROM operations WHERE kind = 'capture' AND charge_id = $1`, [chargeId])).toBe(1)
-    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${second.body.id}`])).toBe(1)
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${id}`])).toBe(1)
   })
 
   it('recovers from a PSP that failed before doing anything, and from one that dropped the connection', async () => {
@@ -152,48 +161,48 @@ describe('payments API', () => {
   })
 
   it('authorizes, captures part of a manual payment, and refuses a second capture without storing it', async () => {
-    const created = await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })
-    expect(created.body).toMatchObject({ status: 'authorized', captured_amount: 0 })
-    const captured = await call('POST', `/v1/payments/${created.body.id}/capture`, { body: { amount: 1000 } })
+    const created = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body)
+    expect(created).toMatchObject({ status: 'authorized', captured_amount: 0 })
+    const captured = await call('POST', `/v1/payments/${created.id}/capture`, { body: { amount: 1000 } })
     expect(captured.body).toMatchObject({ status: 'captured', captured_amount: 1000, fee: 30 })
     const key = randomUUID()
-    const again = await call('POST', `/v1/payments/${created.body.id}/capture`, { key, body: {} })
+    const again = await call('POST', `/v1/payments/${created.id}/capture`, { key, body: {} })
     expect(again).toMatchObject({ status: 409, body: { error: { code: 'payment_not_capturable' } } })
-    expect(await call('POST', `/v1/payments/${created.body.id}/capture`, { key, body: {} })).toMatchObject({ status: 409, replayed: false })
-    expect((await call('POST', `/v1/payments/${created.body.id}/cancel`)).status).toBe(409)
+    expect(await call('POST', `/v1/payments/${created.id}/capture`, { key, body: {} })).toMatchObject({ status: 409, replayed: false })
+    expect((await call('POST', `/v1/payments/${created.id}/cancel`)).status).toBe(409)
   })
 
   it('finishes a manual capture the PSP did before hanging when the client retries it with the same key', async () => {
-    const created = await call('POST', '/v1/payments', { body: pay('tok_timeout_after_capture', { capture: 'manual' }) })
-    expect(created.body).toMatchObject({ status: 'authorized' })
+    const created = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_timeout_after_capture', { capture: 'manual' }) })).body)
+    expect(created).toMatchObject({ status: 'authorized' })
     const key = randomUUID()
-    const capture = `/v1/payments/${created.body.id}/capture`
+    const capture = `/v1/payments/${created.id}/capture`
     expect(await call('POST', capture, { key, body: {} })).toMatchObject({ status: 503, body: { error: { code: 'psp_unavailable' } } })
     expect(await call('POST', capture, { key, body: {} })).toMatchObject({ status: 200, replayed: false, body: { status: 'captured' } })
-    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM attempts WHERE payment_id = $1 AND kind = 'capture'`, [created.body.id])).toBe(1)
-    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.body.id}`])).toBe(1)
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM attempts WHERE payment_id = $1 AND kind = 'capture'`, [created.id])).toBe(1)
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.id}`])).toBe(1)
   })
 
   it('finishes a cancel the PSP did before hanging when the client retries it with the same key', async () => {
-    const created = await call('POST', '/v1/payments', { body: pay('tok_timeout_after_cancel', { capture: 'manual' }) })
-    expect(created.body).toMatchObject({ status: 'authorized' })
+    const created = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_timeout_after_cancel', { capture: 'manual' }) })).body)
+    expect(created).toMatchObject({ status: 'authorized' })
     const key = randomUUID()
-    const cancel = `/v1/payments/${created.body.id}/cancel`
+    const cancel = `/v1/payments/${created.id}/cancel`
     expect(await call('POST', cancel, { key })).toMatchObject({ status: 503, body: { error: { code: 'psp_unavailable' } } })
     expect(await call('POST', cancel, { key })).toMatchObject({ status: 200, replayed: false, body: { status: 'canceled' } })
-    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM attempts WHERE payment_id = $1 AND kind = 'cancel'`, [created.body.id])).toBe(1)
+    expect(await count(stack.admin, `SELECT count(*)::int AS n FROM attempts WHERE payment_id = $1 AND kind = 'cancel'`, [created.id])).toBe(1)
   })
 
   it('cancels an authorization without touching the ledger', async () => {
-    const created = await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })
-    expect((await call('POST', `/v1/payments/${created.body.id}/cancel`)).body).toMatchObject({ status: 'canceled' })
-    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.body.id}`])).toBe(0)
+    const created = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok', { capture: 'manual' }) })).body)
+    expect((await call('POST', `/v1/payments/${created.id}/cancel`)).body).toMatchObject({ status: 'canceled' })
+    expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM journals WHERE external_ref = $1', [`capture:${created.id}`])).toBe(0)
   })
 
   it('refunds in parts, gives back the fee in proportion, and stops at the captured amount', async () => {
     const before = await balance('merchant_payable:wash_2')
     const fees = await balance('platform_fee_revenue:EUR')
-    const payment = (await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2' }) })).body
+    const payment = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2' }) })).body)
     const first = await call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 500 } })
     expect(first.body).toMatchObject({ object: 'refund', status: 'succeeded', amount: 500, fee_refund: 13 })
     const second = await call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 1000 } })
@@ -206,10 +215,10 @@ describe('payments API', () => {
   })
 
   it('writes an event for every state change and every entry, in the transaction that makes it', async () => {
-    const payment = (await call('POST', '/v1/payments', { body: pay('tok_ok') })).body
+    const payment = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok') })).body)
     await call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 600 } })
     await call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 900 } })
-    const declined = (await call('POST', '/v1/payments', { body: pay('tok_decline') })).body.payment
+    const declined = FailedPayment.parse((await call('POST', '/v1/payments', { body: pay('tok_decline') })).body).payment
     const events = async (key: string) =>
       (
         await stack.admin.query<{ type: string; status: string }>(
@@ -238,28 +247,28 @@ describe('payments API', () => {
 
   it('pays a merchant out only up to what it is owed, checked under its lock', async () => {
     await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2', amount: 5000 }) })
-    const payable = (await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body.payable
+    const payable = await merchantPayable()
     expect(payable).toBeGreaterThanOrEqual(4890)
     const tooMuch = await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', amount: payable + 1, currency: 'EUR' } })
     expect(tooMuch).toMatchObject({ status: 409, body: { error: { code: 'insufficient_funds' } } })
     const bank = await balance('bank:EUR')
     const paid = await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', amount: payable, currency: 'EUR' } })
     expect(paid.body).toMatchObject({ object: 'payout', status: 'succeeded', amount: payable })
-    expect((await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body.payable).toBe(0)
+    expect(await merchantPayable()).toBe(0)
     expect(await balance('bank:EUR')).toBe(bank - payable)
     const nothing = await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })
     expect(nothing).toMatchObject({ status: 409, body: { error: { code: 'nothing_to_pay_out' } } })
     await call('POST', '/v1/payments', { body: pay('tok_ok', { merchant: 'wash_2', amount: 2000 }) })
     const swept = await call('POST', '/v1/payouts', { as: 'admin', body: { merchant: 'wash_2', currency: 'EUR' } })
     expect(swept.body).toMatchObject({ object: 'payout', status: 'succeeded', amount: 1950 })
-    expect((await call('GET', '/v1/merchants/wash_2', { as: 'admin' })).body.payable).toBe(0)
+    expect(await merchantPayable()).toBe(0)
     expect((await call('POST', '/v1/payouts', { body: { merchant: 'wash_2', amount: 1, currency: 'EUR' } })).status).toBe(403)
   })
 
   it('checks keys, scopes, ownership and input before doing anything', async () => {
     expect((await call('GET', '/health', { as: 'nobody' })).status).toBe(200)
     expect((await call('POST', '/v1/payments', { as: 'nobody', body: pay('tok_ok') })).status).toBe(401)
-    const mine = (await call('POST', '/v1/payments', { body: pay('tok_ok') })).body
+    const mine = PaymentView.parse((await call('POST', '/v1/payments', { body: pay('tok_ok') })).body)
     expect((await call('GET', `/v1/payments/${mine.id}`, { as: 'bob' })).status).toBe(404)
     expect((await call('GET', `/v1/payments/${mine.id}`, { as: 'admin' })).status).toBe(200)
     expect((await call('POST', '/v1/payments', { key: null, body: pay('tok_ok') })).status).toBe(400)
@@ -267,7 +276,7 @@ describe('payments API', () => {
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok', { amount: 1.5 }) })).status).toBe(400)
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok', { card: '4242' }) })).status).toBe(400)
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok', { merchant: 'nobody' }) })).status).toBe(404)
-    expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok', { amount: 10 }) })).body.error.code).toBe('amount_too_small')
+    expect(await call('POST', '/v1/payments', { key, body: pay('tok_ok', { amount: 10 }) })).toMatchObject({ body: { error: { code: 'amount_too_small' } } })
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_ok') })).status).toBe(200)
     expect((await call('GET', '/v1/payments/not-a-uuid')).status).toBe(400)
   })
@@ -276,7 +285,7 @@ describe('payments API', () => {
     const liar: Server = createServer(async (request, response) => {
       const chunks: Buffer[] = []
       for await (const chunk of request) chunks.push(chunk as Buffer)
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      const body = PspRequest.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')))
       response.writeHead(200, { 'content-type': 'application/json' }).end(
         JSON.stringify({
           id: `op_${randomUUID()}`,
@@ -339,15 +348,12 @@ describe('payments API', () => {
       const held = await app.get(Database).pool.connect()
       try {
         const busy = await call('POST', '/v1/payments', { base: url, key, body: pay('tok_ok') })
-        expect(busy.status).toBe(503)
-        expect(busy.body.error.code).toBe('database_unavailable')
-        expect(busy.retryAfter).toBe('1')
+        expect(busy).toMatchObject({ status: 503, retryAfter: '1', body: { error: { code: 'database_unavailable' } } })
       } finally {
         held.release()
       }
       const served = await call('POST', '/v1/payments', { base: url, key, body: pay('tok_ok') })
-      expect(served.status).toBe(200)
-      expect(served.body.status).toBe('captured')
+      expect(served).toMatchObject({ status: 200, body: { status: 'captured' } })
     } finally {
       await app.close()
     }

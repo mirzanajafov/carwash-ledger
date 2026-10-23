@@ -8,6 +8,7 @@
     "e5": "node --conditions=source src/e5.ts"
   },
   "dependencies": {
+    "@carwash/contracts": "workspace:*",
     "@carwash/recon": "workspace:*"
   },
   "devDependencies": {

@@ -84,7 +84,7 @@ function child(file: string, env: NodeJS.ProcessEnv): Child {
       if (line.endsWith(': ready')) resolve()
       else console.log(line)
     })
-    process_.once('exit', (code) => reject(new Error(`${file} exited with ${code} before it was ready`)))
+    process_.once('exit', (code) => reject(new Error(`${file} exited with ${String(code)} before it was ready`)))
   })
   return { process: process_, ready }
 }

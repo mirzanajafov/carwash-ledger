@@ -1,7 +1,8 @@
 'use client'
 
+import { liveEvent } from '@carwash/contracts'
 import { useEffect, useReducer, useState } from 'react'
-import { EMPTY, reduce, type LiveAction } from './live'
+import { EMPTY, reduce } from './live'
 
 export type Connection = 'connecting' | 'live' | 'reconnecting'
 
@@ -11,14 +12,14 @@ export function useLive() {
 
   useEffect(() => {
     const source = new EventSource('/api/live')
-    const on = (type: LiveAction['type']) => (event: MessageEvent<string>) => {
-      dispatch({ type, data: JSON.parse(event.data), at: Date.now() })
-    }
     source.addEventListener('open', () => setConnection('live'))
     source.addEventListener('error', () => setConnection('reconnecting'))
-    source.addEventListener('balances', on('balances'))
-    source.addEventListener('journal', on('journal'))
-    source.addEventListener('payment', on('payment'))
+    for (const type of ['balances', 'journal', 'payment']) {
+      source.addEventListener(type, (event: MessageEvent<string>) => {
+        const live = liveEvent(type, JSON.parse(event.data))
+        if (live) dispatch({ ...live, at: Date.now() })
+      })
+    }
     return () => source.close()
   }, [])
 

@@ -170,7 +170,7 @@ describe('webhook signatures', () => {
     expect(verifySignature('whsec', body, header, at + 301)).toBe(false)
     expect(verifySignature('whsec', `${body} `, header, at)).toBe(false)
     expect(verifySignature('other', body, header, at)).toBe(false)
-    expect(verifySignature('whsec', body, `v1=${header.split('v1=')[1]}`, at)).toBe(false)
+    expect(verifySignature('whsec', body, header.slice(header.indexOf('v1=')), at)).toBe(false)
     expect(verifySignature('whsec', body, `t=${at},v1=zz`, at)).toBe(false)
     expect(verifySignature('whsec', body, '', at)).toBe(false)
   })

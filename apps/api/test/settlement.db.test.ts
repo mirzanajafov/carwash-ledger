@@ -1,3 +1,4 @@
+import { BreakList, PaymentView, SettlementDayView, SettlementView } from '@carwash/contracts'
 import { checkLedger, checkSettlement, violations } from '@carwash/invariants'
 import { firstRow } from '@carwash/pg'
 import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp'
@@ -15,7 +16,7 @@ async function ingest(day: number) {
   await stack.psp.settlements.close(day)
   const reply = await stack.call('POST', `/v1/settlements/${day}/ingest`, { as: 'admin' })
   expect(reply.status).toBe(201)
-  return reply.body
+  return SettlementView.parse(reply.body)
 }
 
 async function breaksFor(paymentId: string): Promise<string[]> {
@@ -40,9 +41,9 @@ afterAll(() => cleanup.disposeAsync())
 describe('settlement', () => {
   it('ingests a closed day once, posts what the file says, and finds nothing to report', async () => {
     await stack.call('POST', '/v1/payments', { body: pay(1500) })
-    const refunded = (await stack.call('POST', '/v1/payments', { body: pay(2400) })).body
+    const refunded = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(2400) })).body)
     await stack.call('POST', `/v1/payments/${refunded.id}/refunds`, { body: { amount: 400 } })
-    const manual = (await stack.call('POST', '/v1/payments', { body: pay(1500, { capture: 'manual' }) })).body
+    const manual = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(1500, { capture: 'manual' }) })).body)
     await stack.call('POST', `/v1/payments/${manual.id}/capture`, { body: { amount: 900 } })
 
     const first = await ingest(today)
@@ -73,13 +74,13 @@ describe('settlement', () => {
       { code: 'psp_fee_expense:EUR', amount: file.fee },
       { code: 'psp_receivable:EUR', amount: `-${file.gross}` },
     ])
-    expect((await stack.call('POST', `/v1/settlements/${today}/ingest`, { as: 'admin' })).body.outcome).toBe('already')
+    expect(SettlementView.parse((await stack.call('POST', `/v1/settlements/${today}/ingest`, { as: 'admin' })).body).outcome).toBe('already')
     const days = await stack.call('GET', '/v1/reconciliation/days', { as: 'admin' })
     expect(days.body).toMatchObject({ day_seconds: 86_400, data: [{ day: today, id: file.id, lines: 4, gross: file.gross, breaks: {} }] })
     expect((await stack.call('GET', '/v1/reconciliation/days')).status).toBe(403)
-    const day = await stack.call('GET', `/v1/reconciliation/days/${today}`, { as: 'admin' })
-    expect(day.body).toMatchObject({ day: today, file: { id: file.id, lines: 4 }, breaks: [] })
-    expect(day.body.lines.map((l: { kind: string; break: string | null }) => [l.kind, l.break])).toEqual([
+    const day = SettlementDayView.parse((await stack.call('GET', `/v1/reconciliation/days/${today}`, { as: 'admin' })).body)
+    expect(day).toMatchObject({ day: today, file: { id: file.id, lines: 4 }, breaks: [] })
+    expect(day.lines.map((l) => [l.kind, l.break])).toEqual([
       ['capture', null],
       ['capture', null],
       ['refund', null],
@@ -93,19 +94,19 @@ describe('settlement', () => {
   it('reports each file fault as its own break, and places a line without references when one ledger item fits', async () => {
     const scenario = async (fault: SettlementFault, amount: number, day: number) => {
       stack.psp.faults.plan = only(fault)
-      const payment = (await stack.call('POST', '/v1/payments', { body: pay(amount) })).body
+      const payment = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(amount) })).body)
       const ingested = await ingest(day)
       stack.psp.faults.plan = NO_FAULTS
-      return { payment: payment.id as string, ingested }
+      return { payment: payment.id, ingested }
     }
     const blind = await scenario('droppedReference', 1777, today + 1)
     expect(await breaksFor(blind.payment)).toEqual([])
-    expect(blind.ingested.reconciliation.breaks.unknown_line).toBe(0)
+    expect(blind.ingested.reconciliation?.breaks.unknown_line).toBe(0)
     expect(await breaksFor((await scenario('wrongAmount', 1500, today + 2)).payment)).toEqual(['wrong_amount'])
     expect(await breaksFor((await scenario('feeDifference', 1500, today + 3)).payment)).toEqual(['fee_difference'])
     expect(await breaksFor((await scenario('duplicateLine', 1500, today + 4)).payment)).toEqual(['duplicate_line'])
     expect(await breaksFor((await scenario('missingLine', 1500, today + 5)).payment)).toEqual(['missing_line'])
-    const listed = await stack.call('GET', `/v1/reconciliation/breaks?from=${today}&through=${today + 5}`, { as: 'admin' })
-    expect(listed.body.data.map((b: { class: string }) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
+    const listed = BreakList.parse((await stack.call('GET', `/v1/reconciliation/breaks?from=${today}&through=${today + 5}`, { as: 'admin' })).body)
+    expect(listed.data.map((b) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
   })
 })

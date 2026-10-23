@@ -1,3 +1,4 @@
+import { AuditHeadView, CheckpointList } from '@carwash/contracts'
 import type { Metadata } from 'next'
 import { AuditPanel } from '@/components/audit-panel'
 import { callApi, clientKey, witnessKey } from '@/lib/server'
@@ -5,26 +6,16 @@ import { callApi, clientKey, witnessKey } from '@/lib/server'
 export const metadata: Metadata = { title: 'Audit log · Car Wash Ledger' }
 export const dynamic = 'force-dynamic'
 
-interface Checkpoint {
-  tree_size: number
-  root: string
-  signed_at: string
-}
-
 async function load() {
-  try {
-    const [head, checkpoints, key] = await Promise.all([
-      callApi('GET', '/v1/audit/head', clientKey()),
-      callApi('GET', '/v1/audit/checkpoints', clientKey()),
-      witnessKey(),
-    ])
-    return {
-      size: head.status === 200 ? (head.body.tree_size as number) : null,
-      checkpoints: checkpoints.status === 200 ? (checkpoints.body.data as Checkpoint[]).slice(0, 6) : [],
-      key,
-    }
-  } catch {
-    return { size: null, checkpoints: [] as Checkpoint[], key: null }
+  const [head, checkpoints, key] = await Promise.all([
+    callApi('GET', '/v1/audit/head', clientKey()).catch(() => null),
+    callApi('GET', '/v1/audit/checkpoints', clientKey()).catch(() => null),
+    witnessKey(),
+  ])
+  return {
+    size: head?.status === 200 ? AuditHeadView.parse(head.body).tree_size : null,
+    checkpoints: checkpoints?.status === 200 ? CheckpointList.parse(checkpoints.body).data.slice(0, 6) : [],
+    key,
   }
 }
 

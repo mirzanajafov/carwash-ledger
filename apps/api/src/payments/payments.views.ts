@@ -1,7 +1,8 @@
+import type { PaymentView, RefundView } from '@carwash/contracts'
 import { unixSeconds } from '../unix-time.ts'
 import type { Payment, Refund } from './payment.ts'
 
-export function paymentView(p: Payment) {
+export function paymentView(p: Payment): PaymentView {
   return {
     id: p.id,
     object: 'payment',
@@ -18,7 +19,7 @@ export function paymentView(p: Payment) {
   }
 }
 
-export function refundView(r: Refund) {
+export function refundView(r: Refund): RefundView {
   return {
     id: r.id,
     object: 'refund',

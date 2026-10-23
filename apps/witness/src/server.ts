@@ -68,7 +68,7 @@ async function* historyDocument(witness: Witness): AsyncGenerator<string> {
 export function createWitnessServer(witness: Witness, token: string): Server {
   const routes = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const url = new URL(request.url ?? '/', 'http://witness')
-    const route = `${request.method} ${url.pathname}`
+    const route = `${String(request.method)} ${url.pathname}`
     if (route === 'GET /health') return send(response, 200, { ok: true })
     if (route === 'GET /v1/key') return send(response, 200, { origin: witness.origin, algorithm: 'ed25519', public_key: witness.publicKey })
     if (route === 'GET /v1/checkpoints/latest') {
@@ -91,7 +91,7 @@ export function createWitnessServer(witness: Witness, token: string): Server {
     routes(request, response).catch((error: unknown) => {
       if (error instanceof Refusal) return send(response, REFUSAL_STATUS.get(error.code) ?? 409, { error: { code: error.code, message: error.message } })
       if (error instanceof Error && 'code' in error && error.code === 'ERR_STREAM_PREMATURE_CLOSE') return
-      process.stderr.write(`witness: ${error instanceof Error ? error.stack : String(error)}\n`)
+      process.stderr.write(`witness: ${error instanceof Error ? String(error.stack) : String(error)}\n`)
       if (!response.headersSent) send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
     })
   })

@@ -5,12 +5,13 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Checkpointer, sequenceBatch, verifyLog, WitnessClient, type WitnessAnchor } from '@carwash/audit-pg'
+import { TamperState } from '@carwash/contracts'
 import { AccountRegistry, createAccount, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
 import { inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createTamperServer, TamperService } from '../src/index.ts'
 
 let app: pg.Pool
@@ -38,7 +39,8 @@ function client(base: string, token = 'tamper-token') {
       headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined ? null : typeof body === 'string' ? body : JSON.stringify(body),
     })
-    return { status: response.status, body: await response.json() }
+    const answer: unknown = await response.json()
+    return { status: response.status, body: answer }
   }
 }
 
@@ -88,20 +90,22 @@ describe('the tamper service', () => {
     const tampered = await call('POST', '/v1/tamper', { class: 2 })
     expect(tampered).toMatchObject({ status: 201, body: { tamper: { tamper_class: 2, seq: 15, witnessed_size: 30 } } })
     expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).examples).toEqual([{ kind: 'root', size: 30, after: 0 }])
-    expect((await call('POST', '/v1/tamper', { class: 1 })).body.error.code).toBe('already_tampered')
+    expect((await call('POST', '/v1/tamper', { class: 1 })).body).toMatchObject({ error: { code: 'already_tampered' } })
 
     const restarted = client(await serve(createTamperServer(new TamperService(admin), 'tamper-token')))
-    expect((await restarted('GET', '/v1/tamper')).body.tamper).toMatchObject({ tamper_class: 2, seq: 15 })
+    expect((await restarted('GET', '/v1/tamper')).body).toMatchObject({ tamper: { tamper_class: 2, seq: 15 } })
     expect(await restarted('POST', '/v1/restore')).toMatchObject({ status: 200, body: { restored: { tamper_class: 2, seq: 15 } } })
     expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).findings).toBe(0)
-    expect((await restarted('POST', '/v1/restore')).body.error.code).toBe('nothing_to_restore')
+    expect((await restarted('POST', '/v1/restore')).body).toMatchObject({ error: { code: 'nothing_to_restore' } })
   })
 
   it('lets one of two tampers made at the same time through, and the other changes nothing', async () => {
     const tampers = await Promise.allSettled([0.3, 0.6].map((at) => new TamperService(admin, { random: () => at }).tamper(1)))
     const done = tampers.flatMap((tamper) => (tamper.status === 'fulfilled' ? [tamper.value] : []))
     expect(done).toHaveLength(1)
-    expect(tampers.flatMap((tamper) => (tamper.status === 'rejected' ? [tamper.reason] : []))).toEqual([expect.objectContaining({ code: 'already_tampered' })])
+    expect(tampers.flatMap((tamper): unknown[] => (tamper.status === 'rejected' ? [tamper.reason] : []))).toEqual([
+      expect.objectContaining({ code: 'already_tampered' }),
+    ])
     const leaves = (await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).examples.filter((example) => example.kind === 'leaf')
     expect(leaves).toEqual(done.map((tamper) => ({ kind: 'leaf', seq: tamper.seq, journalId: tamper.journal_id })))
   })
@@ -116,7 +120,7 @@ describe('the tamper service', () => {
     }
     expect(await call('POST', '/v1/tamper', '{"class": 1')).toEqual({ status: 400, body: { error: { code: 'invalid', message: 'the body is not JSON' } } })
     expect(await call('POST', '/v1/tamper', 'null')).toEqual({ status: 400, body: { error: { code: 'invalid', message: 'the body must be a JSON object' } } })
-    expect((await call('GET', '/v1/tamper')).body.tamper).toBeNull()
+    expect((await call('GET', '/v1/tamper')).body).toEqual({ tamper: null })
   })
 
   it('restores on its own after the configured time, also after a restart', async () => {
@@ -140,9 +144,10 @@ describe('the tamper service', () => {
     const before = await admin.query(
       'SELECT j.id, j.created_xid::text, e.id AS entry, e.amount, e.currency FROM journals j JOIN entries e ON e.journal_id = j.id ORDER BY e.id',
     )
-    const { body } = await call('POST', '/v1/tamper', { class: 3 })
+    const { tamper } = TamperState.parse((await call('POST', '/v1/tamper', { class: 3 })).body)
+    assert(tamper)
     expect((await inSnapshot(admin, (client) => verifyLog(client, { witness: anchor() }))).examples).toEqual([
-      { kind: 'missing_journal', seq: 3, journalId: body.tamper.journal_id },
+      { kind: 'missing_journal', seq: 3, journalId: tamper.journal_id },
     ])
     await call('POST', '/v1/restore')
     const after = await admin.query(

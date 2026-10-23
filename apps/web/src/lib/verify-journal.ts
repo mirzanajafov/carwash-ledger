@@ -1,29 +1,20 @@
 import { canonicalJournal, checkpointBody, fromHex, leafHash, toHex, verifyInclusion } from '@carwash/audit'
+import { CheckpointView, InclusionProofView, JournalView } from '@carwash/contracts'
+import * as z from 'zod/mini'
 
-export interface JournalJson {
-  id: string
-  external_ref: string
-  created_at_micros: string
-  seq: number | null
-  entries: { id: string; account_id: string; account: string; amount: string }[]
-}
+export type JournalJson = Pick<JournalView, 'id' | 'external_ref' | 'created_at_micros' | 'seq' | 'entries'>
 
-export interface ProofJson {
-  journal_id: string
-  seq: number
-  leaf: string
-  tree_size: number
-  root: string
-  proof: string[]
-}
+export type ProofJson = Omit<InclusionProofView, 'object'>
 
-export interface CheckpointJson {
-  origin: string
-  tree_size: number
-  root: string
-  signature: string
-  witness_key: string
-}
+export type CheckpointJson = Pick<CheckpointView, 'origin' | 'tree_size' | 'root' | 'signature' | 'witness_key'>
+
+export const JournalEvidence = z.object({
+  journal: z.nullable(JournalView),
+  proof: InclusionProofView,
+  checkpoint: CheckpointView,
+})
+
+export type JournalEvidence = z.infer<typeof JournalEvidence>
 
 export interface Verdict {
   name: 'signature' | 'key' | 'rows' | 'inclusion'

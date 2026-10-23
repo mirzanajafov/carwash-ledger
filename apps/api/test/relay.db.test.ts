@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { PaymentView } from '@carwash/contracts'
 import { checkEvents, violations } from '@carwash/invariants'
 import { Envelope, kafkaClient } from '@carwash/outbox'
 import type { INestApplicationContext } from '@nestjs/common'
@@ -33,7 +34,9 @@ afterAll(() => cleanup.disposeAsync())
 
 describe('the worker relay', () => {
   it('publishes what the API wrote to the outbox, in order per payment', async () => {
-    const payment = (await stack.call('POST', '/v1/payments', { body: { amount: 2400, currency: 'EUR', merchant: 'wash_1', token: 'tok_ok' } })).body
+    const payment = PaymentView.parse(
+      (await stack.call('POST', '/v1/payments', { body: { amount: 2400, currency: 'EUR', merchant: 'wash_1', token: 'tok_ok' } })).body,
+    )
     await stack.call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 2400 } })
     worker = await NestFactory.createApplicationContext(
       WorkerModule.register({ ...stack.config, recoveryEveryMs: 0, kafkaBrokers: BROKERS, kafkaTopicPrefix: PREFIX, relayWorkers: 2 }),

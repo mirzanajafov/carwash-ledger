@@ -1,5 +1,5 @@
 import type { Transaction } from '@carwash/pg'
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 export const LANES = 16
 

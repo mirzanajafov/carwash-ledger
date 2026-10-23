@@ -80,7 +80,7 @@ export class Service {
       else if (this.#failpoint) kind = 'failpoint'
       else if (this.#killed) kind = 'killed'
       else if (!this.#wasReady) kind = 'boot'
-      this.#events.exit(this, kind, `code ${code} signal ${signal}`)
+      this.#events.exit(this, kind, `code ${String(code)} signal ${String(signal)}`)
     })
   }
 

@@ -1,4 +1,5 @@
 import 'server-only'
+import { SessionView } from '@carwash/contracts'
 import { cookies } from 'next/headers'
 import { adminKey, callApi } from './server'
 
@@ -22,12 +23,10 @@ export async function sessionToken(): Promise<string | null> {
 export async function adminSession(): Promise<AdminSession | null> {
   const token = await sessionToken()
   if (!token) return null
-  try {
-    const reply = await callApi('GET', '/v1/admin/sessions/current', token, undefined, undefined, 5000)
-    return reply.status === 200 ? { client: String(reply.body.client), expiresAt: String(reply.body.expires_at) } : null
-  } catch {
-    return null
-  }
+  const reply = await callApi('GET', '/v1/admin/sessions/current', token, undefined, undefined, 5000).catch(() => null)
+  if (reply?.status !== 200) return null
+  const session = SessionView.parse(reply.body)
+  return { client: session.client, expiresAt: session.expires_at }
 }
 
 export async function credential(): Promise<string> {

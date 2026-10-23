@@ -1,5 +1,5 @@
+import type { LiveJournal } from '@carwash/contracts'
 import { bookOf, journalKind, merchantName } from '@/lib/accounts'
-import type { Journal } from '@/lib/live'
 import { money, since } from '@/lib/money'
 
 function accountLabel(code: string): string {
@@ -7,7 +7,7 @@ function accountLabel(code: string): string {
   return bookOf(code)?.title ?? code
 }
 
-export function JournalList({ journals, now }: { journals: readonly Journal[]; now: number }) {
+export function JournalList({ journals, now }: { journals: readonly LiveJournal[]; now: number }) {
   if (journals.length === 0) return <p className="text-sm text-muted">Nothing posted yet.</p>
   return (
     <ol className="divide-y divide-line rounded-xl border border-line bg-surface">

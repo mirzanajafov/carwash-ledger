@@ -1,10 +1,11 @@
 'use client'
 
+import { errorOf } from '@carwash/contracts'
 import { useCallback, useEffect, useReducer, useState } from 'react'
-import { EMPTY, reduce, type AuditState } from '@/lib/audit'
+import { AuditState, EMPTY, reduce } from '@/lib/audit'
 import { isOpen } from '@/lib/verification'
-import { checkJournal, type CheckpointJson, type JournalJson, type ProofJson, type Verdict } from '@/lib/verify-journal'
-import { VerificationRunView } from './verification-run'
+import { checkJournal, JournalEvidence, type Verdict } from '@/lib/verify-journal'
+import { VerificationRun } from './verification-run'
 
 const CLASSES = [
   { tamperClass: 1, title: 'Change an amount', detail: 'Move a euro between two entries of one journal. It still balances, so every balance check passes.' },
@@ -40,7 +41,8 @@ export function AuditPanel() {
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    if (response.ok) dispatch({ type: 'loaded', server: (await response.json()) as AuditState })
+    const state = response.ok ? AuditState.safeParse(await response.json()) : undefined
+    if (state?.success) dispatch({ type: 'loaded', server: state.data })
   }, [])
 
   const verifying = isOpen(server?.verification ?? null)
@@ -60,9 +62,7 @@ export function AuditPanel() {
         headers: body ? { 'content-type': 'application/json' } : {},
         body: body ? JSON.stringify(body) : null,
       })
-      const answer = await response.json().catch(() => null)
-      if (!response.ok) setNote(answer?.error?.message ?? `That answered ${response.status}.`)
-      return response.ok ? answer : null
+      if (!response.ok) setNote(errorOf(await response.json().catch(() => null))?.message ?? `That answered ${response.status}.`)
     } finally {
       setBusy(null)
       void refresh()
@@ -75,12 +75,17 @@ export function AuditPanel() {
     setVerdicts(null)
     try {
       const response = await fetch(`/api/audit/seq/${encodeURIComponent(seq)}`, { cache: 'no-store' })
-      const answer = await response.json()
+      const answer: unknown = await response.json()
       if (!response.ok || !server?.witnessKey) {
-        setNote(answer?.error?.message ?? (server?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
+        setNote(errorOf(answer)?.message ?? (server?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
         return
       }
-      const input = answer as { journal: JournalJson | null; proof: ProofJson; checkpoint: CheckpointJson }
+      const evidence = JournalEvidence.safeParse(answer)
+      if (!evidence.success) {
+        setNote('That answer did not have the shape of a journal with its proof.')
+        return
+      }
+      const input = evidence.data
       setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: server.witnessKey }) })
     } finally {
       setBusy(null)
@@ -207,7 +212,7 @@ export function AuditPanel() {
         >
           {busy === 'verify' || verifying ? 'Verifying…' : 'Verify everything'}
         </button>
-        {server?.verification ? <VerificationRunView run={server.verification} tamperAt={tamper?.at ?? null} /> : null}
+        {server?.verification ? <VerificationRun run={server.verification} tamperAt={tamper?.at ?? null} /> : null}
       </section>
 
       {note ? <p className="text-sm text-warn">{note}</p> : null}

@@ -1,4 +1,5 @@
 import { Catch, HttpException, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common'
+import type { ErrorBody } from '@carwash/contracts'
 import type { Response } from 'express'
 import { databaseUnavailable } from '../db/unavailable.ts'
 import { DomainError, type Failure } from '../domain-errors.ts'
@@ -30,7 +31,8 @@ export class ErrorFilter implements ExceptionFilter {
     if (response.headersSent) return
     const reply = this.#reply(exception)
     if (reply.retryAfterSeconds !== undefined) response.setHeader('Retry-After', String(reply.retryAfterSeconds))
-    response.status(reply.status).json({ error: { code: reply.code, message: reply.message } })
+    const body: ErrorBody = { error: { code: reply.code, message: reply.message } }
+    response.status(reply.status).json(body)
   }
 
   #reply(exception: unknown): ErrorReply {

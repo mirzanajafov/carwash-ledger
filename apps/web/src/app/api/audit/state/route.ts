@@ -1,3 +1,4 @@
+import { CheckpointView, TamperState, VerificationRunView } from '@carwash/contracts'
 import type { AuditState } from '@/lib/audit'
 import { callApi, callTamper, clientKey, unreachable, witnessKey } from '@/lib/server'
 
@@ -12,11 +13,11 @@ export async function GET(): Promise<Response> {
       witnessKey(),
     ])
     return Response.json({
-      tamper: tamper?.status === 200 ? tamper.body.tamper : null,
+      tamper: tamper?.status === 200 ? (TamperState.safeParse(tamper.body).data?.tamper ?? null) : null,
       tamperAvailable: tamper?.status === 200,
-      checkpoint: checkpoint.status === 200 ? checkpoint.body : null,
+      checkpoint: checkpoint.status === 200 ? (CheckpointView.safeParse(checkpoint.body).data ?? null) : null,
       witnessKey: key,
-      verification: verification.status === 200 ? verification.body : null,
+      verification: verification.status === 200 ? (VerificationRunView.safeParse(verification.body).data ?? null) : null,
     } satisfies AuditState)
   } catch {
     return unreachable()

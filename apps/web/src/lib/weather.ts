@@ -1,20 +1,10 @@
-export interface Plan {
-  seed?: number
-  decline?: number
-  fail?: number
-  timeoutAfterCommit?: number
-  slow?: number
-  slowMs?: [number, number]
-  wrongAmount?: number
-  webhook?: Partial<Record<'duplicate' | 'delay' | 'reorder' | 'drop', number>>
-  settlement?: Partial<Record<'nextDay' | 'feeDifference' | 'wrongAmount' | 'missingLine' | 'duplicateLine' | 'droppedReference', number>>
-}
+import type { FaultPlanView } from '@carwash/contracts'
 
 export interface Preset {
   name: 'calm' | 'flaky' | 'storm'
   title: string
   detail: string
-  plan: Plan | null
+  plan: FaultPlanView | null
 }
 
 export const PRESETS: readonly Preset[] = [
@@ -57,11 +47,6 @@ export const PRESETS: readonly Preset[] = [
 export const VISITOR_SECONDS = 300
 export const VISITOR_EVERY_MS = 60_000
 
-export interface Weather {
-  base: Plan
-  weather: { label: string; plan: Plan; until: string } | null
-}
-
 export function presetNamed(name: unknown): Preset | undefined {
   return PRESETS.find((preset) => preset.name === name)
 }
@@ -91,7 +76,7 @@ function percent(p: number): string {
   return `${value < 1 ? value.toFixed(1) : Math.round(value)}%`
 }
 
-export function describePlan(plan: Plan): string[] {
+export function describePlan(plan: FaultPlanView): string[] {
   const parts: [number | undefined, string][] = [
     [plan.decline, 'declined'],
     [plan.fail, 'fail'],

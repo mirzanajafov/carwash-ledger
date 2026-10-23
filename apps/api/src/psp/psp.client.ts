@@ -3,15 +3,9 @@ import { API_CONFIG, type ApiConfig } from '../config.ts'
 import type { AttemptId } from '../ids.ts'
 import type { AttemptKind } from './answers.ts'
 
-export interface PspCall {
-  attemptId: AttemptId
-  kind: AttemptKind
-  amount: bigint
-  currency: string
-  chargeId: string | null
-  token: string | null
-  destination: string | null
-}
+export type PspCall = { attemptId: AttemptId; amount: bigint; currency: string } & (
+  { kind: 'authorize'; token: string } | { kind: Exclude<AttemptKind, 'authorize' | 'payout'>; chargeId: string } | { kind: 'payout'; destination: string }
+)
 
 export type PspReply = { kind: 'answer'; httpStatus: number; body: unknown } | { kind: 'unknown'; reason: string }
 

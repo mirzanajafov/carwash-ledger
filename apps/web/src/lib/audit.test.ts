@@ -8,7 +8,15 @@ function server(treeSize: number | null, tamper: { seq: number; at: string } | n
     checkpoint:
       treeSize === null
         ? null
-        : { origin: 'carwash-ledger', tree_size: treeSize, root: '00', signature: 'sig', witness_key: 'key', signed_at: '2026-10-20T10:00:00.000Z' },
+        : {
+            object: 'audit_checkpoint',
+            origin: 'carwash-ledger',
+            tree_size: treeSize,
+            root: '00',
+            signature: 'sig',
+            witness_key: 'key',
+            signed_at: '2026-10-20T10:00:00.000Z',
+          },
     witnessKey: 'key',
     verification: null,
   }

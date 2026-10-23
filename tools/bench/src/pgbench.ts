@@ -57,7 +57,7 @@ export async function runPgbench(options: PgbenchOptions): Promise<PgbenchResult
     child.stdout.on('data', (chunk: Buffer) => (text += chunk.toString()))
     child.stderr.on('data', (chunk: Buffer) => (text += chunk.toString()))
     child.on('error', reject)
-    child.on('close', (code) => (code === 0 ? resolve(text) : reject(new Error(`pgbench exited ${code}: ${text}`))))
+    child.on('close', (code) => (code === 0 ? resolve(text) : reject(new Error(`pgbench exited ${String(code)}: ${text}`))))
   })
 
   const rows: { epochUs: number; latencyUs: number }[] = []

@@ -1,5 +1,5 @@
+import type { LivePayment } from '@carwash/contracts'
 import { merchantName, programOf } from '@/lib/accounts'
-import type { Payment } from '@/lib/live'
 import { money, since } from '@/lib/money'
 
 const REFUNDED = { label: 'Refunded', tone: 'text-violet border-violet/40' }
@@ -13,7 +13,7 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   failed: { label: 'Declined', tone: 'text-bad border-bad/40' },
 }
 
-export function Bays({ payments, now }: { payments: readonly Payment[]; now: number }) {
+export function Bays({ payments, now }: { payments: readonly LivePayment[]; now: number }) {
   if (payments.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm text-muted">

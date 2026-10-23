@@ -7,25 +7,18 @@ import { DomainError } from '../domain-errors.ts'
 import { asAttemptId, type PayoutId } from '../ids.ts'
 import { Chart } from '../ledger/chart.service.ts'
 import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repository.ts'
-import { answeredAmount, checkAnswer, type AttemptKind } from '../psp/answers.ts'
+import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { pspUnavailable } from '../psp/psp.errors.ts'
-import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
+import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyAttempt, type AnomalyRow } from './anomalies.repository.ts'
 import { loadAttempt, setAttemptAmount } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { correctRefundAmount } from './payments.repository.ts'
 
 const ACCEPTABLE: ReadonlySet<AttemptKind> = new Set(['capture', 'refund', 'payout'])
 
-export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt_id: string } {
-  return (
-    row.kind === 'answer_mismatch' &&
-    row.resolved_at === null &&
-    row.attempt_status === 'pending' &&
-    row.attempt_kind !== null &&
-    ACCEPTABLE.has(row.attempt_kind) &&
-    row.attempt_id !== null
-  )
+export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt: AnomalyAttempt } {
+  return row.kind === 'answer_mismatch' && row.resolved_at === null && row.attempt?.status === 'pending' && ACCEPTABLE.has(row.attempt.kind)
 }
 
 function refuse(message: string): DomainError {
@@ -59,7 +52,7 @@ export class AnomaliesService {
           : 'only a refused amount on a capture, a refund or a payout that is still pending can be accepted, and anything else can only be disputed',
       )
     }
-    const attempt = await loadAttempt(this.#db.pool, asAttemptId(row.attempt_id))
+    const attempt = await loadAttempt(this.#db.pool, asAttemptId(row.attempt.id))
     const reply = await this.#psp.pull(attempt.id)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
     if (reply.kind === 'none') throw refuse('the bank has no record of this operation')
@@ -67,7 +60,7 @@ export class AnomaliesService {
     if (amount === undefined) throw refuse('the bank did not say an amount')
     if (amount > attempt.amount) throw refuse(`the bank says ${amount}, more than the ${attempt.amount} that was asked`)
     const call = await this.#attempts.callFor(attempt)
-    const check = checkAnswer({ attemptId: call.attemptId, kind: call.kind, amount, currency: call.currency, chargeId: call.chargeId }, reply.body)
+    const check = checkAnswer(expectedFrom(call, amount), reply.body)
     if (!check.ok) throw refuse(`the bank's answer differs in more than the amount: ${check.problems.join('. ')}`)
     if (check.answer.status !== 'succeeded') throw refuse('the bank declined this operation, so there is no amount to accept')
     await this.#db.transaction(async (client) => {

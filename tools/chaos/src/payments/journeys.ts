@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import { errorOf, FailedPayment, PaymentView, PayoutView, RefundView } from '@carwash/contracts'
 import type { Answer, Clients, RequestRecord } from './client.ts'
 import type { PaymentJourney, PlannedPayout } from './plan.ts'
 
@@ -106,13 +107,15 @@ export class Journeys {
     const created = await this.#send(caller, 'create', '/v1/payments', body, journey.duplicate)
     if (created.answer === undefined) return 'stopped'
     if (created.answer.verdict === 'refused') return 'refused'
-    if (created.answer.status === 402 && created.answer.body?.payment?.status === 'failed') {
-      this.payments.push({ journey: journey.index, paymentId: created.answer.body.payment.id, status: 'failed', captured: 0, refunded: 0, refunds: [] })
+    const failed = FailedPayment.safeParse(created.answer.body)
+    if (created.answer.status === 402 && failed.success && failed.data.payment.status === 'failed') {
+      this.payments.push({ journey: journey.index, paymentId: failed.data.payment.id, status: 'failed', captured: 0, refunded: 0, refunds: [] })
       return 'declined'
     }
     const expected = journey.capture === 'auto' ? 'captured' : 'authorized'
-    if (created.answer.status !== 200 || created.answer.body.status !== expected) return this.#surprise(created.request, created.answer)
-    const payment = created.answer.body
+    const paid = PaymentView.safeParse(created.answer.body)
+    if (created.answer.status !== 200 || !paid.success || paid.data.status !== expected) return this.#surprise(created.request, created.answer)
+    const payment = paid.data
     const belief: PaymentBelief = {
       journey: journey.index,
       paymentId: payment.id,
@@ -132,7 +135,8 @@ export class Journeys {
         const cancel = await this.#send(caller, 'cancel', `/v1/payments/${payment.id}/cancel`, {}, journey.duplicate)
         if (cancel.answer === undefined) return 'stopped'
         if (cancel.answer.verdict === 'refused') return 'refused'
-        if (cancel.answer.status !== 200 || cancel.answer.body.status !== 'canceled') return this.#surprise(cancel.request, cancel.answer)
+        const canceled = PaymentView.safeParse(cancel.answer.body)
+        if (cancel.answer.status !== 200 || !canceled.success || canceled.data.status !== 'canceled') return this.#surprise(cancel.request, cancel.answer)
         belief.status = 'canceled'
         return 'canceled'
       }
@@ -148,16 +152,16 @@ export class Journeys {
         if (loser === undefined) throw new Error(`journey ${journey.index} sent no capture`)
         return this.#surprise(loser.request, loser.answer)
       }
-      const winner = won.answer
-      if (winner.body.status !== 'captured' || winner.body.captured_amount !== journey.captureAmount) {
-        return this.#surprise(won.request, winner)
+      const captured = PaymentView.safeParse(won.answer.body)
+      if (!captured.success || captured.data.status !== 'captured' || captured.data.captured_amount !== journey.captureAmount) {
+        return this.#surprise(won.request, won.answer)
       }
       if (rival) this.#surprise(rival.request, rival.answer)
       for (const loser of lost) {
-        if (loser.answer.body?.error?.code !== 'payment_not_capturable') this.#surprise(loser.request, loser.answer)
+        if (errorOf(loser.answer.body)?.code !== 'payment_not_capturable') this.#surprise(loser.request, loser.answer)
       }
       belief.status = 'captured'
-      belief.captured = winner.body.captured_amount
+      belief.captured = captured.data.captured_amount
     }
 
     for (const [i, amount] of journey.refunds.entries()) {
@@ -167,8 +171,9 @@ export class Journeys {
       const refund = await this.#send(caller, 'refund', `/v1/payments/${payment.id}/refunds`, { amount }, journey.duplicate)
       if (refund.answer === undefined) return 'stopped'
       if (refund.answer.verdict === 'refused') return 'refused'
-      if (refund.answer.status !== 200 || refund.answer.body.status !== 'succeeded') return this.#surprise(refund.request, refund.answer)
-      belief.refunds.push({ id: refund.answer.body.id, amount })
+      const refunded = RefundView.safeParse(refund.answer.body)
+      if (refund.answer.status !== 200 || !refunded.success || refunded.data.status !== 'succeeded') return this.#surprise(refund.request, refund.answer)
+      belief.refunds.push({ id: refunded.data.id, amount })
       belief.refunded += amount
       if (belief.refunded === belief.captured) belief.status = 'refunded'
     }
@@ -182,10 +187,11 @@ export class Journeys {
     const { request, answer } = await this.#send('admin', 'payout', '/v1/payouts', { merchant, currency: 'EUR' }, planned.duplicate)
     if (answer === undefined) return 'stopped'
     if (answer.verdict === 'refused') return 'refused'
-    if (answer.status === 409 && answer.body?.error?.code === 'nothing_to_pay_out') return 'nothing to pay out'
-    if (answer.status !== 200 || !['succeeded', 'failed'].includes(answer.body.status)) return this.#surprise(request, answer)
-    this.payouts.push({ index: planned.index, payoutId: answer.body.id, status: answer.body.status, amount: answer.body.amount })
-    return answer.body.status
+    if (answer.status === 409 && errorOf(answer.body)?.code === 'nothing_to_pay_out') return 'nothing to pay out'
+    const payout = PayoutView.safeParse(answer.body)
+    if (answer.status !== 200 || !payout.success || payout.data.status === 'pending') return this.#surprise(request, answer)
+    this.payouts.push({ index: planned.index, payoutId: payout.data.id, status: payout.data.status, amount: payout.data.amount })
+    return payout.data.status
   }
 
   async #probe(original: RequestRecord, body: Record<string, unknown>): Promise<void> {

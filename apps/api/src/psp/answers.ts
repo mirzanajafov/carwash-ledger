@@ -1,3 +1,5 @@
+import type { PspCall } from './psp.client.ts'
+
 export const CARD_ATTEMPT_KINDS = ['authorize', 'capture', 'cancel'] as const
 
 export type CardAttemptKind = (typeof CARD_ATTEMPT_KINDS)[number]
@@ -10,6 +12,10 @@ export interface ExpectedAnswer {
   amount: bigint
   currency: string
   chargeId: string | null
+}
+
+export function expectedFrom(call: PspCall, amount = call.amount): ExpectedAnswer {
+  return { attemptId: call.attemptId, kind: call.kind, amount, currency: call.currency, chargeId: 'chargeId' in call ? call.chargeId : null }
 }
 
 export interface PspAnswer {

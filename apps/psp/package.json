@@ -16,6 +16,7 @@
     "start": "node --conditions=source src/main.ts"
   },
   "dependencies": {
+    "@carwash/contracts": "workspace:*",
     "@carwash/pg": "workspace:*",
     "pg": "catalog:"
   },
@@ -24,6 +25,7 @@
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

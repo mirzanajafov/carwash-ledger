@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Inject, Logger, Post, Req } from '@nestjs/common'
+import type { InvariantChecksView, PlugView, VerificationRunView } from '@carwash/contracts'
 import { armFailpoints, disarmFailpoints, type FailpointName } from '@carwash/failpoints'
 import { checkAudit, checkLedger, checkPaymentsIncrementally, checkSequenced, readWitness, type WitnessView } from '@carwash/invariants'
 import type pg from 'pg'
@@ -41,7 +42,7 @@ export class DashboardController {
 
   @Post('plug')
   @HttpCode(202)
-  async plug(@Req() request: AuthedRequest, @Body() body: PlugBody) {
+  async plug(@Req() request: AuthedRequest, @Body() body: PlugBody): Promise<PlugView> {
     await this.#turn(request, 'plug', this.#config.plugEveryMs)
     armFailpoints(new Map<FailpointName, number>([[body.failpoint, 1]]), (name) => {
       disarmFailpoints()
@@ -53,7 +54,7 @@ export class DashboardController {
 
   @Post('checks')
   @HttpCode(200)
-  async checks(@Req() request: AuthedRequest) {
+  async checks(@Req() request: AuthedRequest): Promise<InvariantChecksView> {
     const pool = this.#pool()
     await this.#turn(request, 'checks', this.#config.checksEveryMs)
     const started = performance.now()
@@ -77,7 +78,7 @@ export class DashboardController {
 
   @Post('verify')
   @HttpCode(202)
-  async verify(@Req() request: AuthedRequest) {
+  async verify(@Req() request: AuthedRequest): Promise<VerificationRunView> {
     const open = await this.#runs.open()
     if (open) return runView(open)
     await this.#turn(request, 'verify', this.#config.checksEveryMs)

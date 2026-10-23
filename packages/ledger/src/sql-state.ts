@@ -26,7 +26,7 @@ function* chain(error: unknown): Generator<ErrorLike> {
     const e = current as ErrorLike
     yield e
     queue.push(e.cause)
-    if (e.meta !== null && typeof e.meta === 'object') queue.push(...Object.values(e.meta))
+    if (e.meta !== null && typeof e.meta === 'object') for (const value of Object.values(e.meta)) queue.push(value)
   }
 }
 

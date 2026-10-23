@@ -3,6 +3,14 @@ import type { AttemptId } from '../ids.ts'
 import type { AttemptKind } from '../psp/answers.ts'
 import type { AttemptStatus } from './attempt.ts'
 
+export interface AnomalyAttempt {
+  id: string
+  kind: AttemptKind
+  status: AttemptStatus
+  amount: string
+  currency: string
+}
+
 export type AnomalyKind = 'answer_mismatch' | 'unexpected_answer' | 'answer_changed' | 'refund_declined' | 'unmatched_webhook'
 
 export interface AnomalyRow {
@@ -13,11 +21,7 @@ export interface AnomalyRow {
   resolution: string | null
   resolved_at: Date | null
   resolver: string | null
-  attempt_id: string | null
-  attempt_kind: AttemptKind | null
-  attempt_status: AttemptStatus | null
-  amount: string | null
-  currency: string | null
+  attempt: AnomalyAttempt | null
   payment_id: string | null
   refund_id: string | null
   payout_id: string | null
@@ -26,7 +30,8 @@ export interface AnomalyRow {
 
 const SELECT = `
   SELECT an.id::text, an.kind, an.created_at, an.details, an.resolution, an.resolved_at, rc.name AS resolver,
-         a.id AS attempt_id, a.kind::text AS attempt_kind, a.status::text AS attempt_status, a.amount::text, a.currency,
+         CASE WHEN a.id IS NULL THEN NULL
+              ELSE json_build_object('id', a.id, 'kind', a.kind, 'status', a.status, 'amount', a.amount::text, 'currency', a.currency) END AS attempt,
          a.payment_id::text, a.refund_id::text, a.payout_id::text, m.code AS merchant
   FROM anomalies an
   LEFT JOIN attempts a ON a.id = an.attempt_id

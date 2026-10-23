@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import { BREAK_CLASSES, type BreakClass, type BreakView, type SettlementDayList, type SettlementDayView, type SettlementLineView } from '@carwash/contracts'
 import { postInTransaction, type EntryInput } from '@carwash/ledger'
 import { firstRow } from '@carwash/pg'
-import { BREAK_CLASSES, reconcile, window, type BreakClass, type LedgerItem } from '@carwash/recon'
+import { reconcile, window, type LedgerItem } from '@carwash/recon'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
@@ -195,8 +196,8 @@ export class Settlements {
     return ingested
   }
 
-  async breaks(currency: string, from: number, through: number) {
-    const { rows } = await this.#db.pool.query(
+  async breaks(currency: string, from: number, through: number): Promise<BreakView[]> {
+    const { rows } = await this.#db.pool.query<BreakView>(
       `SELECT day::int AS day, class, file_id, line, journal_ref, attempt_id, detail
        FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3 ORDER BY day, class, id`,
       [currency, from, through],
@@ -204,7 +205,7 @@ export class Settlements {
     return rows
   }
 
-  async days(currency: string, limit: number) {
+  async days(currency: string, limit: number): Promise<Omit<SettlementDayList, 'object'>> {
     const calendar = await this.#psp.calendar()
     const { rows } = await this.#db.pool.query<{
       day: number
@@ -215,7 +216,7 @@ export class Settlements {
       net: string
       journal_id: string | null
       received_at: Date
-      breaks: Record<string, number> | null
+      breaks: SettlementDayList['data'][number]['breaks'] | null
     }>(
       `SELECT f.day::int AS day, f.id, f.lines, f.gross::text, f.fee::text, f.net::text, f.journal_id::text, f.received_at,
               (SELECT jsonb_object_agg(class, n) FROM (SELECT class, count(*)::int AS n FROM recon_breaks b WHERE b.currency = f.currency AND b.day = f.day GROUP BY class) c) AS breaks
@@ -229,7 +230,7 @@ export class Settlements {
     }
   }
 
-  async day(currency: string, day: number, limit: number) {
+  async day(currency: string, day: number, limit: number): Promise<SettlementDayView> {
     const { rows: files } = await this.#db.pool.query<{
       id: string
       lines: number
@@ -244,7 +245,7 @@ export class Settlements {
     ])
     const file = files[0]
     const { rows: lines } = file
-      ? await this.#db.pool.query(
+      ? await this.#db.pool.query<Omit<SettlementLineView, 'operated_at'> & { operated_at: Date }>(
           `SELECT l.line, l.operation, l.reference, l.kind, l.gross::text, l.fee::text, l.net::text, l.operated_at,
                   (SELECT b.class FROM recon_breaks b WHERE b.file_id = l.file_id AND b.line = l.line ORDER BY b.id LIMIT 1) AS break
            FROM settlement_lines l WHERE l.file_id = $1 ORDER BY (SELECT 1 FROM recon_breaks b WHERE b.file_id = l.file_id AND b.line = l.line LIMIT 1) NULLS LAST, l.line LIMIT $2`,
@@ -256,7 +257,7 @@ export class Settlements {
       day,
       currency,
       file: file ? { ...file, received_at: file.received_at.toISOString() } : null,
-      lines,
+      lines: lines.map((line) => ({ ...line, operated_at: line.operated_at.toISOString() })),
       breaks: await this.breaks(currency, day, day),
     }
   }

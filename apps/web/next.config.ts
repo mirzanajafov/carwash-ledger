@@ -7,8 +7,10 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   allowedDevOrigins: ['127.0.0.1'],
-  transpilePackages: ['@carwash/audit'],
-  turbopack: { resolveAlias: { '@carwash/audit': '../../packages/audit/src/index.ts' } },
+  transpilePackages: ['@carwash/audit', '@carwash/contracts'],
+  turbopack: {
+    resolveAlias: { '@carwash/audit': '../../packages/audit/src/index.ts', '@carwash/contracts': '../../packages/contracts/src/index.ts' },
+  },
   async headers() {
     if (process.env.NODE_ENV !== 'production') return []
     return [
