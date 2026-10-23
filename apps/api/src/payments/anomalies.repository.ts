@@ -22,6 +22,7 @@ export interface AnomalyRow {
   resolved_at: Date | null
   resolver: string | null
   attempt: AnomalyAttempt | null
+  charge_id: string | null
   payment_id: string | null
   refund_id: string | null
   payout_id: string | null
@@ -32,7 +33,7 @@ const SELECT = `
   SELECT an.id::text, an.kind, an.created_at, an.details, an.resolution, an.resolved_at, rc.name AS resolver,
          CASE WHEN a.id IS NULL THEN NULL
               ELSE json_build_object('id', a.id, 'kind', a.kind, 'status', a.status, 'amount', a.amount::text, 'currency', a.currency) END AS attempt,
-         a.payment_id::text, a.refund_id::text, a.payout_id::text, m.code AS merchant
+         p.psp_charge_id AS charge_id, a.payment_id::text, a.refund_id::text, a.payout_id::text, m.code AS merchant
   FROM anomalies an
   LEFT JOIN attempts a ON a.id = an.attempt_id
   LEFT JOIN payments p ON p.id = a.payment_id
