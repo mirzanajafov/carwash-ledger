@@ -22,6 +22,11 @@ export function sqlStateOf(error: unknown): string | undefined {
   return undefined
 }
 
+export function constraintOf(error: unknown): string | undefined {
+  for (const e of chain(error)) if (typeof e.constraint === 'string') return e.constraint
+  return undefined
+}
+
 export function errorText(error: unknown): string {
   const parts: string[] = []
   for (const e of chain(error)) {

@@ -1,5 +1,5 @@
 import type { PaymentEventData, RefundEventData } from '@carwash/contracts'
-import { TOPICS, writeEvent, writeJournalEvents } from '@carwash/outbox'
+import { TOPICS, writeEvent } from '@carwash/outbox'
 import type { Transaction } from '@carwash/pg'
 import type { PaymentId, RefundId } from '../ids.ts'
 import type { Payment, Refund } from '../payments/payment.ts'
@@ -45,8 +45,4 @@ export async function paymentEvent(client: Transaction, paymentId: PaymentId): P
 export async function refundEvent(client: Transaction, refundId: RefundId): Promise<void> {
   const data = refundData(await loadRefund(client, refundId))
   await writeEvent(client, { topic: TOPICS.payments, key: data.payment, type: `refund.${data.status}`, payload: data })
-}
-
-export async function journalEvents(client: Transaction, journalId: bigint): Promise<void> {
-  await writeJournalEvents(client, journalId)
 }

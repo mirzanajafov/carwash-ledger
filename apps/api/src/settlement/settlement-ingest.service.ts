@@ -1,10 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { SettlementView } from '@carwash/contracts'
 import { postInTransaction, type EntryInput } from '@carwash/ledger'
+import { writeJournalEvents } from '@carwash/outbox'
 import { errorText, takeAdvisoryLock } from '@carwash/pg'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
-import { journalEvents } from '../events/events.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { PspClient, type CalendarReply } from '../psp/psp.client.ts'
 import { PspUnavailableError } from '../psp/psp.errors.ts'
@@ -53,7 +53,7 @@ export class SettlementIngestService {
       let journalId: bigint | null = null
       if (entries.length > 0) {
         journalId = await postInTransaction(client, this.#chart.registry, { externalRef: `settlement:${file.id}`, entries })
-        await journalEvents(client, journalId)
+        await writeJournalEvents(client, journalId)
       }
       await insertFile(client, file, journalId)
       return 'ingested'
