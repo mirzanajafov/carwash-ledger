@@ -1,18 +1,19 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, rmSync } from 'node:fs'
+import { createReadStream, createWriteStream, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { FAILPOINTS } from '@carwash/failpoints'
+import { createGzip } from 'node:zlib'
+import { failpointSpec, type FailpointName } from '@carwash/failpoints'
 import { createPool } from '@carwash/pg'
 import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { withPort, type Lab } from '../lab.ts'
 import { Service, type ServiceEvents } from '../service.ts'
 import type { Endpoints } from './client.ts'
-import { keepLogs } from './diagnostics.ts'
 import { PROXIES, type ProxyName } from './plan.ts'
-import type { PaymentsOptions } from './run.ts'
+import type { PaymentsOptions } from './options.ts'
 
 const ROOT = new URL('../../../../', import.meta.url)
 const API_MAIN = fileURLToPath(new URL('apps/api/dist/main.js', ROOT))
@@ -56,16 +57,20 @@ const WITNESS_TOKEN = 'witness_chaos'
 const API_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'request.', 'webhook.']
 const WORKER_FAILPOINTS = ['post.', 'transaction.', 'attempt.', 'recovery.', 'webhook.', 'relay.', 'consumer.', 'checkpoint.']
 
-function failpointRate(name: string, probability: number): number {
-  if (name.startsWith('transaction.')) return probability
-  if (name.startsWith('checkpoint.')) return Math.min(1, probability * 200)
-  return Math.min(1, probability * 4)
+function failpointRate(probability: number): (name: FailpointName) => number {
+  return (name) => {
+    if (name.startsWith('transaction.')) return probability
+    if (name.startsWith('checkpoint.')) return Math.min(1, probability * 200)
+    return Math.min(1, probability * 4)
+  }
 }
 
-function failpointSpec(prefixes: readonly string[], probability: number): string {
-  return FAILPOINTS.filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
-    .map((name) => `${name}=${failpointRate(name, probability)}`)
-    .join(',')
+async function keepLogs(from: string, to: string, seed: number): Promise<void> {
+  mkdirSync(to, { recursive: true })
+  for (const name of ['psp', 'witness', 'api-0', 'api-1', 'worker', 'kafka']) {
+    await pipeline(createReadStream(join(from, `${name}.log`)), createGzip(), createWriteStream(join(to, `seed-${seed}-${name}.log.gz`)))
+  }
+  rmSync(from, { recursive: true, force: true })
 }
 
 async function until(ready: () => boolean, timeoutMs: number, what: string): Promise<void> {
@@ -83,18 +88,26 @@ export class PaymentsStack {
   readonly owner: pg.Pool
   readonly audit: pg.Pool
   readonly keys: Readonly<Record<string, string>>
+  readonly #lab: Lab
+  readonly #options: PaymentsOptions
+  readonly #seed: number
+  readonly #log: (line: string) => void
   readonly #services = new Map<string, Service>()
   readonly #logs: string
   readonly #witnessDir: string
 
-  constructor(ledgerDb: TestDatabase, pspDb: ScratchDatabase, seed: number, clients: number) {
+  private constructor(lab: Lab, options: PaymentsOptions, seed: number, log: (line: string) => void, ledgerDb: TestDatabase, pspDb: ScratchDatabase) {
+    this.#lab = lab
+    this.#options = options
+    this.#seed = seed
+    this.#log = log
     this.ledgerDb = ledgerDb
     this.pspDb = pspDb
     this.psp = createPool({ connectionString: pspDb.url, max: 2 })
     this.owner = ledgerDb.pool('ledger_owner', 1)
     this.audit = ledgerDb.pool('ledger_audit', 3)
     const keys: Record<string, string> = { admin: ADMIN_KEY }
-    for (let i = 0; i < clients; i++) keys[`client-${i}`] = `cw_chaos_client_${i}`
+    for (let i = 0; i < options.clients; i++) keys[`client-${i}`] = `cw_chaos_client_${i}`
     this.keys = keys
     this.#logs = `/tmp/chaos-logs/seed-${seed}`
     mkdirSync(this.#logs, { recursive: true })
@@ -102,10 +115,17 @@ export class PaymentsStack {
     rmSync(this.#witnessDir, { recursive: true, force: true })
   }
 
-  static async create(seed: number, clients: number): Promise<PaymentsStack> {
+  static async create(lab: Lab, options: PaymentsOptions, seed: number, log: (line: string) => void): Promise<PaymentsStack> {
     const ledgerDb = await createTestDatabase()
-    const pspDb = await createScratchDatabase('psp')
-    return new PaymentsStack(ledgerDb, pspDb, seed, clients)
+    let pspDb: ScratchDatabase | undefined
+    try {
+      pspDb = await createScratchDatabase('psp')
+      return new PaymentsStack(lab, options, seed, log, ledgerDb, pspDb)
+    } catch (error) {
+      await pspDb?.drop()
+      await ledgerDb.drop()
+      throw error
+    }
   }
 
   get services(): Service[] {
@@ -123,7 +143,9 @@ export class PaymentsStack {
     return { live: () => apis.filter((a) => a.service.ready).map((a) => a.url) }
   }
 
-  async start(lab: Lab, options: PaymentsOptions, seed: number, events: ServiceEvents): Promise<void> {
+  async start(events: ServiceEvents): Promise<void> {
+    const lab = this.#lab
+    const options = this.#options
     for (const [name, key] of Object.entries(this.keys)) {
       await this.owner.query('INSERT INTO api_clients (name, key_hash, scope) VALUES ($1, $2, $3::client_scope)', [
         name,
@@ -154,7 +176,7 @@ export class PaymentsStack {
       RECOVERY_EVERY_MS: '1000',
       DATABASE_POOL_SIZE: '10',
     }
-    const pspFaults = { seed, slowMs: [500, 3000], ...options.psp }
+    const faultPlan = { seed: this.#seed, slowMs: [500, 3000], ...options.psp }
     this.#add(
       'psp',
       PSP_MAIN,
@@ -166,7 +188,7 @@ export class PaymentsStack {
         PSP_WEBHOOK_SECRET: WEBHOOK_SECRET,
         PSP_PORT: String(PSP_PORT),
         PSP_HANG_MS: String(options.pspTimeoutMs + 1000),
-        PSP_FAULT_PLAN: JSON.stringify(pspFaults),
+        PSP_FAULT_PLAN: JSON.stringify(faultPlan),
       },
       events,
     )
@@ -179,7 +201,7 @@ export class PaymentsStack {
           ...shared,
           PORT: String(port),
           DATABASE_URL: ledgerUrl(i === 0 ? 'api-0-db' : 'api-1-db'),
-          CHAOS_FAILPOINTS: failpointSpec(API_FAILPOINTS, options.failpointProbability),
+          CHAOS_FAILPOINTS: failpointSpec(API_FAILPOINTS, failpointRate(options.failpointProbability)),
         },
         events,
       )
@@ -197,7 +219,7 @@ export class PaymentsStack {
         WITNESS_URL: `http://127.0.0.1:${PROXY_PORTS.witness}`,
         WITNESS_TOKEN,
         CHECKPOINT_EVERY_MS: '2000',
-        CHAOS_FAILPOINTS: failpointSpec(WORKER_FAILPOINTS, options.failpointProbability),
+        CHAOS_FAILPOINTS: failpointSpec(WORKER_FAILPOINTS, failpointRate(options.failpointProbability)),
       },
       events,
     )
@@ -214,11 +236,12 @@ export class PaymentsStack {
     await Promise.all(this.services.map((s) => s.stop()))
   }
 
-  async close(lab: Lab, seed: number, log: (line: string) => void): Promise<void> {
+  async close(): Promise<void> {
+    const log = this.#log
     await this.stopServices().catch(() => undefined)
-    await lab.kafka.stop().catch(() => undefined)
+    await this.#lab.kafka.stop().catch(() => undefined)
     await this.psp.end().catch(() => undefined)
-    await keepLogs(this.#logs, join(lab.dir, 'logs'), seed).catch((error: unknown) => log(`could not keep the service logs: ${String(error)}`))
+    await keepLogs(this.#logs, join(this.#lab.dir, 'logs'), this.#seed).catch((error: unknown) => log(`could not keep the service logs: ${String(error)}`))
     await this.pspDb.drop().catch((error: unknown) => log(`psp drop failed: ${String(error)}`))
     await this.ledgerDb.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
   }

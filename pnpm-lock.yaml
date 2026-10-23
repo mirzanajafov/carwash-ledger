@@ -767,6 +767,9 @@ importers:
       '@carwash/pg':
         specifier: workspace:*
         version: link:../../packages/pg
+      '@carwash/psp':
+        specifier: workspace:*
+        version: link:../../apps/psp
       '@carwash/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit

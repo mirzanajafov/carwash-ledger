@@ -19,6 +19,7 @@
     "@carwash/ledger": "workspace:*",
     "@carwash/outbox": "workspace:*",
     "@carwash/pg": "workspace:*",
+    "@carwash/psp": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "pg": "catalog:"
   },

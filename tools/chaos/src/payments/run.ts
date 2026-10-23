@@ -1,66 +1,35 @@
 import { checkAgainstPsp, checkAudit, checkLedger, checkPaymentsIncrementally, readWitness } from '@carwash/invariants'
 import { mulberry32 } from '@carwash/lab'
+import { NO_FAULTS } from '@carwash/psp'
 import { drive, startClock } from '../drive.ts'
 import type { Lab } from '../lab.ts'
 import { Outages } from '../outages.ts'
 import type { ServiceEvents } from '../service.ts'
 import { Supervisor } from '../supervisor.ts'
 import { Violations } from '../violations.ts'
-import { askForVerification, NO_FAULTS, pspFaults, setPspFaults } from './admin.ts'
+import { askForVerification, currentPspFaults, setPspFaults } from './admin.ts'
 import { Clients } from './client.ts'
-import { activity, pendingAttempts } from './diagnostics.ts'
-import { checkWhenStopped, countWhatHappened } from './final-checks.ts'
+import { activity, pendingAttempts } from './activity.ts'
+import { checkWhenStopped, countWhatHappened, runFinalVerification } from './final-checks.ts'
 import { Forger } from './forger.ts'
 import { Journeys } from './journeys.ts'
 import { planPayments, type PaymentFault } from './plan.ts'
-import { newReport, type PaymentsReport } from './report.ts'
-import { allSettled, finishVerification, settleDays, waitForDelivery } from './settle.ts'
+import type { PaymentsOptions } from './options.ts'
+import { newPaymentsReport, type PaymentsReport } from './report.ts'
+import { acceptOpenAnomalies, hasSettled, settleDays, waitForDelivery } from './settle.ts'
 import { PaymentsStack, WEBHOOK_SECRET, WITNESS_URL } from './stack.ts'
 
-export interface PspFaults {
-  decline: number
-  fail: number
-  timeoutAfterCommit: number
-  slow: number
-  wrongAmount: number
-  webhook: { duplicate: number; delay: number; reorder: number; drop: number }
-}
-
-export interface PaymentsOptions {
-  durationMs: number
-  rate: number
-  clients: number
-  merchants: number
-  manualShare: number
-  cancelShare: number
-  partialShare: number
-  refundShare: number
-  duplicateShare: number
-  reuseShare: number
-  rivalShare: number
-  payoutEveryMs: number
-  killEveryMs: number
-  postgresEveryMs: number
-  kafkaEveryMs: number
-  toxicEveryMs: number
-  forgeEveryMs: number
-  failpointProbability: number
-  checkEveryMs: number
-  settleMs: number
-  leaseSeconds: number
-  pspTimeoutMs: number
-  psp: PspFaults
-}
+const SETTLED_EVERY_MS = 500
 
 export async function runPayments(lab: Lab, options: PaymentsOptions, seed: number): Promise<PaymentsReport> {
-  const { postgres, kafka, toxiproxy } = lab
+  const { postgres } = lab
   const log = (line: string) => lab.log(`seed ${seed} ${line}`)
   const plan = planPayments({ ...options, seed })
   const random = mulberry32(seed ^ 0x636c69)
   const found = new Violations()
-  const report = newReport(seed, options.durationMs, plan, found.list)
+  const report = newPaymentsReport(seed, options.durationMs, plan, found.list)
   const supervisor = new Supervisor()
-  const stack = await PaymentsStack.create(seed, options.clients)
+  const stack = await PaymentsStack.create(lab, options, seed, log)
   try {
     const { audit, psp } = stack
     const events: ServiceEvents = {
@@ -72,14 +41,15 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
         report.exits[kind]++
         log(`${service.name} exited (${kind}, ${detail})`)
         if (kind === 'crash' && report.crashes.length < 20) report.crashes.push(`${service.name} ${detail}`)
-        if (kind !== 'stopped') supervisor.restart(service, kind === 'boot')
+        if (kind === 'boot') supervisor.restartAfterFailedBoot(service)
+        else if (kind !== 'stopped') supervisor.restart(service)
       },
     }
-    await stack.start(lab, options, seed, events)
+    await stack.start(events)
 
     const endpoints = stack.endpoints()
     const clients = new Clients(endpoints, stack.keys, random, log)
-    log(`psp faults ${await pspFaults()}`)
+    log(`psp faults ${await currentPspFaults()}`)
     const merchants = Array.from({ length: options.merchants }, (_, i) => `wash_${i}`)
     for (const code of merchants) {
       const created = await clients.send(clients.record('admin', 'merchant', '/v1/merchants', { code, name: `Wash ${code}`, currency: 'EUR' }))
@@ -93,7 +63,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     )
     const forger = new Forger(audit, endpoints, WEBHOOK_SECRET, mulberry32(seed ^ 0x77656268))
 
-    const outages = new Outages(lab, seed, log)
+    const outages = new Outages(lab, seed, log, { withKafka: true })
     const applyFault = async (fault: PaymentFault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
@@ -137,14 +107,13 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     const tasks: Promise<unknown>[] = []
     const track = (task: Promise<unknown>) =>
       tasks.push(task.catch((error: unknown) => report.harnessErrors.push(`task: ${error instanceof Error ? (error.stack ?? String(error)) : String(error)}`)))
-    const faultTasks: Promise<void>[] = []
     let nextJourney = 0
     let nextPayout = 0
     let nextFault = 0
     let nextForgery = 0
     const driven = await drive(
       startClock(),
-      { durationMs: options.durationMs, settleMs: options.settleMs, checkEveryMs: options.checkEveryMs, settledEveryMs: 500 },
+      { durationMs: options.durationMs, settleMs: options.settleMs, checkEveryMs: options.checkEveryMs, settledEveryMs: SETTLED_EVERY_MS },
       {
         startDue: (t) => {
           for (let journey = plan.journeys[nextJourney]; journey !== undefined && journey.at <= t; journey = plan.journeys[++nextJourney])
@@ -153,19 +122,10 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
             track(journeys.payout(payout))
           for (let at = plan.forgeries[nextForgery]; at !== undefined && at <= t; at = plan.forgeries[++nextForgery]) track(forger.forge())
           for (let fault = plan.faults[nextFault]; fault !== undefined && fault.at <= t; fault = plan.faults[++nextFault])
-            faultTasks.push(applyFault(fault, nextFault))
+            outages.track(applyFault(fault, nextFault))
         },
         endFaults: async () => {
-          await Promise.all(faultTasks)
-          await toxiproxy.reset()
-          if (!postgres.running) {
-            postgres.start()
-            await postgres.waitReady()
-          }
-          if (!kafka.running) {
-            kafka.start()
-            await kafka.waitReady()
-          }
+          await outages.end()
           for (const service of stack.services) {
             service.disarm()
             service.start()
@@ -173,11 +133,11 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           await setPspFaults(NO_FAULTS)
           log('faults stopped, settling')
         },
-        canCheck: () => postgres.running && !outages.postgresBusy,
+        canCheck: () => outages.postgresUp,
         check: periodicCheck,
         settled: async (settlingMs) => {
-          const done = await allSettled(tasks, journeys.probes, audit)
-          if (Math.floor(settlingMs / 5000) !== Math.floor((settlingMs - 500) / 5000)) {
+          const done = await hasSettled(tasks, journeys.probes, audit)
+          if (Math.floor(settlingMs / 5000) !== Math.floor((settlingMs - SETTLED_EVERY_MS) / 5000)) {
             log(`settling: ${clients.unanswered()} requests open, ${await pendingAttempts(audit)} attempts pending`)
             log(`in flight ${JSON.stringify(Object.fromEntries(clients.inFlight))}; ${await activity(postgres.adminUrl, stack.ledgerDb.name)}`)
           }
@@ -187,13 +147,14 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     )
     report.settleMs = driven.settleMs
     report.settled = driven.settled
-    await settleDays(report, journeys, log)
+    await acceptOpenAnomalies(report, journeys, log)
+    await settleDays(report, log)
     await waitForDelivery(audit)
     clients.stop()
     await Promise.allSettled([...tasks, ...journeys.probes])
-    const witness = await finishVerification(stack, report, found, askedRuns, log)
+    const witness = await runFinalVerification(stack, report, found, askedRuns, log)
 
-    supervisor.stop()
+    supervisor.stopRestarting()
     await stack.stopServices()
     await driven.lastCheck
 
@@ -201,7 +162,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     Object.assign(report, await countWhatHappened(stack, lab, { clients, journeys, forger }))
     return report
   } finally {
-    supervisor.stop()
-    await stack.close(lab, seed, log)
+    supervisor.stopRestarting()
+    await stack.close()
   }
 }

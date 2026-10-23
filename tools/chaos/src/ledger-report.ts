@@ -1,6 +1,6 @@
 import { median } from '@carwash/lab'
 import type { ClientLedger } from './client.ts'
-import type { ToxicKind } from './plan.ts'
+import type { RunPlan, ToxicKind } from './plan.ts'
 import { addCounts, byInvariant, type Violation } from './violations.ts'
 
 export interface LedgerReport {
@@ -25,14 +25,14 @@ export interface LedgerReport {
   violations: Violation[]
 }
 
-export function newLedgerReport(seed: number, faultPhaseMs: number, journeys: number, violations: Violation[]): LedgerReport {
+export function newLedgerReport(seed: number, faultPhaseMs: number, plan: RunPlan, violations: Violation[]): LedgerReport {
   return {
     seed,
     startedAt: new Date().toISOString(),
     faultPhaseMs,
     settleMs: 0,
     settled: true,
-    journeys,
+    journeys: plan.journeys.length,
     captures: 0,
     reversals: 0,
     attempts: 0,

@@ -40,6 +40,12 @@ export function failpoint(name: FailpointName): void {
   if (probability !== undefined && random() < probability) onHit(name)
 }
 
+export function failpointSpec(prefixes: readonly string[], rate: (name: FailpointName) => number): string {
+  return FAILPOINTS.filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
+    .map((name) => `${name}=${rate(name)}`)
+    .join(',')
+}
+
 export function parseFailpoints(spec: string): Map<FailpointName, number> {
   const parsed = new Map<FailpointName, number>()
   for (const part of spec

@@ -41,7 +41,7 @@ export interface PaymentsReport {
   violations: Violation[]
 }
 
-export function newReport(seed: number, faultPhaseMs: number, plan: PaymentsPlan, violations: Violation[]): PaymentsReport {
+export function newPaymentsReport(seed: number, faultPhaseMs: number, plan: PaymentsPlan, violations: Violation[]): PaymentsReport {
   return {
     seed,
     startedAt: new Date().toISOString(),

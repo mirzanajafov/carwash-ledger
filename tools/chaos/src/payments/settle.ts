@@ -1,13 +1,12 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import { checkEvents, checkSequenced, checkSettled, readWitness, readWitnessHistory, type WitnessView } from '@carwash/invariants'
+import { checkEvents, checkSequenced, checkSettled, readWitness } from '@carwash/invariants'
 import type pg from 'pg'
-import type { Violations } from '../violations.ts'
-import { acceptAnomalies, finalVerificationRun, settleDay } from './admin.ts'
+import { acceptAnomalies, settleDay } from './admin.ts'
 import type { Journeys } from './journeys.ts'
 import type { PaymentsReport } from './report.ts'
-import { SETTLEMENT_DAY_SECONDS, WITNESS_URL, type PaymentsStack } from './stack.ts'
+import { SETTLEMENT_DAY_SECONDS, WITNESS_URL } from './stack.ts'
 
-export async function allSettled(tasks: readonly Promise<unknown>[], probes: readonly Promise<unknown>[], audit: pg.Pool): Promise<boolean> {
+export async function hasSettled(tasks: readonly Promise<unknown>[], probes: readonly Promise<unknown>[], audit: pg.Pool): Promise<boolean> {
   const pending = Symbol('pending')
   const race = await Promise.race([Promise.allSettled([...tasks, ...probes]).then(() => 'done'), sleep(0, pending)])
   if (race === pending) return false
@@ -20,7 +19,7 @@ export async function allSettled(tasks: readonly Promise<unknown>[], probes: rea
   }
 }
 
-export async function settleDays(report: PaymentsReport, journeys: Journeys, log: (line: string) => void): Promise<void> {
+export async function acceptOpenAnomalies(report: PaymentsReport, journeys: Journeys, log: (line: string) => void): Promise<void> {
   try {
     report.anomalies = await acceptAnomalies(journeys)
     log(
@@ -29,6 +28,9 @@ export async function settleDays(report: PaymentsReport, journeys: Journeys, log
   } catch (error) {
     report.harnessErrors.push(`accepting anomalies: ${String(error)}`)
   }
+}
+
+export async function settleDays(report: PaymentsReport, log: (line: string) => void): Promise<void> {
   const firstDay = Math.floor(Date.parse(report.startedAt) / 1000 / SETTLEMENT_DAY_SECONDS)
   const lastDay = Math.floor(Date.now() / 1000 / SETTLEMENT_DAY_SECONDS)
   for (let day = firstDay; day <= lastDay; day++) {
@@ -63,34 +65,4 @@ export async function waitForDelivery(audit: pg.Pool): Promise<void> {
     if (current) break
     await sleep(250)
   }
-}
-
-export async function finishVerification(
-  stack: PaymentsStack,
-  report: PaymentsReport,
-  found: Violations,
-  askedRuns: ReadonlySet<string>,
-  log: (line: string) => void,
-): Promise<WitnessView> {
-  const [witness, history] = await Promise.all([readWitness(WITNESS_URL), readWitnessHistory(WITNESS_URL)])
-  const witnessed = witness.latest?.size ?? 0
-  const checkpoints = history.filter((checkpoint) => checkpoint.size <= witnessed).length
-  report.witness = { checkpoints, size: witnessed, compared: 0 }
-  report.verification.requested = askedRuns.size
-  const finalRun = await finalVerificationRun()
-  const finalReport = finalRun?.status === 'done' ? finalRun.report : null
-  found.add(
-    'verify-job',
-    'final',
-    'a verification run in the worker, asked for once the faults stop, ends done and finds nothing',
-    finalReport ? finalReport.findings : 1,
-    finalReport ? finalReport.examples.slice(0, 5).map((finding) => JSON.stringify(finding)) : [JSON.stringify(finalRun)],
-  )
-  const { rows: runs } = await stack.owner.query<{ status: string; n: number; attempts: number }>(
-    'SELECT status::text, count(*)::int AS n, max(attempts) AS attempts FROM verification_runs GROUP BY status',
-  )
-  report.verification.runs = Object.fromEntries(runs.map((row) => [row.status, row.n]))
-  report.verification.maxAttempts = Math.max(0, ...runs.map((row) => row.attempts))
-  log(`verification runs ${JSON.stringify(report.verification)}, the last one ${finalRun?.status ?? 'never finished'}`)
-  return witness
 }

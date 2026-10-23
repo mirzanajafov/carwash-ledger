@@ -1,8 +1,3 @@
-import { createReadStream, createWriteStream, mkdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { createGzip } from 'node:zlib'
-import { kafkaClient } from '@carwash/outbox'
 import { firstRow } from '@carwash/pg'
 import pg from 'pg'
 
@@ -34,14 +29,6 @@ export async function activity(adminUrl: string, database: string): Promise<stri
   }
 }
 
-export async function keepLogs(from: string, to: string, seed: number): Promise<void> {
-  mkdirSync(to, { recursive: true })
-  for (const name of ['psp', 'witness', 'api-0', 'api-1', 'worker', 'kafka']) {
-    await pipeline(createReadStream(join(from, `${name}.log`)), createGzip(), createWriteStream(join(to, `seed-${seed}-${name}.log.gz`)))
-  }
-  rmSync(from, { recursive: true, force: true })
-}
-
 export async function pendingAttempts(audit: pg.Pool): Promise<string> {
   try {
     const { n } = firstRow(await audit.query<{ n: number }>(`SELECT count(*)::int AS n FROM attempts WHERE status = 'pending'`))
@@ -49,26 +36,4 @@ export async function pendingAttempts(audit: pg.Pool): Promise<string> {
   } catch {
     return 'unknown'
   }
-}
-
-export async function publishedMessages(broker: string): Promise<Record<string, number>> {
-  const admin = kafkaClient({ brokers: [broker], clientId: 'chaos-harness' }).admin()
-  try {
-    await admin.connect()
-    const counts: Record<string, number> = {}
-    for (const topic of ['payments', 'ledger']) {
-      const offsets = await admin.fetchTopicOffsets(topic)
-      counts[`kafka ${topic}`] = offsets.reduce((sum, p) => sum + Number(p.high) - Number(p.low), 0)
-    }
-    return counts
-  } catch {
-    return {}
-  } finally {
-    await admin.disconnect().catch(() => undefined)
-  }
-}
-
-export async function countBy(pool: pg.Pool, sql: string): Promise<Record<string, number>> {
-  const { rows } = await pool.query<{ name: string; n: number }>(sql)
-  return Object.fromEntries(rows.map((row) => [row.name, row.n]))
 }

@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { FAILPOINTS } from '@carwash/failpoints'
+import { failpointSpec } from '@carwash/failpoints'
 import { checkLedger } from '@carwash/invariants'
 import { mulberry32 } from '@carwash/lab'
 import { createAccount, type Account, type BalanceMode } from '@carwash/ledger'
@@ -75,16 +75,13 @@ async function createAccounts(app: pg.Pool, options: LedgerOptions): Promise<{ r
 }
 
 export async function runLedger(lab: Lab, options: LedgerOptions, seed: number): Promise<LedgerReport> {
-  const { postgres, toxiproxy } = lab
+  const { toxiproxy } = lab
   const log = (line: string) => lab.log(`seed ${seed} ${line}`)
-  const failpointSpec = (prefix: string) =>
-    FAILPOINTS.filter((name) => name.startsWith(prefix))
-      .map((name) => `${name}=${options.failpointProbability}`)
-      .join(',')
+  const failpoints = (prefix: string) => failpointSpec([prefix], () => options.failpointProbability)
   const plan = planRun({ ...options, seed })
   const random = mulberry32(seed ^ 0x72756e)
   const found = new Violations()
-  const report = newLedgerReport(seed, options.durationMs, plan.journeys.length, found.list)
+  const report = newLedgerReport(seed, options.durationMs, plan, found.list)
 
   const db = await createTestDatabase()
   const workers: Worker[] = []
@@ -127,7 +124,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       },
       log,
       exit: (worker: Worker, code: number | null, signal: NodeJS.Signals | null) => {
-        if (supervisor.stopping) return
+        if (supervisor.stopped) return
         if (signal === null && code !== 0) report.crashes++
         supervisor.restart(worker)
       },
@@ -137,13 +134,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     const posters = Array.from(
       { length: options.posters },
       (_, i) =>
-        new Worker(
-          'poster',
-          i,
-          script('poster'),
-          { CHAOS_DB_URL: posterUrl, CHAOS_POOL: String(options.pool), CHAOS_FAILPOINTS: failpointSpec('post.') },
-          events,
-        ),
+        new Worker('poster', i, script('poster'), { CHAOS_DB_URL: posterUrl, CHAOS_POOL: String(options.pool), CHAOS_FAILPOINTS: failpoints('post.') }, events),
     )
     const snapshotter = new Worker(
       'snapshotter',
@@ -152,7 +143,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       {
         CHAOS_DB_URL: withPort(db.url('ledger_app'), PROXY_PORTS.snapshots),
         CHAOS_SNAPSHOT_MS: String(options.snapshotMs),
-        CHAOS_FAILPOINTS: failpointSpec('snapshot.'),
+        CHAOS_FAILPOINTS: failpoints('snapshot.'),
       },
       events,
     )
@@ -175,7 +166,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
     }
 
-    const outages = new Outages(lab, seed, log)
+    const outages = new Outages(lab, seed, log, { withKafka: false })
     const applyFault = async (fault: Fault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
@@ -204,7 +195,6 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
     }
 
-    const faultTasks: Promise<void>[] = []
     let nextJourney = 0
     let nextFault = 0
     const driven = await drive(
@@ -217,15 +207,10 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
             report.captures++
           }
           for (let fault = plan.faults[nextFault]; fault !== undefined && fault.at <= t; fault = plan.faults[++nextFault])
-            faultTasks.push(applyFault(fault, nextFault))
+            outages.track(applyFault(fault, nextFault))
         },
         endFaults: async () => {
-          await Promise.all(faultTasks)
-          await toxiproxy.reset()
-          if (!postgres.running) {
-            postgres.start()
-            await postgres.waitReady()
-          }
+          await outages.end()
           for (const worker of workers) {
             worker.disarm()
             worker.start()
@@ -234,7 +219,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
         tick: (t) => {
           for (const op of client.due(t)) dispatch(op)
         },
-        canCheck: () => postgres.running && !outages.postgresBusy,
+        canCheck: () => outages.postgresUp,
         check: periodicCheck,
         settled: () => Promise.resolve(client.inFlight() === 0 && client.unresolved().length === 0),
       },
@@ -243,7 +228,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     report.settled = driven.settled
     report.outcomes = { ...client.stats }
 
-    supervisor.stop()
+    supervisor.stopRestarting()
     await Promise.all(workers.map((w) => w.stop()))
     report.workerStarts = workers.reduce((sum, w) => sum + w.starts, 0)
     await driven.lastCheck
@@ -255,7 +240,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     found.add('L1', 'final', 'every journal is resolved once the faults stop', open.count, open.examples)
     return report
   } finally {
-    supervisor.stop()
+    supervisor.stopRestarting()
     await Promise.all(workers.map((w) => w.stop())).catch(() => undefined)
     await db.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
   }

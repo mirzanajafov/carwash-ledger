@@ -4,25 +4,32 @@ export interface Restartable {
 
 export class Supervisor {
   readonly #bootFailures = new Map<Restartable, number>()
-  #stopping = false
+  #stopped = false
 
-  get stopping(): boolean {
-    return this.#stopping
+  get stopped(): boolean {
+    return this.#stopped
   }
 
-  restart(process: Restartable, failedToBoot = false): void {
-    if (this.#stopping) return
-    const streak = failedToBoot ? (this.#bootFailures.get(process) ?? 0) + 1 : 0
-    this.#bootFailures.set(process, streak)
+  restart(restartable: Restartable): void {
+    this.#later(restartable, 0)
+  }
+
+  restartAfterFailedBoot(restartable: Restartable): void {
+    this.#later(restartable, (this.#bootFailures.get(restartable) ?? 0) + 1)
+  }
+
+  stopRestarting(): void {
+    this.#stopped = true
+  }
+
+  #later(restartable: Restartable, bootFailures: number): void {
+    if (this.#stopped) return
+    this.#bootFailures.set(restartable, bootFailures)
     setTimeout(
       () => {
-        if (!this.#stopping) process.start()
+        if (!this.#stopped) restartable.start()
       },
-      Math.min(4000, 500 * 2 ** streak),
+      Math.min(4000, 500 * 2 ** bootFailures),
     )
-  }
-
-  stop(): void {
-    this.#stopping = true
   }
 }

@@ -4,9 +4,7 @@ import type { Journeys } from './journeys.ts'
 import type { PaymentsReport } from './report.ts'
 import { ADMIN_KEY, API_PORTS, PSP_ADMIN_KEY, PSP_PORT } from './stack.ts'
 
-export const NO_FAULTS = { seed: 0, decline: 0, fail: 0, timeoutAfterCommit: 0, slow: 0, wrongAmount: 0, webhook: {} }
-
-export async function pspFaults(): Promise<string> {
+export async function currentPspFaults(): Promise<string> {
   return (await fetch(`http://127.0.0.1:${PSP_PORT}/admin/faults`, { headers: { authorization: `Bearer ${PSP_ADMIN_KEY}` } })).text()
 }
 
