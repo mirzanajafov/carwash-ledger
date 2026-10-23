@@ -3,7 +3,10 @@ import { firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { ensureTopics, kafkaClient, KafkaPublisher, Relay, TOPICS, writeEvent, type Envelope } from '../src/index.ts'
+import { z } from 'zod'
+import { Envelope, ensureTopics, kafkaClient, KafkaPublisher, Relay, TOPICS, writeEvent } from '../src/index.ts'
+
+const Step = z.object({ n: z.number() })
 
 const BROKERS = (process.env.KAFKA_BROKERS ?? '127.0.0.1:9194').split(',')
 
@@ -41,7 +44,7 @@ describe('the relay against Kafka', () => {
     const publisher = await KafkaPublisher.connect({ brokers: BROKERS, clientId: 'outbox-test', deliveryTimeoutMs: 10_000, topicPrefix: prefix })
     const relay = new Relay(app, publisher, { workers: 3, batch: 16, pollMs: 10 })
     relay.start()
-    const received: { key: string; envelope: Envelope; headers: Record<string, string> }[] = []
+    const received: { key: string; value: string; headers: Record<string, string> }[] = []
     const consumer = kafka.consumer({ kafkaJS: { groupId: `test-${randomUUID()}`, fromBeginning: true } })
     try {
       await consumer.connect()
@@ -52,7 +55,7 @@ describe('the relay against Kafka', () => {
           eachMessage: async ({ message }) => {
             const headers = Object.fromEntries(Object.entries(message.headers ?? {}).map(([name, value]) => [name, String(value)]))
             assert(message.key && message.value)
-            received.push({ key: message.key.toString(), envelope: JSON.parse(message.value.toString()), headers })
+            received.push({ key: message.key.toString(), value: message.value.toString(), headers })
             if (received.length === keys.length * 20) {
               clearTimeout(timer)
               resolve()
@@ -65,15 +68,16 @@ describe('the relay against Kafka', () => {
       await relay.stop()
       await publisher.close()
     }
+    const messages = received.map(({ key, value, headers }) => ({ key, headers, envelope: Envelope.parse(JSON.parse(value)) }))
     for (const key of keys) {
-      expect(received.filter((message) => message.key === key).map((message) => (message.envelope.data as { n: number }).n)).toEqual(
+      expect(messages.filter((message) => message.key === key).map((message) => Step.parse(message.envelope.data).n)).toEqual(
         Array.from({ length: 20 }, (_, n) => n),
       )
     }
     const { event_id: eventId } = firstRow(
       await app.query<{ event_id: string }>('SELECT event_id::text FROM outbox WHERE topic = $1 ORDER BY id LIMIT 1', [TOPICS.payments]),
     )
-    const first = received.find((message) => message.envelope.id === eventId)
+    const first = messages.find((message) => message.envelope.id === eventId)
     assert(first)
     expect(first.envelope.type).toBe('test.step')
     expect(first.headers).toEqual({ 'event-id': eventId, 'event-type': 'test.step' })

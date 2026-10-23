@@ -1,12 +1,7 @@
+import { PaymentEventData } from '@carwash/contracts'
 import { TOPICS, type ConsumerSpec } from '@carwash/outbox'
 
-interface CapturedPayment {
-  id: string
-  merchant: string
-  captured_amount: number
-  fee: number
-  currency: string
-}
+const CapturedPayment = PaymentEventData.pick({ id: true, merchant: true, captured_amount: true, fee: true, currency: true })
 
 const ISSUE = `
   WITH counter AS (
@@ -21,10 +16,11 @@ export const receipts: ConsumerSpec = {
   name: 'receipts',
   topic: TOPICS.payments,
   apply: async (client, events) => {
-    const captured = events.filter((event) => event.type === 'payment.captured')
-    captured.sort((a, b) => (a.data as CapturedPayment).merchant.localeCompare((b.data as CapturedPayment).merchant))
-    for (const event of captured) {
-      const payment = event.data as CapturedPayment
+    const captured = events
+      .filter((event) => event.type === 'payment.captured')
+      .map((event) => ({ event, payment: CapturedPayment.parse(event.data) }))
+      .sort((a, b) => a.payment.merchant.localeCompare(b.payment.merchant))
+    for (const { event, payment } of captured) {
       await client.query(ISSUE, [payment.merchant, payment.id, payment.captured_amount, payment.fee, payment.currency, event.occurredAt, event.id])
     }
   },

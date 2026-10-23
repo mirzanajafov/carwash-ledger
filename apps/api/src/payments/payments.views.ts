@@ -1,4 +1,4 @@
-import { unixSeconds } from '../http/unix-time.ts'
+import { unixSeconds } from '../unix-time.ts'
 import type { Payment, Refund } from './payment.ts'
 
 export function paymentView(p: Payment) {

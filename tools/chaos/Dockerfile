@@ -5,6 +5,7 @@ RUN corepack enable \
   && apt-get install -y --no-install-recommends patch \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
 COPY packages/failpoints/package.json packages/failpoints/
 COPY packages/ledger/package.json packages/ledger/

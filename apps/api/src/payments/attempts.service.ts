@@ -111,7 +111,7 @@ export class AttemptsService {
 
   async #move(client: Transaction, paymentId: PaymentId, from: PaymentStatus, to: PaymentStatus, changes: PaymentChanges): Promise<void> {
     if (!(await movePayment(client, paymentId, from, to, changes))) throw new Error(`payment ${paymentId} was not ${from} when it should have moved to ${to}`)
-    await paymentEvent(client, paymentId, `payment.${to}`)
+    await paymentEvent(client, paymentId)
   }
 
   async #applyRefund(client: Transaction, attempt: RefundAttempt, payment: Payment, answer: PspAnswer): Promise<Applied> {
@@ -119,7 +119,7 @@ export class AttemptsService {
     await lockRefund(client, refundId)
     if (answer.status === 'declined') {
       await failRefund(client, refundId, answer.reason ?? 'declined')
-      await refundEvent(client, refundId, 'refund.failed')
+      await refundEvent(client, refundId)
       await recordAnomaly(client, attempt.id, 'refund_declined', { answer })
       return 'anomaly'
     }
@@ -141,7 +141,7 @@ export class AttemptsService {
     })
     await succeedRefund(client, refundId, back, journalId)
     await journalEvents(client, journalId)
-    await refundEvent(client, refundId, 'refund.succeeded')
+    await refundEvent(client, refundId)
     const after = before + amount
     if (after === captured) {
       await this.#move(client, payment.id, 'captured', 'refunded', { refundedAmount: after })

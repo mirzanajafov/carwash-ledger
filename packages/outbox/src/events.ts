@@ -1,4 +1,5 @@
 import type { Transaction } from '@carwash/pg'
+import { z } from 'zod'
 
 export const LANES = 16
 
@@ -6,18 +7,20 @@ export const TOPICS = { payments: 'payments', ledger: 'ledger' } as const
 
 export type Topic = (typeof TOPICS)[keyof typeof TOPICS]
 
+export const Envelope = z.object({
+  id: z.uuid(),
+  type: z.string(),
+  occurred_at: z.iso.datetime(),
+  data: z.unknown(),
+})
+
+export type Envelope = z.infer<typeof Envelope>
+
 export interface NewEvent {
   topic: Topic
   key: string
   type: string
   payload: unknown
-}
-
-export interface Envelope {
-  id: string
-  type: string
-  occurred_at: string
-  data: unknown
 }
 
 export function laneSql(key: string): string {

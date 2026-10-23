@@ -18,7 +18,8 @@
     "@carwash/failpoints": "workspace:*",
     "@carwash/pg": "workspace:*",
     "@confluentinc/kafka-javascript": "1.10.1",
-    "pg": "catalog:"
+    "pg": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@carwash/ledger": "workspace:*",
