@@ -1,7 +1,7 @@
-import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
+import { Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import type { AnomalyList, AnomalyView } from '@carwash/contracts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
-import { AnomaliesQuery } from '../http/dto.ts'
+import { AnomaliesQuery, AnomalyParams } from '../http/dto.ts'
 import type { AnomalyRow } from './anomalies.repository.ts'
 import { AnomaliesService, acceptable } from './anomalies.service.ts'
 
@@ -47,13 +47,13 @@ export class AnomaliesController {
 
   @Post(':id/accept')
   @HttpCode(200)
-  async accept(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number): Promise<AnomalyView> {
+  async accept(@Req() request: AuthedRequest, @Param() { id }: AnomalyParams): Promise<AnomalyView> {
     return view(await this.#anomalies.accept(id, request.client.id))
   }
 
   @Post(':id/dispute')
   @HttpCode(200)
-  async dispute(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number): Promise<AnomalyView> {
+  async dispute(@Req() request: AuthedRequest, @Param() { id }: AnomalyParams): Promise<AnomalyView> {
     return view(await this.#anomalies.dispute(id, request.client.id))
   }
 }

@@ -216,3 +216,7 @@ export async function deliver(pool: pg.Pool, batches: readonly (readonly OutboxE
   const ids = [...new Set(batches.flat().map((event) => event.id))]
   await pool.query('UPDATE outbox SET published_at = now() WHERE event_id = ANY($1::uuid[]) AND published_at IS NULL', [ids])
 }
+
+export function invalid(message: string): Reply {
+  return { status: 400, body: { error: { code: 'invalid_request', message } }, replayed: false, retryAfter: null }
+}

@@ -1,15 +1,17 @@
 import { applyDecorators } from '@nestjs/common'
 import { Transform, type TransformFnParams } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min, ValidateBy } from 'class-validator'
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateBy } from 'class-validator'
 import { CURRENCY_CODE } from '../currency.ts'
 import { CAPTURE_MODES, type CaptureMode } from '../payments/payment.ts'
 
 const MAX_AMOUNT = 100_000_000_000
 const MAX_DAY = 999_999_999_999
 const MAX_TREE_SIZE = 999_999_999_999_999
+const MAX_ID = 999_999_999_999_999
+const ACCOUNT_CODE = /^[\w:-]{1,200}$/
 const CODE = /^[a-z0-9_-]{1,64}$/
 
-function IsCurrency() {
+function IsCurrencyCode() {
   return Matches(CURRENCY_CODE, { message: 'currency must be a three-letter currency code' })
 }
 
@@ -25,7 +27,7 @@ export class CreatePaymentBody {
   @Max(MAX_AMOUNT)
   amount!: number
 
-  @IsCurrency()
+  @IsCurrencyCode()
   currency!: string
 
   @Matches(CODE, { message: 'merchant must be a merchant code' })
@@ -65,7 +67,7 @@ export class PayoutBody {
   @Max(MAX_AMOUNT)
   amount?: number
 
-  @IsCurrency()
+  @IsCurrencyCode()
   currency!: string
 }
 
@@ -77,7 +79,7 @@ export class MerchantBody {
   @Length(1, 100)
   name!: string
 
-  @IsCurrency()
+  @IsCurrencyCode()
   currency!: string
 }
 
@@ -89,13 +91,11 @@ export class PlugBody {
 }
 
 export class CurrencyQuery {
-  @IsOptional()
-  @IsCurrency()
+  @IsCurrencyCode()
   currency = 'EUR'
 }
 
 export class DaysQuery extends CurrencyQuery {
-  @IsOptional()
   @WholeNumber(1, 60, 'limit must be between 1 and 60')
   limit = 7
 }
@@ -115,17 +115,35 @@ export class DayParams {
 }
 
 export class AnomaliesQuery {
-  @IsOptional()
   @IsIn(['open', 'resolved'], { message: 'state must be open or resolved' })
   state: 'open' | 'resolved' = 'open'
 
-  @IsOptional()
   @WholeNumber(1, 200, 'limit must be between 1 and 200')
   limit = 50
 }
 
+export class AnomalyParams {
+  @WholeNumber(1, MAX_ID, 'the anomaly id must be a number')
+  id!: number
+}
+
+export class PaymentParams {
+  @IsUUID('all', { message: 'the payment id must be a UUID' })
+  id!: string
+}
+
+export class MerchantParams {
+  @Matches(CODE, { message: 'code must be 1 to 64 lowercase letters, digits, dashes or underscores' })
+  code!: string
+}
+
+export class AccountParams {
+  @Matches(ACCOUNT_CODE, { message: 'code must be an account code' })
+  code!: string
+}
+
 export class SeqParams {
-  @WholeNumber(0, MAX_TREE_SIZE, 'seq must be a tree size')
+  @WholeNumber(0, MAX_TREE_SIZE, 'seq must be a position in the log')
   seq!: number
 }
 

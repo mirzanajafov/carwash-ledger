@@ -6,7 +6,7 @@ import { sequenceBatch } from '@carwash/audit-pg'
 import { firstRow, type Transaction } from '@carwash/pg'
 import { inRollbackWithTriggersOff } from '@carwash/testkit'
 import { Database } from '../src/db/database.ts'
-import { startStack, type Stack } from './support.ts'
+import { invalid, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 
@@ -147,12 +147,15 @@ describe('the audit log', () => {
   })
 
   it('refuses a sequence number, journal id or tree size that is not a whole number', async () => {
-    const refused = async (path: string) => (await stack.call('GET', path)).body
-    const message = (text: string) => ({ error: { code: 'invalid_request', message: text } })
-    expect(await refused('/v1/audit/leaves/one')).toEqual(message('seq must be a tree size'))
-    expect(await refused('/v1/journals/12abc')).toEqual(message('the journal id must be a number'))
-    expect(await refused('/v1/journals/1/proof?tree_size=0x10')).toEqual(message('tree_size must be a tree size'))
-    expect(await refused('/v1/audit/consistency')).toEqual(message('first must be a tree size'))
-    expect(await refused('/v1/audit/consistency?first=1&second=2.0')).toEqual(message('second must be a tree size'))
+    const get = (path: string) => stack.call('GET', path)
+    expect(await get('/v1/audit/leaves/one')).toEqual(invalid('seq must be a position in the log'))
+    expect(await get('/v1/journals/12abc')).toEqual(invalid('the journal id must be a number'))
+    expect(await get('/v1/journals/1/proof?tree_size=0x10')).toEqual(invalid('tree_size must be a tree size'))
+    expect(await get('/v1/audit/consistency')).toEqual(invalid('first must be a tree size'))
+    expect(await get('/v1/audit/consistency?first=1&second=2.0')).toEqual(invalid('second must be a tree size'))
+    expect(await stack.call('GET', '/v1/merchants/Wash', { as: 'admin' })).toEqual(
+      invalid('code must be 1 to 64 lowercase letters, digits, dashes or underscores'),
+    )
+    expect(await get('/v1/accounts/bank%20EUR/balance')).toEqual(invalid('code must be an account code'))
   })
 })

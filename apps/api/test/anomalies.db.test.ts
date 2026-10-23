@@ -2,7 +2,7 @@ import { AnomalyList, AnomalyView, PaymentView } from '@carwash/contracts'
 import { checkAgainstPsp, checkLedger, checkPayments, violations } from '@carwash/invariants'
 import { NO_FAULTS } from '@carwash/psp'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { count, startStack, type Stack } from './support.ts'
+import { count, invalid, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 
@@ -110,11 +110,12 @@ describe('resolving anomalies', () => {
     expect(resolved.map((a) => a.resolution).sort()).toEqual(['accepted', 'accepted', 'accepted', 'disputed'])
   })
 
-  it('lists open or resolved anomalies, and refuses any other state or a limit out of range', async () => {
-    const refused = async (path: string) => (await stack.call('GET', path, { as: 'admin' })).body
-    const message = (text: string) => ({ error: { code: 'invalid_request', message: text } })
-    expect(await refused('/v1/admin/anomalies?state=all')).toEqual(message('state must be open or resolved'))
-    expect(await refused('/v1/admin/anomalies?limit=500')).toEqual(message('limit must be between 1 and 200'))
-    expect(AnomalyList.parse((await stack.call('GET', '/v1/admin/anomalies?state=resolved&limit=2', { as: 'admin' })).body).data.length).toBeLessThanOrEqual(2)
+  it('lists open or resolved anomalies, and refuses any other state, a limit out of range or an id that is not a number', async () => {
+    expect(await stack.call('GET', '/v1/admin/anomalies?state=all', { as: 'admin' })).toEqual(invalid('state must be open or resolved'))
+    expect(await stack.call('GET', '/v1/admin/anomalies?limit=500', { as: 'admin' })).toEqual(invalid('limit must be between 1 and 200'))
+    expect(await stack.call('POST', '/v1/admin/anomalies/0x10/accept', { as: 'admin', key: null })).toEqual(invalid('the anomaly id must be a number'))
+    const resolved = AnomalyList.parse((await stack.call('GET', '/v1/admin/anomalies?state=resolved&limit=2', { as: 'admin' })).body).data
+    expect(resolved).toHaveLength(2)
+    expect(resolved.every((anomaly) => anomaly.resolution !== null)).toBe(true)
   })
 })
