@@ -5,6 +5,7 @@ import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp
 import { NestFactory } from '@nestjs/core'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PspClient } from '../src/psp/psp.client.ts'
+import { ReconciliationService } from '../src/settlement/reconciliation.service.ts'
 import { SettlementIngestService } from '../src/settlement/settlement-ingest.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
 import { invalid, startStack, type Stack } from './support.ts'
@@ -26,6 +27,21 @@ async function ingest(day: number) {
 async function breaksFor(paymentId: string): Promise<string[]> {
   const { rows } = await stack.admin.query<{ class: string }>('SELECT class FROM recon_breaks WHERE journal_ref = $1 ORDER BY class', [`capture:${paymentId}`])
   return rows.map((row) => row.class)
+}
+
+async function latestDay(): Promise<number> {
+  return firstRow(await stack.admin.query<{ day: number }>('SELECT max(day)::int AS day FROM settlement_files')).day
+}
+
+async function withWorker(currentDay: number, work: (ingest: SettlementIngestService) => Promise<void>): Promise<void> {
+  const calendar = vi.spyOn(PspClient.prototype, 'calendar').mockResolvedValue({ kind: 'answer', daySeconds: 86_400, currentDay })
+  const worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
+  try {
+    await work(worker.get(SettlementIngestService))
+  } finally {
+    calendar.mockRestore()
+    await worker.close()
+  }
 }
 
 function only(fault: SettlementFault) {
@@ -114,6 +130,18 @@ describe('settlement', () => {
     expect(listed.data.map((b) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
   })
 
+  it('ingests a file once and keeps one copy of each break when two ingests of it race', async () => {
+    const day = (await latestDay()) + 1
+    stack.psp.faults.plan = only('wrongAmount')
+    const payment = PaymentView.parse((await stack.call('POST', '/v1/payments', { body: pay(1500) })).body)
+    await stack.psp.settlements.close(day)
+    const replies = await Promise.all([1, 2].map(() => stack.call('POST', `/v1/settlements/${day}/ingest`, { as: 'admin' })))
+    stack.psp.faults.plan = NO_FAULTS
+    expect(replies.map((reply) => reply.status)).toEqual([201, 201])
+    expect(replies.map((reply) => SettlementView.parse(reply.body).outcome).sort()).toEqual(['already', 'ingested'])
+    expect(await breaksFor(payment.id)).toEqual(['wrong_amount'])
+  })
+
   it('refuses a query it cannot use, and says which parameter is wrong', async () => {
     const get = (path: string) => stack.call('GET', path, { as: 'admin' })
     expect(await get('/v1/reconciliation/days?limit=0')).toEqual(invalid('limit must be between 1 and 60'))
@@ -127,20 +155,32 @@ describe('settlement', () => {
     expect((await get('/v1/reconciliation/days')).status).toBe(200)
   })
 
-  it('catches up on every closed day it has not ingested yet, and reconciles after', async () => {
-    const latest = firstRow(await stack.admin.query<{ day: number }>('SELECT max(day)::int AS day FROM settlement_files')).day
+  it('catches up on every closed day it has not ingested yet', async () => {
+    const latest = await latestDay()
     const days = [latest + 1, latest + 2]
     for (const day of days) await stack.psp.settlements.close(day)
-    const calendar = vi.spyOn(PspClient.prototype, 'calendar').mockResolvedValue({ kind: 'answer', daySeconds: 86_400, currentDay: latest + 3 })
-    const worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
-    try {
-      expect(await worker.get(SettlementIngestService).catchUp()).toBe(2)
+    await withWorker(latest + 3, async (ingest) => {
+      expect(await ingest.catchUp()).toBe(2)
       const { rows } = await stack.admin.query<{ day: number }>('SELECT day::int AS day FROM settlement_files WHERE day = ANY($1) ORDER BY day', [days])
       expect(rows.map((row) => row.day)).toEqual(days)
-      expect(await worker.get(SettlementIngestService).catchUp()).toBe(0)
+      expect(await ingest.catchUp()).toBe(0)
+    })
+  })
+
+  it('reconciles on the next catch-up when the reconcile after an ingest failed', async () => {
+    const latest = await latestDay()
+    await stack.psp.settlements.close(latest + 1)
+    const reconcile = vi.spyOn(ReconciliationService.prototype, 'reconcile').mockRejectedValueOnce(new Error('the database went away'))
+    try {
+      await withWorker(latest + 2, async (ingest) => {
+        await expect(ingest.catchUp()).rejects.toThrow('the database went away')
+        expect(await ingest.catchUp()).toBe(0)
+        expect(reconcile).toHaveBeenCalledTimes(2)
+        expect(await ingest.catchUp()).toBe(0)
+        expect(reconcile).toHaveBeenCalledTimes(2)
+      })
     } finally {
-      calendar.mockRestore()
-      await worker.close()
+      reconcile.mockRestore()
     }
   })
 })

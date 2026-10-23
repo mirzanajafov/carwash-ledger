@@ -7,9 +7,9 @@ import { journalEvents } from '../events/events.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { PspUnavailableError } from '../psp/psp.errors.ts'
-import { ReconciliationService } from './reconciliation.service.ts'
+import { ReconciliationService, type ReconcileSummary } from './reconciliation.service.ts'
 import { parseSettlementFile } from './settlement-file.ts'
-import { fileExists, insertFile, settledSoFar } from './settlements.repository.ts'
+import { fileExists, insertFile, lockSettlements, reconciliationDue, settledSoFar } from './settlements.repository.ts'
 
 export type IngestOutcome = SettlementView['outcome']
 
@@ -38,6 +38,7 @@ export class SettlementIngestService {
     const file = parseSettlementFile(reply.csv)
     if (file.day !== day || file.currency !== currency) throw new Error(`asked for ${currency} day ${day}, got ${file.currency} day ${file.day}`)
     return this.#db.transaction(async (client) => {
+      await lockSettlements(client, currency)
       if (await fileExists(client, file.id)) return 'already'
       const entries: EntryInput[] = [
         { accountId: accounts.bank.id, amount: file.net },
@@ -54,6 +55,14 @@ export class SettlementIngestService {
     })
   }
 
+  async ingestAndReconcile(day: number, currency: string): Promise<{ outcome: IngestOutcome; reconciliation?: ReconcileSummary | undefined }> {
+    const outcome = await this.ingest(day, currency)
+    if (outcome === 'not_ready') return { outcome }
+    const calendar = await this.#psp.calendar()
+    if (calendar.kind === 'unknown') throw new PspUnavailableError(`the PSP's calendar is not available (${calendar.reason})`, 5)
+    return { outcome, reconciliation: await this.#reconciliation.reconcile(currency, calendar.daySeconds) }
+  }
+
   async catchUp(): Promise<number> {
     const calendar = await this.#psp.calendar()
     if (calendar.kind === 'unknown') return 0
@@ -61,17 +70,13 @@ export class SettlementIngestService {
     for (const currency of this.#config.currencies) {
       const { latest, first } = await settledSoFar(this.#db.pool, currency, calendar.daySeconds)
       let day = latest === null ? (first ?? calendar.currentDay) : latest + 1
-      let fresh = false
       while (day < calendar.currentDay) {
         const outcome = await this.ingest(day, currency)
         if (outcome === 'not_ready') break
-        if (outcome === 'ingested') {
-          ingested++
-          fresh = true
-        }
+        if (outcome === 'ingested') ingested++
         day++
       }
-      if (fresh) await this.#reconciliation.reconcile(currency)
+      if (await reconciliationDue(this.#db.pool, currency)) await this.#reconciliation.reconcile(currency, calendar.daySeconds)
     }
     if (ingested > 0) this.#logger.log(`ingested ${ingested} settlement files`)
     return ingested

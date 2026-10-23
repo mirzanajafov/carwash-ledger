@@ -1,12 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common'
 import type { BreakClass, SettlementView } from '@carwash/contracts'
-import { reconcile, window } from '@carwash/recon'
+import { reconcile, window, type Break, type Window } from '@carwash/recon'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { PspClient, type CalendarReply } from '../psp/psp.client.ts'
-import { PspUnavailableError } from '../psp/psp.errors.ts'
-import { latestFileDay, ledgerItems, linesForMatching, recentFiles, replaceBreaks, type FileSummaryRow } from './settlements.repository.ts'
+import {
+  filesSoFar,
+  ledgerItems,
+  linesForMatching,
+  lockSettlements,
+  recentFiles,
+  recordReconciliation,
+  replaceBreaks,
+  type FileSummaryRow,
+} from './settlements.repository.ts'
 
 export type ReconcileSummary = NonNullable<SettlementView['reconciliation']>
 
@@ -24,14 +32,26 @@ export class ReconciliationService {
     this.#config = config
   }
 
-  async reconcile(currency: string): Promise<ReconcileSummary | undefined> {
-    const calendar = await this.#psp.calendar()
-    if (calendar.kind === 'unknown') throw new PspUnavailableError(`the PSP's calendar is not available (${calendar.reason})`, 5)
-    const through = await latestFileDay(this.#db.pool, currency)
-    if (through === null) return undefined
+  async reconcile(currency: string, daySeconds: number): Promise<ReconcileSummary | undefined> {
+    for (;;) {
+      const files = await filesSoFar(this.#db.pool, currency)
+      if (files.latest === null) return undefined
+      const { span, summary, kept } = await this.#match(currency, daySeconds, files.latest)
+      const saved = await this.#db.transaction(async (client) => {
+        await lockSettlements(client, currency)
+        if ((await filesSoFar(client, currency)).count !== files.count) return false
+        await replaceBreaks(client, currency, span.keepFrom, span.keepThrough, kept)
+        await recordReconciliation(client, currency, files.count)
+        return true
+      })
+      if (saved) return summary
+    }
+  }
+
+  async #match(currency: string, daySeconds: number, through: number): Promise<{ span: Window; summary: ReconcileSummary; kept: Break[] }> {
     const span = window(through, this.#config.reconWindowDays)
     const items = await ledgerItems(this.#db.pool, {
-      daySeconds: calendar.daySeconds,
+      daySeconds,
       receivableId: this.#chart.accounts(currency).receivable.id,
       currency,
       from: span.itemsFrom,
@@ -40,10 +60,9 @@ export class ReconciliationService {
     const lines = await linesForMatching(this.#db.pool, currency, span.linesFrom, span.linesThrough)
     const result = reconcile(lines, items, { contract: this.#config.pspFees, fallback: this.#config.reconFallback, settledThrough: through })
     const kept = result.breaks.filter((b) => b.day >= span.keepFrom && b.day <= span.keepThrough)
-    await this.#db.transaction((client) => replaceBreaks(client, currency, span.keepFrom, span.keepThrough, kept))
     const breaks: Record<BreakClass, number> = { missing_line: 0, duplicate_line: 0, wrong_amount: 0, fee_difference: 0, unknown_line: 0 }
     for (const b of kept) breaks[b.class]++
-    return {
+    const summary = {
       currency,
       from: span.keepFrom,
       through,
@@ -54,6 +73,7 @@ export class ReconciliationService {
       pending: result.pending.length,
       breaks,
     }
+    return { span, summary, kept }
   }
 
   async recentDays(currency: string, limit: number): Promise<{ calendar: CalendarReply; files: FileSummaryRow[] }> {

@@ -449,6 +449,16 @@ model ReconBreak {
   @@map("recon_breaks")
 }
 
+model ReconciliationRun {
+  id        BigInt   @id @default(autoincrement())
+  currency  String   @db.Char(3)
+  files     Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([currency, files])
+  @@map("reconciliation_runs")
+}
+
 model AuditQueue {
   journalId BigInt   @id @map("journal_id")
   queuedAt  DateTime @default(now()) @map("queued_at") @db.Timestamptz(6)
