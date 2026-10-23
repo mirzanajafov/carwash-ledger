@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { postInTransaction } from '@carwash/ledger'
+import { lockBalances, postInTransaction } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
@@ -9,7 +9,7 @@ import { Chart } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
 import { insertAttempt, pendingPayoutAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
-import { insertPayout, loadPayout, lockPayoutBalances, setPayoutJournal } from './payouts.repository.ts'
+import { insertPayout, loadPayout, setPayoutJournal } from './payouts.repository.ts'
 import { payoutView } from './payouts.views.ts'
 
 export interface PayoutInput {
@@ -56,7 +56,7 @@ export class PayoutsService {
         throw new DomainError('invalid', 'currency_mismatch', `merchant ${input.merchant} is paid in ${merchant.currency}`)
       }
       const bank = this.#chart.accounts(input.currency).bank
-      const balance = await lockPayoutBalances(client, merchant.accountId, bank.id)
+      const balance = (await lockBalances(client, [merchant.accountId, bank.id])).get(merchant.accountId)
       if (balance === undefined) throw new Error(`merchant ${input.merchant} has no balance row`)
       const payable = -balance
       if (input.amount === undefined && payable <= 0n) {

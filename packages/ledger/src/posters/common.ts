@@ -1,7 +1,7 @@
+import { DEFAULT_RETRY, withRetry, type RetryOptions } from '@carwash/pg'
 import type { AccountRegistry } from '../accounts.ts'
 import { LedgerRuleError } from '../errors.ts'
 import { planJournal, type JournalPlan } from '../plan.ts'
-import { DEFAULT_RETRY, withRetry, type RetryOptions } from '../retry.ts'
 import { translateError } from '../translate.ts'
 import type { JournalInput, PostedJournal } from '../types.ts'
 

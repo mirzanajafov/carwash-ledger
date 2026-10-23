@@ -1,4 +1,3 @@
-import { createPrisma, type PrismaClient } from '@carwash/db'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { assert } from 'vitest'
@@ -8,9 +7,6 @@ import {
   createAccount,
   PgCtePoster,
   pgAccountLoader,
-  PrismaApiPoster,
-  PrismaCtePoster,
-  PrismaSqlPoster,
   type Account,
   type BalanceMode,
   type EntryInput,
@@ -31,8 +27,6 @@ export interface LedgerFixture {
   app: pg.Pool
   owner: pg.Pool
   admin: pg.Pool
-  prisma: PrismaClient
-  posters: Poster[]
   poster: Poster
   close(): Promise<void>
 }
@@ -40,26 +34,13 @@ export interface LedgerFixture {
 export async function openLedger(poolSize = 16): Promise<LedgerFixture> {
   const db = await createTestDatabase()
   const app = db.pool('ledger_app', poolSize)
-  const prisma = createPrisma(db.url('ledger_app'), poolSize)
-  const registry = new AccountRegistry(pgAccountLoader(app))
-  const poster = new PgCtePoster(app, registry, PATIENT_RETRY)
   return {
     db,
     app,
     owner: db.pool('ledger_owner', 2),
     admin: db.pool('admin', 2),
-    prisma,
-    poster,
-    posters: [
-      poster,
-      new PrismaApiPoster(prisma, registry, PATIENT_RETRY),
-      new PrismaSqlPoster(prisma, registry, PATIENT_RETRY),
-      new PrismaCtePoster(prisma, registry, PATIENT_RETRY),
-    ],
-    close: async () => {
-      await prisma.$disconnect()
-      await db.drop()
-    },
+    poster: new PgCtePoster(app, new AccountRegistry(pgAccountLoader(app)), PATIENT_RETRY),
+    close: () => db.drop(),
   }
 }
 

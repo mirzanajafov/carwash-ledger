@@ -1,10 +1,35 @@
 import { Prisma, type PrismaClient } from '@carwash/db'
-import type { AccountRegistry } from '../accounts.ts'
-import { deltaParams, entryParams, lockParams, type JournalPlan } from '../plan.ts'
-import type { RetryOptions } from '../retry.ts'
-import { APPLY_DELTAS, INSERT_ENTRIES, INSERT_JOURNAL, LOCK_BALANCES, POST_JOURNAL } from '../sql.ts'
-import type { JournalInput, PostedJournal, Poster } from '../types.ts'
-import { expectApplied, postWith } from './common.ts'
+import {
+  deltaParams,
+  entryParams,
+  expectApplied,
+  lockParams,
+  LOCK_BALANCES,
+  POST_JOURNAL,
+  postWith,
+  type AccountRegistry,
+  type JournalInput,
+  type JournalPlan,
+  type PostedJournal,
+  type Poster,
+} from '@carwash/ledger'
+import type { RetryOptions } from '@carwash/pg'
+
+const INSERT_JOURNAL = `
+INSERT INTO journals (external_ref, reverses_id)
+VALUES ($1, $2::bigint)
+RETURNING id`
+
+const INSERT_ENTRIES = `
+INSERT INTO entries (journal_id, account_id, amount)
+SELECT $1::bigint, t.account_id, t.amount
+FROM unnest($2::bigint[], $3::bigint[]) AS t(account_id, amount)`
+
+const APPLY_DELTAS = `
+UPDATE balances AS b
+SET amount = b.amount + t.delta, version = b.version + 1
+FROM unnest($1::bigint[], $2::int[], $3::bigint[]) AS t(account_id, shard, delta)
+WHERE b.account_id = t.account_id AND b.shard = t.shard`
 
 type Tx = Prisma.TransactionClient
 

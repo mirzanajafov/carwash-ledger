@@ -123,12 +123,9 @@ describe('posting', () => {
     ).rejects.toBeInstanceOf(InvalidJournalError)
   })
 
-  it('rejects a second journal with the same external ref, in every poster', async () => {
-    for (const poster of ledger.posters) {
-      const ref = `dup-${poster.name}`
-      await poster.post({ externalRef: ref, entries: capture(eur, 2, 2000n, 50n) })
-      await expect(poster.post({ externalRef: ref, entries: capture(eur, 2, 2000n, 50n) })).rejects.toBeInstanceOf(DuplicateJournalError)
-    }
+  it('rejects a second journal with the same external ref', async () => {
+    await ledger.poster.post({ externalRef: 'dup', entries: capture(eur, 2, 2000n, 50n) })
+    await expect(ledger.poster.post({ externalRef: 'dup', entries: capture(eur, 2, 2000n, 50n) })).rejects.toBeInstanceOf(DuplicateJournalError)
   })
 
   it('reverses a journal once and restores every balance', async () => {

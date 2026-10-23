@@ -41,9 +41,11 @@ export interface ResourceRefs {
   payoutId?: PayoutId
 }
 
+export type IdempotencyState = 'started' | 'finished'
+
 interface KeyRow {
   request_hash: Buffer
-  state: 'started' | 'finished'
+  state: IdempotencyState
   payment_id: string | null
   refund_id: string | null
   payout_id: string | null

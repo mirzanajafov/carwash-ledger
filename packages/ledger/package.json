@@ -15,7 +15,6 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@carwash/db": "workspace:*",
     "@carwash/failpoints": "workspace:*",
     "@carwash/pg": "workspace:*",
     "pg": "catalog:"

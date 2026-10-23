@@ -1,5 +1,14 @@
-import { RetriesExhaustedError } from './errors.ts'
 import { sqlStateOf } from './sql-state.ts'
+
+export class RetriesExhaustedError extends Error {
+  readonly attempts: number
+
+  constructor(attempts: number, options?: ErrorOptions) {
+    super(`gave up after ${attempts} attempts`, options)
+    this.name = new.target.name
+    this.attempts = attempts
+  }
+}
 
 export interface RetryOptions {
   maxAttempts: number

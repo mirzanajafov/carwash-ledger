@@ -1,6 +1,6 @@
 --- a/packages/ledger/src/posters/pg-cte.ts
 +++ b/packages/ledger/src/posters/pg-cte.ts
-@@ -11,16 +11,19 @@
+@@ -10,16 +10,19 @@
  import { expectApplied, postWith } from './common.ts'
  
  async function writeJournal(client: Transaction, plan: JournalPlan): Promise<bigint> {
@@ -38,9 +38,9 @@
 -FOR UPDATE OF b`
 +ORDER BY b.account_id, b.shard`
  
- export const INSERT_JOURNAL = `
- INSERT INTO journals (external_ref, reverses_id)
-@@ -34,7 +33,7 @@
+ export const POST_JOURNAL = `
+ WITH journal AS (
+@@ -18,7 +17,7 @@
    RETURNING 1
  ), applied AS (
    UPDATE balances AS b

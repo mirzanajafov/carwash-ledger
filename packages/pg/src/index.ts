@@ -1,5 +1,8 @@
 import pg from 'pg'
 
+export * from './retry.ts'
+export * from './sql-state.ts'
+
 const ignore = () => undefined
 
 export type Queryable = pg.Pool | pg.ClientBase

@@ -33,6 +33,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@carwash/db": "workspace:*",
     "@carwash/psp": "workspace:*",
     "@carwash/testkit": "workspace:*",
     "@carwash/witness": "workspace:*",

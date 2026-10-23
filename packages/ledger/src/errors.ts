@@ -42,12 +42,3 @@ export class LedgerRuleError extends LedgerError {
     this.sqlState = sqlState
   }
 }
-
-export class RetriesExhaustedError extends LedgerError {
-  readonly attempts: number
-
-  constructor(attempts: number, options?: ErrorOptions) {
-    super(`gave up after ${attempts} attempts`, options)
-    this.attempts = attempts
-  }
-}
