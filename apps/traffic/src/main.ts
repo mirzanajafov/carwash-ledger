@@ -1,19 +1,20 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { errorOf, PaymentView, PayoutView } from '@carwash/contracts'
+import { nonNegativeInteger, optional, positiveNumber, required } from '@carwash/env'
 import { ApiClient } from './client.ts'
 import { gapMs, mulberry32, pick, visit, type Visit } from './visits.ts'
 
-const url = process.env.API_URL ?? 'http://127.0.0.1:3140'
-const clientKey = process.env.CLIENT_KEY
-const adminKey = process.env.ADMIN_KEY
-if (!clientKey || !adminKey) throw new Error('CLIENT_KEY and ADMIN_KEY are required')
-const perMinute = Number(process.env.PER_MINUTE ?? 12)
-const payoutEveryMs = Number(process.env.PAYOUT_EVERY_MINUTES ?? 5) * 60_000
-const merchants = (process.env.MERCHANTS ?? 'wash_north:North bay,wash_south:South bay,wash_east:East bay').split(',').map((pair) => {
+const env = process.env
+const url = optional(env, 'API_URL') ?? 'http://127.0.0.1:3140'
+const clientKey = required(env, 'CLIENT_KEY')
+const adminKey = required(env, 'ADMIN_KEY')
+const perMinute = positiveNumber(env, 'PER_MINUTE', 12)
+const payoutEveryMs = positiveNumber(env, 'PAYOUT_EVERY_MINUTES', 5) * 60_000
+const merchants = (optional(env, 'MERCHANTS') ?? 'wash_north:North bay,wash_south:South bay,wash_east:East bay').split(',').map((pair) => {
   const [code = '', name = code] = pair.split(':')
   return { code: code.trim(), name: name.trim() }
 })
-const random = mulberry32(Number(process.env.SEED ?? Date.now() % 2 ** 31))
+const random = mulberry32(nonNegativeInteger(env, 'SEED', Date.now() % 2 ** 31))
 
 const stop = new AbortController()
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => stop.abort())

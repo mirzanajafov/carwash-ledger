@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { onlyFields } from '@carwash/http'
+import * as z from 'zod/mini'
 
 export const CARD_OPERATIONS = ['authorize', 'capture', 'cancel', 'refund'] as const
 export type CardOperation = (typeof CARD_OPERATIONS)[number]
@@ -7,29 +9,7 @@ export type OperationKind = CardOperation | 'payout'
 export const WEBHOOK_FAULTS = ['duplicate', 'delay', 'reorder', 'drop'] as const
 export type WebhookFault = (typeof WEBHOOK_FAULTS)[number]
 
-export interface FaultPlan {
-  seed: number
-  decline: number
-  fail: number
-  timeoutAfterCommit: number
-  slow: number
-  slowMs: readonly [number, number]
-  wrongAmount: number
-  webhook: Record<WebhookFault, number>
-  settlement: Record<SettlementFault, number>
-}
-
-export const NO_FAULTS: FaultPlan = {
-  seed: 0,
-  decline: 0,
-  fail: 0,
-  timeoutAfterCommit: 0,
-  slow: 0,
-  slowMs: [500, 3000],
-  wrongAmount: 0,
-  webhook: { duplicate: 0, delay: 0, reorder: 0, drop: 0 },
-  settlement: { nextDay: 0, feeDifference: 0, wrongAmount: 0, missingLine: 0, duplicateLine: 0, droppedReference: 0 },
-}
+export type FaultPlan = z.output<typeof FaultPlanInput>
 
 export type TokenEffect =
   | { kind: 'ok' | 'decline' | 'expire_authorization' }
@@ -162,61 +142,69 @@ export function unitHash(input: string): number {
   return createHash('sha256').update(input).digest().readUInt32BE(0) / 2 ** 32
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+function probability(name: string) {
+  const error = `${name} must be a probability in [0, 1]`
+  return z._default(z.number({ error }).check(z.gte(0, { error }), z.lte(1, { error })), 0)
 }
 
-export function parseFaultPlan(input: unknown): FaultPlan {
-  if (!isRecord(input)) throw new Error('the fault plan must be an object')
-  for (const key of Object.keys(input)) {
-    if (!(key in NO_FAULTS)) throw new Error(`unknown fault plan field ${key}`)
-  }
-  const probability = (value: unknown, name: string) => {
-    if (value === undefined) return 0
-    if (typeof value !== 'number' || !(value >= 0 && value <= 1)) throw new Error(`${name} must be a probability in [0, 1]`)
-    return value
-  }
-  const seed = input.seed ?? 0
-  if (typeof seed !== 'number' || !Number.isSafeInteger(seed)) throw new Error('seed must be an integer')
-  const slowMs = input.slowMs ?? NO_FAULTS.slowMs
-  if (!Array.isArray(slowMs) || slowMs.length !== 2 || !slowMs.every((ms) => Number.isSafeInteger(ms) && ms >= 0) || slowMs[0] > slowMs[1]) {
-    throw new Error('slowMs must be [low, high] in milliseconds')
-  }
-  const settlement = input.settlement ?? {}
-  if (!isRecord(settlement)) throw new Error('settlement must be an object')
-  for (const key of Object.keys(settlement)) {
-    if (!(SETTLEMENT_FAULTS as readonly string[]).includes(key)) throw new Error(`unknown settlement fault ${key}`)
-  }
-  const webhook = input.webhook ?? {}
-  if (!isRecord(webhook)) throw new Error('webhook must be an object')
-  for (const key of Object.keys(webhook)) {
-    if (!(WEBHOOK_FAULTS as readonly string[]).includes(key)) throw new Error(`unknown webhook fault ${key}`)
-  }
-  return {
-    seed,
-    decline: probability(input.decline, 'decline'),
-    fail: probability(input.fail, 'fail'),
-    timeoutAfterCommit: probability(input.timeoutAfterCommit, 'timeoutAfterCommit'),
-    slow: probability(input.slow, 'slow'),
-    slowMs: [slowMs[0], slowMs[1]],
-    wrongAmount: probability(input.wrongAmount, 'wrongAmount'),
-    webhook: Object.fromEntries(WEBHOOK_FAULTS.map((fault) => [fault, probability(webhook[fault], `webhook.${fault}`)])) as Record<WebhookFault, number>,
-    settlement: Object.fromEntries(SETTLEMENT_FAULTS.map((fault) => [fault, probability(settlement[fault], `settlement.${fault}`)])) as Record<
-      SettlementFault,
-      number
-    >,
-  }
-}
+const SLOW_MS = 'slowMs must be [low, high] in milliseconds'
+const milliseconds = z.int({ error: SLOW_MS }).check(z.gte(0, { error: SLOW_MS }))
+const LABEL = 'label must be 1-32 lowercase letters, digits, spaces or dashes'
+const SECONDS = `seconds must be an integer from 1 to ${MAX_WEATHER_SECONDS}`
 
-export function parseWeather(input: unknown): { label: string; plan: FaultPlan; seconds: number } {
-  if (!isRecord(input)) throw new Error('the weather must be an object')
-  for (const key of Object.keys(input)) {
-    if (!['label', 'plan', 'seconds'].includes(key)) throw new Error(`unknown weather field ${key}`)
-  }
-  const { label, seconds } = input
-  if (typeof label !== 'string' || !/^[a-z][a-z0-9 -]{0,31}$/.test(label)) throw new Error('label must be 1-32 lowercase letters, digits, spaces or dashes')
-  if (typeof seconds !== 'number' || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > MAX_WEATHER_SECONDS) {
-    throw new Error(`seconds must be an integer from 1 to ${MAX_WEATHER_SECONDS}`)
-  }
-  return { label, plan: parseFaultPlan(input.plan), seconds }
-}
+export const FaultPlanInput = onlyFields(
+  {
+    seed: z._default(z.int({ error: 'seed must be an integer' }), 0),
+    decline: probability('decline'),
+    fail: probability('fail'),
+    timeoutAfterCommit: probability('timeoutAfterCommit'),
+    slow: probability('slow'),
+    slowMs: z.prefault(
+      z.readonly(z.tuple([milliseconds, milliseconds], { error: SLOW_MS }).check(z.refine(([low, high]) => low <= high, { error: SLOW_MS }))),
+      [500, 3000],
+    ),
+    wrongAmount: probability('wrongAmount'),
+    webhook: z.prefault(
+      onlyFields(
+        {
+          duplicate: probability('webhook.duplicate'),
+          delay: probability('webhook.delay'),
+          reorder: probability('webhook.reorder'),
+          drop: probability('webhook.drop'),
+        },
+        'unknown webhook fault',
+        'webhook must be an object',
+      ),
+      {},
+    ),
+    settlement: z.prefault(
+      onlyFields(
+        {
+          nextDay: probability('settlement.nextDay'),
+          feeDifference: probability('settlement.feeDifference'),
+          wrongAmount: probability('settlement.wrongAmount'),
+          missingLine: probability('settlement.missingLine'),
+          duplicateLine: probability('settlement.duplicateLine'),
+          droppedReference: probability('settlement.droppedReference'),
+        },
+        'unknown settlement fault',
+        'settlement must be an object',
+      ),
+      {},
+    ),
+  },
+  'unknown fault plan field',
+  'the fault plan must be an object',
+)
+
+export const NO_FAULTS: FaultPlan = FaultPlanInput.parse({})
+
+export const WeatherRequest = onlyFields(
+  {
+    label: z.string({ error: LABEL }).check(z.regex(/^[a-z][a-z0-9 -]{0,31}$/, { error: LABEL })),
+    plan: FaultPlanInput,
+    seconds: z.int({ error: SECONDS }).check(z.gte(1, { error: SECONDS }), z.lte(MAX_WEATHER_SECONDS, { error: SECONDS })),
+  },
+  'unknown weather field',
+  'the weather must be an object',
+)

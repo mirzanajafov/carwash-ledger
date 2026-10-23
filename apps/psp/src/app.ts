@@ -20,7 +20,7 @@ export interface RunningPsp {
 
 const SWEEP_EVERY_MS = 60_000
 
-export async function startPsp(config: Config, log?: (message: string) => void): Promise<RunningPsp> {
+export async function startPsp(config: Config, log: (message: string) => void): Promise<RunningPsp> {
   const pool = createPool({ connectionString: config.databaseUrl, max: 10 })
   await migrate(pool)
   const faults = new Faults(config.faultPlan)
@@ -29,15 +29,14 @@ export async function startPsp(config: Config, log?: (message: string) => void):
     idempotencyWindowSeconds: config.idempotencyWindowSeconds,
     webhooks: config.webhook !== undefined,
   })
-  const logging = log === undefined ? {} : { log }
-  const webhooks = config.webhook && new WebhookSender(pool, { ...config.webhook, ...logging })
+  const webhooks = config.webhook && new WebhookSender(pool, { ...config.webhook, log })
   const settlements = new Settlements(pool, faults, { daySeconds: config.settlementDaySeconds, feeBps: config.feeBps, feeFixed: config.feeFixed })
-  const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, ...logging })
+  const server = createPspServer(psp, faults, settlements, { apiKey: config.apiKey, adminKey: config.adminKey, hangMs: config.hangMs, log })
   server.listen(config.port, '0.0.0.0')
   await once(server, 'listening')
   webhooks?.start()
   const sweeper = setInterval(() => {
-    psp.sweepExpiredKeys().catch((error: unknown) => log?.(`psp sweeper: ${error instanceof Error ? error.message : String(error)}`))
+    psp.sweepExpiredKeys().catch((error: unknown) => log(`psp sweeper: ${error instanceof Error ? error.message : String(error)}`))
   }, SWEEP_EVERY_MS)
   sweeper.unref()
 

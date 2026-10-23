@@ -1,59 +1,29 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { timingSafeEqual } from 'node:crypto'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
-import { Refusal, Witness, type Submission } from './witness.ts'
+import type { IncomingMessage, Server } from 'node:http'
+import { bearerMatches, HttpError, parse, readJson, serve, type Reply } from '@carwash/http'
+import * as z from 'zod/mini'
+import { Refusal, Witness } from './witness.ts'
 
 const MAX_BODY_BYTES = 1_000_000
 
-const REFUSAL_STATUS = new Map([
-  ['invalid', 400],
-  ['too_large', 413],
-])
+const PROOF = 'proof must be a list of hex hashes'
 
-function send(response: ServerResponse, status: number, body: unknown): void {
-  const text = JSON.stringify(body)
-  response.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) })
-  response.end(text)
+function integerFrom(min: number, error: string) {
+  return z.int({ error }).check(z.gte(min, { error }))
 }
 
-async function readBody(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of request as AsyncIterable<Buffer>) {
-    size += chunk.length
-    if (size <= MAX_BODY_BYTES) chunks.push(chunk)
-  }
-  if (size > MAX_BODY_BYTES) throw new Refusal('too_large', 'the body is over 1 MB')
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  } catch {
-    throw new Refusal('invalid', 'the body is not JSON')
-  }
+function hash(error: string) {
+  return z.string({ error }).check(z.regex(/^[0-9a-f]{64}$/, { error }))
 }
 
-function authorized(request: IncomingMessage, token: string): boolean {
-  const header = request.headers.authorization ?? ''
-  const given = Buffer.from(header.startsWith('Bearer ') ? header.slice(7) : '')
-  const expected = Buffer.from(token)
-  return given.length === expected.length && timingSafeEqual(given, expected)
-}
-
-const HASH = /^[0-9a-f]{64}$/
-
-function submission(input: unknown): Submission {
-  const body = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
-  const size = body.size
-  const fromSize = body.from_size ?? 0
-  const proof = body.proof ?? []
-  if (!Number.isSafeInteger(size) || (size as number) < 1) throw new Refusal('invalid', 'size must be a positive integer')
-  if (!Number.isSafeInteger(fromSize) || (fromSize as number) < 0) throw new Refusal('invalid', 'from_size must be a non-negative integer')
-  if (typeof body.root !== 'string' || !HASH.test(body.root)) throw new Refusal('invalid', 'root must be 32 bytes of hex')
-  if (!Array.isArray(proof) || proof.length > 64 || !proof.every((p) => typeof p === 'string' && HASH.test(p))) {
-    throw new Refusal('invalid', 'proof must be a list of hex hashes')
-  }
-  return { size: size as number, root: body.root, from_size: fromSize as number, proof: proof as string[] }
-}
+const SubmissionRequest = z.object(
+  {
+    size: integerFrom(1, 'size must be a positive integer'),
+    from_size: z._default(integerFrom(0, 'from_size must be a non-negative integer'), 0),
+    root: hash('root must be 32 bytes of hex'),
+    proof: z._default(z.array(hash(PROOF), { error: PROOF }).check(z.maxLength(64, { error: PROOF })), []),
+  },
+  { error: 'the body must be a JSON object' },
+)
 
 async function* historyDocument(witness: Witness): AsyncGenerator<string> {
   yield '{"data":['
@@ -66,33 +36,26 @@ async function* historyDocument(witness: Witness): AsyncGenerator<string> {
 }
 
 export function createWitnessServer(witness: Witness, token: string): Server {
-  const routes = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+  async function handle(request: IncomingMessage): Promise<Reply> {
     const url = new URL(request.url ?? '/', 'http://witness')
     const route = `${String(request.method)} ${url.pathname}`
-    if (route === 'GET /health') return send(response, 200, { ok: true })
-    if (route === 'GET /v1/key') return send(response, 200, { origin: witness.origin, algorithm: 'ed25519', public_key: witness.publicKey })
+    if (route === 'GET /health') return { status: 200, json: { ok: true } }
+    if (route === 'GET /v1/key') return { status: 200, json: { origin: witness.origin, algorithm: 'ed25519', public_key: witness.publicKey } }
     if (route === 'GET /v1/checkpoints/latest') {
       const latest = witness.latest()
-      if (!latest) return send(response, 404, { error: { code: 'none', message: 'nothing is signed yet' } })
-      return send(response, 200, latest)
+      if (!latest) throw new HttpError(404, 'none', 'nothing is signed yet')
+      return { status: 200, json: latest }
     }
-    if (route === 'GET /v1/checkpoints') {
-      response.writeHead(200, { 'content-type': 'application/json' })
-      return pipeline(Readable.from(historyDocument(witness)), response)
-    }
+    if (route === 'GET /v1/checkpoints') return { status: 200, stream: historyDocument(witness), contentType: 'application/json' }
     if (route === 'POST /v1/checkpoints') {
-      if (!authorized(request, token)) return send(response, 401, { error: { code: 'unauthorized', message: 'the submitter token is missing or wrong' } })
-      const { signed, fresh } = await witness.submit(submission(await readBody(request)))
-      return send(response, fresh ? 201 : 200, signed)
+      if (!bearerMatches(request, token)) throw new HttpError(401, 'unauthorized', 'the submitter token is missing or wrong')
+      const { signed, fresh } = await witness.submit(parse(SubmissionRequest, await readJson(request, MAX_BODY_BYTES)))
+      return { status: fresh ? 201 : 200, json: signed }
     }
-    send(response, 404, { error: { code: 'not_found', message: `no route ${route}` } })
+    throw new HttpError(404, 'not_found', `no route ${route}`)
   }
-  return createServer((request, response) => {
-    routes(request, response).catch((error: unknown) => {
-      if (error instanceof Refusal) return send(response, REFUSAL_STATUS.get(error.code) ?? 409, { error: { code: error.code, message: error.message } })
-      if (error instanceof Error && 'code' in error && error.code === 'ERR_STREAM_PREMATURE_CLOSE') return
-      process.stderr.write(`witness: ${error instanceof Error ? String(error.stack) : String(error)}\n`)
-      if (!response.headersSent) send(response, 500, { error: { code: 'internal_error', message: 'internal error' } })
-    })
+  return serve(handle, {
+    name: 'witness',
+    mapError: (error) => (error instanceof Refusal ? new HttpError(409, error.code, error.message) : undefined),
   })
 }

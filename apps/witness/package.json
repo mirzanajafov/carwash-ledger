@@ -16,7 +16,10 @@
     "start": "node --conditions=source src/main.ts"
   },
   "dependencies": {
-    "@carwash/audit": "workspace:*"
+    "@carwash/audit": "workspace:*",
+    "@carwash/env": "workspace:*",
+    "@carwash/http": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

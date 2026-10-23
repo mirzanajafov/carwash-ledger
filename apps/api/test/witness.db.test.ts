@@ -36,8 +36,15 @@ function runVerify(args: string[]): Promise<{ code: number; report: z.infer<type
       { env: { ...process.env, DATABASE_URL: stack.ledgerDb.url('ledger_audit'), WITNESS_URL: witnessUrl } },
       (error, stdout, stderr) => {
         const code = error ? (typeof error.code === 'number' ? error.code : -1) : 0
-        if (code !== 0 && code !== 1) return reject(new Error(`verify exited with ${code}: ${stderr}`))
-        resolve({ code, report: VerifyOutput.parse(JSON.parse(stdout)) })
+        if (code !== 0 && code !== 1) {
+          reject(new Error(`verify exited with ${code}: ${stderr}`))
+          return
+        }
+        try {
+          resolve({ code, report: VerifyOutput.parse(JSON.parse(stdout)) })
+        } catch (parseError) {
+          reject(parseError instanceof Error ? parseError : new Error(String(parseError)))
+        }
       },
     )
   })

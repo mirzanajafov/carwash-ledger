@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { HttpError } from '@carwash/http'
 import { firstRow, withTransaction, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import type { Behaviour, Faults, OperationKind, TokenEffect } from './faults.ts'
-import { HttpError } from './http.ts'
 
 export interface PspSettings {
   authorizationTtlSeconds: number

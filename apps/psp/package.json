@@ -17,8 +17,11 @@
   },
   "dependencies": {
     "@carwash/contracts": "workspace:*",
+    "@carwash/env": "workspace:*",
+    "@carwash/http": "workspace:*",
     "@carwash/pg": "workspace:*",
-    "pg": "catalog:"
+    "pg": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@carwash/testkit": "workspace:*",

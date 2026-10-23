@@ -36,7 +36,6 @@ export default defineConfig(
   {
     name: 'pending',
     rules: {
-      '@typescript-eslint/no-confusing-void-expression': 'off',
       '@typescript-eslint/no-misused-promises': 'off',
       'react-hooks/set-state-in-effect': 'off',
     },

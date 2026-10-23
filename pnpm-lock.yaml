@@ -156,12 +156,21 @@ importers:
       '@carwash/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@carwash/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@carwash/http':
+        specifier: workspace:*
+        version: link:../../packages/http
       '@carwash/pg':
         specifier: workspace:*
         version: link:../../packages/pg
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@carwash/testkit':
         specifier: workspace:*
@@ -178,9 +187,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
 
   apps/tamper:
     dependencies:
@@ -190,12 +196,21 @@ importers:
       '@carwash/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@carwash/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@carwash/http':
+        specifier: workspace:*
+        version: link:../../packages/http
       '@carwash/pg':
         specifier: workspace:*
         version: link:../../packages/pg
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@carwash/ledger':
         specifier: workspace:*
@@ -224,6 +239,9 @@ importers:
       '@carwash/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@carwash/env':
+        specifier: workspace:*
+        version: link:../../packages/env
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -286,6 +304,15 @@ importers:
       '@carwash/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@carwash/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@carwash/http':
+        specifier: workspace:*
+        version: link:../../packages/http
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -397,7 +424,35 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
 
+  packages/env:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
   packages/failpoints:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@24.19.1)(vite@8.3.3(@types/node@24.19.1)(jiti@2.7.0))
+
+  packages/http:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
