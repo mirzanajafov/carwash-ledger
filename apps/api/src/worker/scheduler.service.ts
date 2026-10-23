@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleD
 import { runEvery } from '@carwash/jobs'
 import { takeSnapshots } from '@carwash/ledger'
 import { pruneInbox, pruneOutbox } from '@carwash/outbox'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, WORKER_CONFIG, type CoreConfig, type HotAccountMode, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { IdempotencyService } from '../idempotency/idempotency.service.ts'
 import { Settlements } from '../settlement/settlements.service.ts'
@@ -16,7 +16,8 @@ export class Scheduler implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #webhooks: WebhooksService
   readonly #idempotency: IdempotencyService
   readonly #settlements: Settlements
-  readonly #config: ApiConfig
+  readonly #config: WorkerConfig
+  readonly #hotAccountMode: HotAccountMode
   readonly #logger = new Logger('scheduler')
   readonly #stop = new AbortController()
   readonly #loops: Promise<void>[] = []
@@ -27,7 +28,8 @@ export class Scheduler implements OnApplicationBootstrap, OnModuleDestroy {
     webhooks: WebhooksService,
     idempotency: IdempotencyService,
     settlements: Settlements,
-    @Inject(API_CONFIG) config: ApiConfig,
+    @Inject(WORKER_CONFIG) config: WorkerConfig,
+    @Inject(CORE_CONFIG) core: CoreConfig,
   ) {
     this.#db = db
     this.#recovery = recovery
@@ -35,6 +37,7 @@ export class Scheduler implements OnApplicationBootstrap, OnModuleDestroy {
     this.#idempotency = idempotency
     this.#settlements = settlements
     this.#config = config
+    this.#hotAccountMode = core.hotAccountMode
   }
 
   onApplicationBootstrap(): void {
@@ -44,12 +47,12 @@ export class Scheduler implements OnApplicationBootstrap, OnModuleDestroy {
     this.#every('unmatched webhooks', 30_000, () => this.#webhooks.recheckUnmatched())
     this.#every('sweepers', 60_000, async () => {
       await this.#idempotency.sweep()
-      await this.#webhooks.prune()
+      await this.#webhooks.prune(config.webhookRetentionDays)
       await pruneOutbox(this.#db.pool, config.outboxRetentionHours)
       await pruneInbox(this.#db.pool, config.inboxRetentionDays)
     })
     if (config.settlementEveryMs > 0) this.#every('settlements', config.settlementEveryMs, () => this.#settlements.catchUp())
-    if (config.hotAccountMode === 'derived') this.#every('snapshots', 1000, () => takeSnapshots(this.#db.pool))
+    if (this.#hotAccountMode === 'derived') this.#every('snapshots', 1000, () => takeSnapshots(this.#db.pool))
   }
 
   async onModuleDestroy(): Promise<void> {

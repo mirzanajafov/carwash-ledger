@@ -4,7 +4,7 @@ import { readWitness, type WitnessView } from '@carwash/invariants'
 import { runEvery } from '@carwash/jobs'
 import { inSnapshot } from '@carwash/pg'
 import type pg from 'pg'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, WORKER_CONFIG, type CoreConfig, type WorkerConfig } from '../config.ts'
 import { AuditDatabase } from '../db/audit-database.ts'
 import { VerificationRuns, type VerificationRun } from './verification-runs.ts'
 
@@ -12,16 +12,18 @@ import { VerificationRuns, type VerificationRun } from './verification-runs.ts'
 export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #runs: VerificationRuns
   readonly #pool: pg.Pool
-  readonly #config: ApiConfig
+  readonly #config: WorkerConfig
+  readonly #witnessUrl: string | undefined
   readonly #logger = new Logger('verification')
   readonly #stop = new AbortController()
   #loop: Promise<void> | undefined
 
-  constructor(runs: VerificationRuns, audit: AuditDatabase, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(runs: VerificationRuns, audit: AuditDatabase, @Inject(WORKER_CONFIG) config: WorkerConfig, @Inject(CORE_CONFIG) core: CoreConfig) {
     if (!audit.pool) throw new Error('AUDIT_DATABASE_URL is required in the worker')
     this.#runs = runs
     this.#pool = audit.pool
     this.#config = config
+    this.#witnessUrl = core.witnessUrl
   }
 
   onApplicationBootstrap(): void {
@@ -43,7 +45,7 @@ export class VerificationJob implements OnApplicationBootstrap, OnModuleDestroy 
     if (!run) return undefined
     let witness: WitnessView | undefined
     try {
-      witness = this.#config.witnessUrl ? await readWitness(this.#config.witnessUrl) : undefined
+      witness = this.#witnessUrl ? await readWitness(this.#witnessUrl) : undefined
     } catch (error) {
       this.#logger.warn(`run ${run.id}: the witness could not be read: ${error instanceof Error ? error.message : String(error)}`)
       await this.#runs.retryOrFail(run, 'the witness could not be read')

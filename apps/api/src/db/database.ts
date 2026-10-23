@@ -2,13 +2,13 @@ import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
 import { createPool, withRetry, withTransaction, type Transaction } from '@carwash/pg'
 import pg from 'pg'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 
 @Injectable()
 export class Database implements OnModuleDestroy {
   readonly pool: pg.Pool
 
-  constructor(@Inject(API_CONFIG) config: ApiConfig) {
+  constructor(@Inject(CORE_CONFIG) config: CoreConfig) {
     this.pool = createPool({
       connectionString: config.databaseUrl,
       max: config.poolSize,

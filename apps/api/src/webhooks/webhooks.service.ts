@@ -1,7 +1,6 @@
 import { failpoint } from '@carwash/failpoints'
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import type { WebhookReceipt } from '@carwash/contracts'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError } from '../domain-errors.ts'
 import { recordAnomaly } from '../payments/anomalies.repository.ts'
@@ -38,14 +37,12 @@ export class WebhooksService {
   readonly #db: Database
   readonly #attempts: AttemptsService
   readonly #psp: PspClient
-  readonly #config: ApiConfig
   readonly #logger = new Logger('webhooks')
 
-  constructor(db: Database, attempts: AttemptsService, psp: PspClient, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, attempts: AttemptsService, psp: PspClient) {
     this.#db = db
     this.#attempts = attempts
     this.#psp = psp
-    this.#config = config
   }
 
   async handle(event: PspEvent): Promise<WebhookReceipt> {
@@ -91,8 +88,8 @@ export class WebhooksService {
     return rows.length
   }
 
-  async prune(): Promise<number> {
-    const deleted = await pruneWebhookEvents(this.#db.pool, this.#config.webhookRetentionDays)
+  async prune(retentionDays: number): Promise<number> {
+    const deleted = await pruneWebhookEvents(this.#db.pool, retentionDays)
     if (deleted > 0) this.#logger.log(`pruned ${deleted} webhook events`)
     return deleted
   }

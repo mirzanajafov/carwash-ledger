@@ -4,7 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express'
 import { AccountsModule } from './accounts/accounts.module.ts'
 import { AuditApiModule } from './audit/audit-api.module.ts'
 import { AccessGuard } from './auth/access.guard.ts'
-import type { ApiConfig } from './config.ts'
+import { API_CONFIG, type ApiConfig, type CoreConfig } from './config.ts'
 import { CoreModule } from './core/core.module.ts'
 import { DashboardModule } from './dashboard/dashboard.module.ts'
 import { HealthModule } from './health/health.module.ts'
@@ -17,11 +17,11 @@ import { WebhooksApiModule } from './webhooks/webhooks-api.module.ts'
 
 @Module({})
 export class AppModule {
-  static register(config: ApiConfig): DynamicModule {
+  static register(config: { core: CoreConfig; api: ApiConfig }): DynamicModule {
     return {
       module: AppModule,
       imports: [
-        CoreModule.register(config),
+        CoreModule.register(config.core, { provide: API_CONFIG, useValue: config.api }),
         HealthModule,
         PaymentsModule,
         MerchantsModule,
@@ -39,7 +39,7 @@ export class AppModule {
 }
 
 export function configureApp(app: NestExpressApplication, config: ApiConfig): NestExpressApplication {
-  app.set('trust proxy', config.trustProxy === 'false' ? false : config.trustProxy.split(','))
+  app.set('trust proxy', config.trustProxy)
   app.useBodyParser('json', { limit: '16kb' })
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   app.enableShutdownHooks()

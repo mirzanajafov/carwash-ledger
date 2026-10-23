@@ -11,7 +11,7 @@ import * as z from 'zod/mini'
 import { Database } from '../src/db/database.ts'
 import { IdempotencyService, type Begun, type OwnedKey } from '../src/idempotency/idempotency.service.ts'
 import { PaymentsService } from '../src/payments/payments.service.ts'
-import { apiConfig, count, startApi, startStack, type CallOptions, type Stack } from './support.ts'
+import { count, startApi, startStack, testConfig, type CallOptions, type Stack } from './support.ts'
 
 let stack: Stack
 
@@ -302,7 +302,9 @@ describe('payments API', () => {
     })
     liar.listen(0, '127.0.0.1')
     await once(liar, 'listening')
-    const lied = await startApi(apiConfig(stack.ledgerDb.url('ledger_app'), `http://127.0.0.1:${(liar.address() as AddressInfo).port}`))
+    const lied = await startApi(
+      testConfig({ DATABASE_URL: stack.ledgerDb.url('ledger_app'), PSP_URL: `http://127.0.0.1:${(liar.address() as AddressInfo).port}` }),
+    )
     try {
       const reply = await call('POST', '/v1/payments', { base: lied.url, body: pay('tok_ok', { amount: 900 }) })
       expect(reply).toMatchObject({ status: 502, body: { error: { code: 'psp_answer_rejected' } } })
@@ -323,13 +325,20 @@ describe('payments API', () => {
     }
   })
 
+  const cramped = () => ({
+    DATABASE_URL: stack.ledgerDb.url('ledger_app'),
+    PSP_URL: stack.psp.url,
+    DATABASE_POOL_SIZE: '1',
+    DATABASE_CONNECT_TIMEOUT_MS: '200',
+  })
+
   it('caps how long a transaction may stay open and how long a request waits for a connection', async () => {
     const { rows } = await stack.app.get(Database).pool.query<{ transaction_timeout: string; idle_in_transaction_session_timeout: string }>(
       `SELECT current_setting('transaction_timeout') AS transaction_timeout,
               current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout`,
     )
     expect(rows[0]).toEqual({ transaction_timeout: '10s', idle_in_transaction_session_timeout: '10s' })
-    const tight = new Database(apiConfig(stack.ledgerDb.url('ledger_app'), stack.psp.url, { poolSize: 1, connectTimeoutMs: 200 }))
+    const tight = new Database(testConfig(cramped()).core)
     const held = await tight.pool.connect()
     try {
       const started = Date.now()
@@ -342,7 +351,7 @@ describe('payments API', () => {
   })
 
   it('answers 503 with Retry-After when it cannot reach the database in time, and the same key works once it can', async () => {
-    const { app, url } = await startApi(apiConfig(stack.ledgerDb.url('ledger_app'), stack.psp.url, { poolSize: 1, connectTimeoutMs: 200 }))
+    const { app, url } = await startApi(testConfig(cramped()))
     const key = randomUUID()
     try {
       const held = await app.get(Database).pool.connect()

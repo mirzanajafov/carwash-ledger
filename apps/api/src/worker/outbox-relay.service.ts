@@ -1,20 +1,20 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
 import { linearBackoff, retryUntilStopped } from '@carwash/jobs'
 import { ensureTopics, kafkaClient, KafkaPublisher, Relay, topicSpecs } from '@carwash/outbox'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { WORKER_CONFIG, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 
 @Injectable()
 export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
-  readonly #config: ApiConfig
+  readonly #config: WorkerConfig
   readonly #logger = new Logger('relay')
   #relay: Relay | undefined
   #publisher: KafkaPublisher | undefined
   #starting: Promise<void> | undefined
   readonly #stop = new AbortController()
 
-  constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, @Inject(WORKER_CONFIG) config: WorkerConfig) {
     this.#db = db
     this.#config = config
   }

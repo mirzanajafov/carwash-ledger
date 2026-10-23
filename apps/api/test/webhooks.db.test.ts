@@ -14,7 +14,7 @@ import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
 import { Recovery } from '../src/worker/recovery.service.ts'
 import { Scheduler } from '../src/worker/scheduler.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
-import { count, startStack, WEBHOOK_SECRET, type CallOptions, type Reply, type Stack } from './support.ts'
+import { count, startStack, testConfig, WEBHOOK_SECRET, type CallOptions, type Reply, type Stack } from './support.ts'
 
 let stack: Stack
 let worker: INestApplicationContext
@@ -80,7 +80,7 @@ const cleanup = new AsyncDisposableStack()
 beforeAll(async () => {
   stack = await startStack({ webhooks: true })
   cleanup.defer(() => stack.close())
-  worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 0 }), { logger: false })
+  worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
   cleanup.defer(() => worker.close())
   recovery = worker.get(Recovery)
 })
@@ -185,9 +185,12 @@ describe('the recovery job', () => {
   })
 
   it('runs on its own in the worker process, which answers health and nothing else', async () => {
-    const live: INestApplication = await NestFactory.create(WorkerModule.register({ ...stack.config, recoveryEveryMs: 200, recoveryAfterSeconds: 0 }), {
-      logger: false,
-    })
+    const live: INestApplication = await NestFactory.create(
+      WorkerModule.register(testConfig({ ...stack.env, RECOVERY_EVERY_MS: '200', RECOVERY_AFTER_SECONDS: '0' })),
+      {
+        logger: false,
+      },
+    )
     await live.listen(0, '127.0.0.1')
     try {
       const base = await live.getUrl()
@@ -240,7 +243,7 @@ describe('the worker', () => {
     const stopping = vi.spyOn(Scheduler.prototype, 'onModuleDestroy')
     const closing = vi.spyOn(Database.prototype, 'onModuleDestroy')
     try {
-      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 10 }), { logger: false })
+      const worker = await NestFactory.createApplicationContext(WorkerModule.register(testConfig({ ...stack.env, RECOVERY_EVERY_MS: '10' })), { logger: false })
       await worker.close()
       const [stopped] = stopping.mock.invocationCallOrder
       const [closed] = closing.mock.invocationCallOrder

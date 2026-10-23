@@ -2,7 +2,7 @@ import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable } from '@nestjs/common'
 import { requestHash } from '@carwash/http'
 import { deleteInBatches, firstRow, type Transaction } from '@carwash/pg'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, invalidInput, type Failure } from '../domain-errors.ts'
 import { asPaymentId, asPayoutId, asRefundId, type PaymentId, type PayoutId, type RefundId } from '../ids.ts'
@@ -73,9 +73,9 @@ function refused(error: unknown): boolean {
 @Injectable()
 export class IdempotencyService {
   readonly #db: Database
-  readonly #config: ApiConfig
+  readonly #config: CoreConfig
 
-  constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, @Inject(CORE_CONFIG) config: CoreConfig) {
     this.#db = db
     this.#config = config
   }

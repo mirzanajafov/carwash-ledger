@@ -9,7 +9,7 @@ import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
 import { EventConsumers } from '../src/consumers/event-consumers.service.ts'
 import { OutboxRelay } from '../src/worker/outbox-relay.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
-import { count, startStack, type Stack } from './support.ts'
+import { count, startStack, testConfig, type Stack } from './support.ts'
 
 const BROKERS = (process.env.KAFKA_BROKERS ?? '127.0.0.1:9194').split(',')
 const PREFIX = `test-${randomUUID()}.`
@@ -39,7 +39,7 @@ describe('the worker relay', () => {
     )
     await stack.call('POST', `/v1/payments/${payment.id}/refunds`, { body: { amount: 2400 } })
     worker = await NestFactory.createApplicationContext(
-      WorkerModule.register({ ...stack.config, recoveryEveryMs: 0, kafkaBrokers: BROKERS, kafkaTopicPrefix: PREFIX, relayWorkers: 2 }),
+      WorkerModule.register(testConfig({ ...stack.env, KAFKA_BROKERS: BROKERS.join(','), KAFKA_TOPIC_PREFIX: PREFIX, RELAY_WORKERS: '2' })),
       { logger: false },
     )
     cleanup.defer(() => worker?.close())

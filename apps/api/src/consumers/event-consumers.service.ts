@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
 import { linearBackoff, retryUntilStopped } from '@carwash/jobs'
 import { EventConsumer, ensureTopics, kafkaClient, topicSpecs } from '@carwash/outbox'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { WORKER_CONFIG, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { receipts } from './receipts.ts'
 import { statements } from './statements.ts'
@@ -11,13 +11,13 @@ export const CONSUMERS = [receipts, statements]
 @Injectable()
 export class EventConsumers implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
-  readonly #config: ApiConfig
+  readonly #config: WorkerConfig
   readonly #logger = new Logger('consumers')
   readonly #stop = new AbortController()
   readonly #consumers: EventConsumer[] = []
   #starting: Promise<void> | undefined
 
-  constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, @Inject(WORKER_CONFIG) config: WorkerConfig) {
     this.#db = db
     this.#config = config
   }

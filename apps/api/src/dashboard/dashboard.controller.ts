@@ -5,7 +5,7 @@ import { checkAudit, checkLedger, checkPaymentsIncrementally, checkSequenced, re
 import type pg from 'pg'
 import { runView, VerificationRuns } from '../audit/verification-runs.ts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { API_CONFIG, CORE_CONFIG, type ApiConfig, type CoreConfig } from '../config.ts'
 import { AuditDatabase } from '../db/audit-database.ts'
 import { Database } from '../db/database.ts'
 import { ApiError } from '../http/api-error.ts'
@@ -25,13 +25,15 @@ export class DashboardController {
   readonly #db: Database
   readonly #runs: VerificationRuns
   readonly #config: ApiConfig
+  readonly #witnessUrl: string | undefined
   readonly #logger = new Logger('dashboard')
 
-  constructor(audit: AuditDatabase, db: Database, runs: VerificationRuns, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(audit: AuditDatabase, db: Database, runs: VerificationRuns, @Inject(API_CONFIG) config: ApiConfig, @Inject(CORE_CONFIG) core: CoreConfig) {
     this.#audit = audit
     this.#db = db
     this.#runs = runs
     this.#config = config
+    this.#witnessUrl = core.witnessUrl
   }
 
   async #turn(request: AuthedRequest, name: string, everyMs: number): Promise<void> {
@@ -86,9 +88,9 @@ export class DashboardController {
   }
 
   async #witness(): Promise<WitnessView | undefined> {
-    if (!this.#config.witnessUrl) return undefined
+    if (!this.#witnessUrl) return undefined
     try {
-      return await readWitness(this.#config.witnessUrl)
+      return await readWitness(this.#witnessUrl)
     } catch (error) {
       this.#logger.warn(`the witness could not be read: ${error instanceof Error ? error.message : String(error)}`)
       throw new ApiError(503, 'witness_unavailable', 'the witness could not be read, so try again in a minute', 60)

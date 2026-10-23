@@ -17,7 +17,7 @@ import * as z from 'zod/mini'
 import { sequenceBatch } from '@carwash/audit-pg'
 import { Sequencer } from '../src/audit/sequencer.service.ts'
 import { Database } from '../src/db/database.ts'
-import { startStack, type Stack } from './support.ts'
+import { startStack, testConfig, type Stack } from './support.ts'
 
 let stack: Stack
 let witnessUrl: string
@@ -102,7 +102,8 @@ beforeAll(async () => {
     server.close()
   })
   stateFile = join(dir, 'verifier.json')
-  sequencer = new Sequencer(stack.app.get(Database), { ...stack.config, witnessUrl, witnessToken: 'witness-token' })
+  const config = testConfig({ ...stack.env, WITNESS_URL: witnessUrl, WITNESS_TOKEN: 'witness-token' })
+  sequencer = new Sequencer(stack.app.get(Database), config.worker, config.core)
 })
 
 afterAll(() => cleanup.disposeAsync())

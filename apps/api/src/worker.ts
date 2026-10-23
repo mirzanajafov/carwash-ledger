@@ -1,9 +1,9 @@
 import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
-import { loadConfig } from './config.ts'
+import { loadCoreConfig, loadWorkerConfig } from './config.ts'
 import { WorkerModule } from './worker/worker.module.ts'
 
-const config = loadConfig(process.env)
+const config = { core: loadCoreConfig(process.env), worker: loadWorkerConfig(process.env) }
 const worker = await NestFactory.create(WorkerModule.register(config))
 worker.enableShutdownHooks()
-await worker.listen(config.workerPort, '0.0.0.0')
+await worker.listen(config.worker.port, '0.0.0.0')
