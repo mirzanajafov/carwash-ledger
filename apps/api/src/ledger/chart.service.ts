@@ -41,7 +41,7 @@ export class Chart implements OnModuleInit {
     this.#db = db
     this.#config = config
     this.registry = new AccountRegistry(pgAccountLoader(db.pool))
-    this.feeSchedule = { bps: config.feeBps, fixed: config.feeFixed }
+    this.feeSchedule = config.fees
   }
 
   async onModuleInit(): Promise<void> {

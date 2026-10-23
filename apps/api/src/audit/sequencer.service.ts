@@ -13,12 +13,11 @@ export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #checkpointer: Checkpointer | undefined
   #loop: Promise<void> | undefined
 
-  constructor(db: Database, @Inject(WORKER_CONFIG) config: WorkerConfig, @Inject(CORE_CONFIG) { witnessUrl }: CoreConfig) {
+  constructor(db: Database, @Inject(WORKER_CONFIG) config: WorkerConfig, @Inject(CORE_CONFIG) core: CoreConfig) {
     this.#db = db
     this.#config = config
-    if (witnessUrl && !config.witnessToken) throw new Error('WITNESS_TOKEN is required when WITNESS_URL is set')
-    if (witnessUrl && config.witnessToken) {
-      this.#checkpointer = new Checkpointer(db.pool, new WitnessClient(witnessUrl, config.witnessToken, config.witnessTimeoutMs))
+    if (core.witnessUrl && config.witnessToken) {
+      this.#checkpointer = new Checkpointer(db.pool, new WitnessClient(core.witnessUrl, config.witnessToken, config.witnessTimeoutMs))
     }
   }
 

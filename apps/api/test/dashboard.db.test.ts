@@ -221,7 +221,7 @@ describe('the admin side of the dashboard', () => {
   })
 
   it('answers 503 for the checks while the witness is not answering', async () => {
-    const blind = await startApi(testConfig({ ...stack.env, WITNESS_URL: 'http://127.0.0.1:9' }))
+    const blind = await startApi(testConfig({ ...stack.env, WITNESS_URL: 'http://127.0.0.1:9', WITNESS_TOKEN: 'token' }))
     try {
       const answer = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null, base: blind.url })
       expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })

@@ -60,8 +60,6 @@ export interface TestConfig {
 
 export function testConfig(env: Env): TestConfig {
   const all: Env = {
-    PORT: '0',
-    WORKER_PORT: '0',
     PSP_API_KEY: 'sk_test_api',
     PSP_TIMEOUT_MS: '500',
     HOT_ACCOUNT_SHARDS: '4',

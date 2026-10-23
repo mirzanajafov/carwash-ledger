@@ -11,8 +11,9 @@ describe('reading the environment', () => {
     }
   })
 
-  it('refuses zero where only a positive number makes sense', () => {
+  it('refuses zero where only a positive number makes sense, and says so for anything else that is not one', () => {
     expect(() => positiveInteger({ PER_MINUTE: '0' }, 'PER_MINUTE', 12)).toThrow('PER_MINUTE must be a positive integer')
+    expect(() => positiveInteger({ PER_MINUTE: '1e3' }, 'PER_MINUTE', 12)).toThrow('PER_MINUTE must be a positive integer')
     expect(positiveInteger({}, 'PER_MINUTE', 12)).toBe(12)
   })
 
@@ -32,6 +33,7 @@ describe('reading the environment', () => {
   it('takes one of a fixed set of words, and names the set when the value is not in it', () => {
     const modes = ['sharded', 'derived', 'locked'] as const
     expect(oneOf({}, 'MODE', modes, 'sharded')).toBe('sharded')
+    expect(oneOf({ MODE: '' }, 'MODE', modes, 'sharded')).toBe('sharded')
     expect(oneOf({ MODE: 'derived' }, 'MODE', modes, 'sharded')).toBe('derived')
     expect(() => oneOf({ MODE: 'Derived' }, 'MODE', modes, 'sharded')).toThrow('MODE must be one of sharded, derived, locked')
   })

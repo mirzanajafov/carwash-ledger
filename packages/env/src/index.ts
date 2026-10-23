@@ -10,18 +10,20 @@ export function optional(env: Env, name: string): string | undefined {
   return env[name] || undefined
 }
 
-export function nonNegativeInteger(env: Env, name: string, fallback: number): number {
+function integerFrom(env: Env, name: string, fallback: number, min: number, kind: string): number {
   const raw = env[name]
   if (raw === undefined || raw === '') return fallback
   const value = Number(raw)
-  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value)) throw new Error(`${name} must be a non-negative integer`)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min) throw new Error(`${name} must be a ${kind} integer`)
   return value
 }
 
+export function nonNegativeInteger(env: Env, name: string, fallback: number): number {
+  return integerFrom(env, name, fallback, 0, 'non-negative')
+}
+
 export function positiveInteger(env: Env, name: string, fallback: number): number {
-  const value = nonNegativeInteger(env, name, fallback)
-  if (value === 0) throw new Error(`${name} must be a positive integer`)
-  return value
+  return integerFrom(env, name, fallback, 1, 'positive')
 }
 
 export function positiveNumber(env: Env, name: string, fallback: number): number {
@@ -32,7 +34,7 @@ export function positiveNumber(env: Env, name: string, fallback: number): number
   return value
 }
 
-export function oneOf<const T extends string>(env: Env, name: string, values: readonly T[], fallback: T): T {
+export function oneOf<const T extends string>(env: Env, name: string, values: readonly T[], fallback: NoInfer<T>): T {
   const raw = env[name]
   if (raw === undefined || raw === '') return fallback
   const value = values.find((candidate) => candidate === raw)

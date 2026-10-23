@@ -137,7 +137,7 @@ export class Settlements {
       }>(LINES, [currency, span.linesFrom, span.linesThrough])
     ).rows.map((row) => ({ ...row, gross: BigInt(row.gross), fee: BigInt(row.fee), net: BigInt(row.net) }))
     const result = reconcile(lines, items, {
-      contract: { bps: BigInt(this.#config.pspFeeBps), fixed: this.#config.pspFeeFixed },
+      contract: this.#config.pspFees,
       fallback: this.#config.reconFallback,
       settledThrough: through,
     })
