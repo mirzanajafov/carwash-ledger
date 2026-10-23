@@ -5,15 +5,21 @@ import { adminKey, callApi } from './server'
 
 const SECURE = process.env.NODE_ENV === 'production'
 
-export const SESSION_COOKIE = SECURE ? '__Host-cw_admin' : 'cw_admin'
+const SESSION_COOKIE = SECURE ? '__Host-cw_admin' : 'cw_admin'
 
 export interface AdminSession {
   client: string
   expiresAt: string
 }
 
-export function cookieOptions(expiresAt: string) {
-  return { httpOnly: true, secure: SECURE, sameSite: 'strict' as const, path: '/', expires: new Date(expiresAt) }
+const ATTRIBUTES = { httpOnly: true, secure: SECURE, sameSite: 'strict', path: '/' } as const
+
+export async function rememberSession(token: string, expiresAt: string): Promise<void> {
+  ;(await cookies()).set(SESSION_COOKIE, token, { ...ATTRIBUTES, expires: new Date(expiresAt) })
+}
+
+export async function forgetSession(): Promise<void> {
+  ;(await cookies()).delete({ name: SESSION_COOKIE, ...ATTRIBUTES })
 }
 
 export async function sessionToken(): Promise<string | null> {
