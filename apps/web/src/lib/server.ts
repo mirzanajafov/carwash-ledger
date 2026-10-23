@@ -1,5 +1,6 @@
 import 'server-only'
 import { WitnessKeyView } from '@carwash/contracts'
+import * as z from 'zod/mini'
 import type { Reply } from './plug'
 
 export function apiUrl(): string {
@@ -24,17 +25,29 @@ export function demoMerchant(): string {
   return process.env.DASHBOARD_MERCHANT ?? 'wash_north'
 }
 
-export async function callApi(method: string, path: string, key: string | null, body?: unknown, idempotencyKey?: string, timeoutMs = 15_000): Promise<Reply> {
-  const response = await fetch(`${apiUrl()}${path}`, {
+export interface CallOptions {
+  body?: unknown
+  idempotencyKey?: string
+  timeoutMs?: number
+}
+
+interface Upstream {
+  url: string
+  token: string | null
+  timeoutMs: number
+}
+
+async function send(upstream: Upstream, method: string, path: string, options: CallOptions): Promise<Reply> {
+  const response = await fetch(`${upstream.url.replace(/\/+$/, '')}${path}`, {
     method,
     cache: 'no-store',
     headers: {
-      ...(key ? { authorization: `Bearer ${key}` } : {}),
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
+      ...(upstream.token ? { authorization: `Bearer ${upstream.token}` } : {}),
+      ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
     },
-    body: body === undefined ? null : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
+    body: options.body === undefined ? null : JSON.stringify(options.body),
+    signal: AbortSignal.timeout(options.timeoutMs ?? upstream.timeoutMs),
   })
   const retryAfter = Number(response.headers.get('retry-after'))
   return {
@@ -44,35 +57,28 @@ export async function callApi(method: string, path: string, key: string | null, 
   }
 }
 
-export function witnessUrl(): string | null {
-  return process.env.WITNESS_URL ? process.env.WITNESS_URL.replace(/\/+$/, '') : null
+function notConfigured(what: string): Reply {
+  return { status: 503, body: { error: { code: 'not_configured', message: `${what} is not configured on this web server` } }, retryAfter: null }
+}
+
+export function callApi(method: string, path: string, key: string | null, options: CallOptions = {}): Promise<Reply> {
+  return send({ url: apiUrl(), token: key, timeoutMs: 15_000 }, method, path, options)
 }
 
 export async function callTamper(method: string, path: string, body?: unknown): Promise<Reply> {
   const url = process.env.TAMPER_URL
-  if (!url)
-    return { status: 503, body: { error: { code: 'not_configured', message: 'the tamper service is not configured on this web server' } }, retryAfter: null }
-  const response = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
-    method,
-    cache: 'no-store',
-    headers: { authorization: `Bearer ${secret('TAMPER_TOKEN')}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    body: body === undefined ? null : JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  })
-  return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }
+  if (!url) return notConfigured('the tamper service')
+  return send({ url, token: secret('TAMPER_TOKEN'), timeoutMs: 30_000 }, method, path, { body })
 }
 
 export async function callPsp(method: string, path: string, body?: unknown): Promise<Reply> {
   const url = process.env.PSP_URL
-  if (!url) return { status: 503, body: { error: { code: 'not_configured', message: 'the bank is not configured on this web server' } }, retryAfter: null }
-  const response = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
-    method,
-    cache: 'no-store',
-    headers: { authorization: `Bearer ${secret('PSP_ADMIN_KEY')}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    body: body === undefined ? null : JSON.stringify(body),
-    signal: AbortSignal.timeout(5000),
-  })
-  return { status: response.status, body: await response.json().catch(() => null), retryAfter: null }
+  if (!url) return notConfigured('the bank')
+  return send({ url, token: secret('PSP_ADMIN_KEY'), timeoutMs: 5000 }, method, path, { body })
+}
+
+export function witnessUrl(): string | null {
+  return process.env.WITNESS_URL ? process.env.WITNESS_URL.replace(/\/+$/, '') : null
 }
 
 export async function witnessKey(): Promise<string | null> {
@@ -87,10 +93,19 @@ export async function witnessKey(): Promise<string | null> {
   }
 }
 
+export async function readBody<T>(request: Request, schema: z.ZodMiniType<T>): Promise<T | undefined> {
+  const parsed = schema.safeParse(await request.json().catch(() => null))
+  return parsed.success ? parsed.data : undefined
+}
+
+export function refuse(status: number, code: string, message: string, headers: Record<string, string> = {}): Response {
+  return Response.json({ error: { code, message } }, { status, headers })
+}
+
 export function relay(reply: Reply): Response {
   return Response.json(reply.body, { status: reply.status, headers: reply.retryAfter ? { 'retry-after': String(reply.retryAfter) } : {} })
 }
 
 export function unreachable(): Response {
-  return Response.json({ error: { code: 'unreachable', message: 'a service behind the dashboard is not answering' } }, { status: 502 })
+  return refuse(502, 'unreachable', 'a service behind the dashboard is not answering')
 }

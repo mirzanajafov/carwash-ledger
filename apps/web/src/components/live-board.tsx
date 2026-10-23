@@ -6,6 +6,7 @@ import { money } from '@/lib/money'
 import { useLive, useNow } from '@/lib/use-live'
 import { Bays } from './bays'
 import { JournalList } from './journal-list'
+import { Mark } from './mark'
 import { TAccount } from './t-account'
 
 function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
@@ -34,13 +35,7 @@ export function LiveBoard() {
         </span>
         {state.balances.length > 0 ? (
           <span className={`inline-flex items-center gap-1.5 ${net === 0n ? 'text-ok' : 'text-bad'}`}>
-            <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-              {net === 0n ? (
-                <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" />
-              ) : (
-                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" />
-              )}
-            </svg>
+            <Mark ok={net === 0n} />
             {net === 0n ? 'Debits equal credits' : `Off by ${money(net)}`}
           </span>
         ) : null}

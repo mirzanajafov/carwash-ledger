@@ -1,4 +1,5 @@
-import { callPsp, relay, unreachable } from '@/lib/server'
+import * as z from 'zod/mini'
+import { callPsp, readBody, refuse, relay, unreachable } from '@/lib/server'
 import { adminSession } from '@/lib/session'
 import { presetNamed, Turn, VISITOR_EVERY_MS, VISITOR_SECONDS } from '@/lib/weather'
 
@@ -14,12 +15,13 @@ export async function GET(): Promise<Response> {
   }
 }
 
-function refuse(status: number, code: string, message: string, headers: Record<string, string> = {}): Response {
-  return Response.json({ error: { code, message } }, { status, headers })
-}
+const WeatherBody = z.object({
+  preset: z.optional(z.unknown()),
+  custom: z.optional(z.nullable(z.object({ plan: z.optional(z.unknown()), minutes: z.optional(z.unknown()) }))),
+})
 
 export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as { preset?: unknown; custom?: { plan?: unknown; minutes?: unknown } | null } | null
+  const body = await readBody(request, WeatherBody)
   try {
     if (body?.custom !== undefined) {
       if (!(await adminSession())) return refuse(403, 'forbidden', 'only an admin session can set its own weather')

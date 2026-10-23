@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
+import { text } from 'node:stream/consumers'
 import type { AddressInfo } from 'node:net'
 import { BalanceView, FailedPayment, MerchantView, PaymentView } from '@carwash/contracts'
 import { requestHash } from '@carwash/http'
@@ -282,23 +283,23 @@ describe('payments API', () => {
   })
 
   it('does not apply a PSP answer that does not match the request, and records it', async () => {
-    const liar: Server = createServer(async (request, response) => {
-      const chunks: Buffer[] = []
-      for await (const chunk of request) chunks.push(chunk as Buffer)
-      const body = PspRequest.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')))
-      response.writeHead(200, { 'content-type': 'application/json' }).end(
-        JSON.stringify({
-          id: `op_${randomUUID()}`,
-          object: 'operation',
-          idempotency_key: request.headers['idempotency-key'],
-          kind: 'authorize',
-          status: 'succeeded',
-          reason: null,
-          amount: body.amount + 100,
-          currency: body.currency,
-          charge: { id: `ch_${randomUUID()}`, authorized_amount: body.amount + 100 },
-        }),
-      )
+    const liar: Server = createServer((request, response) => {
+      void text(request).then((raw) => {
+        const body = PspRequest.parse(JSON.parse(raw))
+        response.writeHead(200, { 'content-type': 'application/json' }).end(
+          JSON.stringify({
+            id: `op_${randomUUID()}`,
+            object: 'operation',
+            idempotency_key: request.headers['idempotency-key'],
+            kind: 'authorize',
+            status: 'succeeded',
+            reason: null,
+            amount: body.amount + 100,
+            currency: body.currency,
+            charge: { id: `ch_${randomUUID()}`, authorized_amount: body.amount + 100 },
+          }),
+        )
+      })
     })
     liar.listen(0, '127.0.0.1')
     await once(liar, 'listening')

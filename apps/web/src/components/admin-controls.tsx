@@ -1,33 +1,24 @@
 'use client'
 
-import { errorOf } from '@carwash/contracts'
 import { useRouter } from 'next/navigation'
 import { useState, type SubmitEvent } from 'react'
+import { postJson, refusal, useAction } from '@/lib/use-action'
 
 export function AdminLogin() {
   const router = useRouter()
   const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
+  const { busy, note, run } = useAction<'login'>()
 
-  async function submit(event: SubmitEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
-    setNote(null)
-    try {
-      const response = await fetch('/api/admin/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) })
-      const body: unknown = await response.json().catch(() => null)
-      if (response.ok) {
+    run('login', async () => {
+      const answer = await postJson('/api/admin/session', { key })
+      if (answer.ok) {
         setKey('')
         router.refresh()
-      } else {
-        setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
       }
-    } catch {
-      setNote('The web server stopped answering.')
-    } finally {
-      setBusy(false)
-    }
+      return refusal(answer)
+    })
   }
 
   return (
@@ -47,7 +38,7 @@ export function AdminLogin() {
       </label>
       <button
         type="submit"
-        disabled={busy || key.length === 0}
+        disabled={busy !== null || key.length === 0}
         className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg"
       >
         {busy ? 'Checking…' : 'Log in'}
@@ -59,23 +50,21 @@ export function AdminLogin() {
 
 export function AdminLogout() {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const { busy, run } = useAction<'logout'>()
 
-  async function logout() {
-    setBusy(true)
-    try {
+  function logout() {
+    run('logout', async () => {
       await fetch('/api/admin/session', { method: 'DELETE' })
       router.refresh()
-    } finally {
-      setBusy(false)
-    }
+      return undefined
+    })
   }
 
   return (
     <button
       type="button"
       onClick={logout}
-      disabled={busy}
+      disabled={busy !== null}
       className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50"
     >
       {busy ? 'Logging out…' : 'Log out'}

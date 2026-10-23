@@ -3,8 +3,10 @@
 import { errorOf } from '@carwash/contracts'
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { AuditState, EMPTY, reduce } from '@/lib/audit'
+import { postJson, refusal, useAction } from '@/lib/use-action'
 import { isOpen } from '@/lib/verification'
 import { checkJournal, JournalEvidence, type Verdict } from '@/lib/verify-journal'
+import { Mark as Drawn } from './mark'
 import { VerificationRun } from './verification-run'
 
 const CLASSES = [
@@ -22,21 +24,16 @@ const LABELS: Record<Verdict['name'], string> = {
 
 function Mark({ ok }: { ok: boolean | null }) {
   if (ok === null) return <span className="text-warn">?</span>
-  return ok ? (
-    <svg viewBox="0 0 16 16" className="size-4 text-ok" aria-label="holds">
-      <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 16 16" className="size-4 text-bad" aria-label="fails">
-      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" />
-    </svg>
+  return (
+    <span className={ok ? 'text-ok' : 'text-bad'}>
+      <Drawn ok={ok} label={ok ? 'holds' : 'fails'} />
+    </span>
   )
 }
 
 export function AuditPanel() {
   const [{ server, seq }, dispatch] = useReducer(reduce, EMPTY)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [note, setNote] = useState<string | null>(null)
+  const { busy, note, run } = useAction<'restore' | 'tamper' | 'check' | 'verify'>()
   const [verdicts, setVerdicts] = useState<{ seq: number; journalId: string; verdicts: Verdict[] } | null>(null)
 
   const refresh = useCallback(async () => {
@@ -53,43 +50,30 @@ export function AuditPanel() {
     return () => clearInterval(timer)
   }, [refresh, verifying])
 
-  async function act(label: string, url: string, body?: unknown) {
-    setBusy(label)
-    setNote(null)
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: body ? { 'content-type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : null,
-      })
-      if (!response.ok) setNote(errorOf(await response.json().catch(() => null))?.message ?? `That answered ${response.status}.`)
-    } finally {
-      setBusy(null)
-      void refresh()
-    }
+  function act(label: 'restore' | 'tamper' | 'verify', url: string, body?: unknown) {
+    run(label, async () => {
+      try {
+        return refusal(await postJson(url, body))
+      } finally {
+        void refresh()
+      }
+    })
   }
 
-  async function check() {
-    setBusy('check')
-    setNote(null)
+  function check() {
     setVerdicts(null)
-    try {
+    run('check', async () => {
       const response = await fetch(`/api/audit/seq/${encodeURIComponent(seq)}`, { cache: 'no-store' })
       const answer: unknown = await response.json()
       if (!response.ok || !server?.witnessKey) {
-        setNote(errorOf(answer)?.message ?? (server?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
-        return
+        return errorOf(answer)?.message ?? (server?.witnessKey ? `The web server answered ${response.status}.` : 'The witness key is not available.')
       }
       const evidence = JournalEvidence.safeParse(answer)
-      if (!evidence.success) {
-        setNote('That answer did not have the shape of a journal with its proof.')
-        return
-      }
+      if (!evidence.success) return 'That answer did not have the shape of a journal with its proof.'
       const input = evidence.data
       setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: server.witnessKey }) })
-    } finally {
-      setBusy(null)
-    }
+      return undefined
+    })
   }
 
   const tamper = server?.tamper
@@ -151,7 +135,7 @@ export function AuditPanel() {
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault()
-            void check()
+            check()
           }}
         >
           <label className="text-sm text-muted" htmlFor="seq">

@@ -1,10 +1,11 @@
 'use client'
 
-import { errorOf, InvariantChecksView, type InvariantResult } from '@carwash/contracts'
+import { InvariantChecksView, type InvariantResult } from '@carwash/contracts'
 import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
 import { CRASH_POINTS, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
+import { postJson, refusal, useAction } from '@/lib/use-action'
 import { ChecksTable } from './checks-table'
 
 function seconds(ms: number): string {
@@ -72,51 +73,36 @@ function describe(step: Step, tries = 1, until = step.at): { text: string; tone:
 export function PlugPanel({ admin = false }: { admin?: boolean }) {
   const [point, setPoint] = useState<CrashPoint>('attempt.after_psp')
   const [steps, setSteps] = useState<Step[]>([])
-  const [running, setRunning] = useState(false)
   const [checks, setChecks] = useState<{ ms: number; scope: PaymentScope; results: InvariantResult[] } | null>(null)
-  const [checking, setChecking] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
+  const { busy, note, run } = useAction<'pull' | 'check'>()
+  const running = busy === 'pull'
 
-  async function pull() {
-    setRunning(true)
+  function pull() {
     setSteps([])
-    setNote(null)
-    try {
+    run('pull', async () => {
       const response = await fetch('/api/plug', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ failpoint: point }) })
-      if (!response.ok || !response.body) {
-        setNote(`The web server answered ${response.status}.`)
-        return
-      }
+      if (!response.ok || !response.body) return `The web server answered ${response.status}.`
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
       let buffer = ''
       for (;;) {
         const { value, done } = await reader.read()
-        if (done) break
+        if (done) return undefined
         buffer += value
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) if (line.trim()) setSteps((previous) => [...previous, JSON.parse(line) as Step])
       }
-    } catch {
-      setNote('The web server stopped answering.')
-    } finally {
-      setRunning(false)
-    }
+    })
   }
 
-  async function check() {
-    setChecking(true)
-    setNote(null)
-    try {
-      const response = await fetch('/api/checks', { method: 'POST' })
-      const body: unknown = await response.json()
-      if (response.ok) {
-        const checks = InvariantChecksView.parse(body)
-        setChecks({ ms: checks.ms, scope: checks.payment_checks, results: checks.results })
-      } else setNote(errorOf(body)?.message ?? `The checks answered ${response.status}.`)
-    } finally {
-      setChecking(false)
-    }
+  function check() {
+    run('check', async () => {
+      const answer = await postJson('/api/checks')
+      if (!answer.ok) return refusal(answer)
+      const checks = InvariantChecksView.parse(answer.body)
+      setChecks({ ms: checks.ms, scope: checks.payment_checks, results: checks.results })
+      return undefined
+    })
   }
 
   const finalChecks = steps.find((s): s is Extract<Step, { kind: 'checks' }> => s.kind === 'checks')
@@ -152,7 +138,7 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
         <button
           type="button"
           onClick={pull}
-          disabled={running}
+          disabled={busy !== null}
           className="rounded-lg bg-bad px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:text-bg"
         >
           {running ? 'Pulling…' : 'Pull the plug'}
@@ -160,10 +146,10 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
         <button
           type="button"
           onClick={check}
-          disabled={checking || running}
+          disabled={busy !== null}
           className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium disabled:opacity-50"
         >
-          {checking ? 'Checking…' : 'Just run the checks'}
+          {busy === 'check' ? 'Checking…' : 'Just run the checks'}
         </button>
         <span className="text-xs text-muted">
           {admin ? 'Admin session: no turns to wait for.' : 'One plug a minute for everyone, and the checks at most every 10 s.'}

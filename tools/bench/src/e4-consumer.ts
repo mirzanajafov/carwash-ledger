@@ -25,8 +25,10 @@ const consumer = new EventConsumer(
 await consumer.start()
 console.log('e4-consumer: ready')
 
-process.once('SIGTERM', async () => {
+async function shutdown(): Promise<void> {
   await consumer.stop()
   await pool.end()
   process.exit(0)
-})
+}
+
+process.once('SIGTERM', () => void shutdown())
