@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
+import type { Env } from '@carwash/env'
 import { applyOnce, type ConsumedEvent } from '@carwash/outbox'
 import { firstRow } from '@carwash/pg'
 import { NO_FAULTS, startPsp, type RunningPsp } from '@carwash/psp'
@@ -12,7 +13,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express'
 import pg from 'pg'
 import { AppModule, configureApp } from '../src/app.module.ts'
 import { hashApiKey } from '../src/auth/api-keys.ts'
-import type { ApiConfig } from '../src/config.ts'
+import { loadApiConfig, loadCoreConfig, loadWorkerConfig, type ApiConfig, type CoreConfig, type WorkerConfig } from '../src/config.ts'
 import { CONSUMERS } from '../src/consumers/event-consumers.service.ts'
 
 export const KEYS = { alice: 'cw_live_alice', bob: 'cw_live_bob', admin: 'cw_admin_ops' }
@@ -41,7 +42,8 @@ export interface Stack {
   psp: RunningPsp
   app: NestExpressApplication
   url: string
-  config: ApiConfig
+  env: Env
+  config: TestConfig
   owner: pg.Pool
   admin: pg.Pool
   pspSql: pg.Pool
@@ -50,67 +52,40 @@ export interface Stack {
   close(): Promise<void>
 }
 
-export function apiConfig(databaseUrl: string, pspUrl: string, overrides: Partial<ApiConfig> = {}): ApiConfig {
-  return {
-    port: 0,
-    databaseUrl,
-    poolSize: 10,
-    connectTimeoutMs: 5000,
-    transactionTimeoutMs: 10_000,
-    pspUrl,
-    pspApiKey: 'sk_test_api',
-    pspTimeoutMs: 500,
-    currencies: ['EUR'],
-    hotAccountMode: 'sharded',
-    hotAccountShards: 4,
-    feeBps: 200,
-    feeFixed: 10n,
-    leaseSeconds: 30,
-    idempotencyWindowSeconds: 24 * 3600,
-    rateLimitPerKey: 10_000,
-    rateLimitPerIp: 10_000,
-    trustProxy: 'loopback',
-    webhookSecret: undefined,
-    workerPort: 0,
-    recoveryAfterSeconds: 30,
-    recoveryEveryMs: 0,
-    webhookRetentionDays: 7,
-    kafkaBrokers: [],
-    relayWorkers: 4,
-    relayIdleMaxMs: 1000,
-    outboxRetentionHours: 24,
-    kafkaTopicPrefix: '',
-    inboxRetentionDays: 7,
-    pspFeeBps: 120,
-    pspFeeFixed: 8n,
-    reconFallback: 'unique',
-    reconWindowDays: 7,
-    settlementEveryMs: 0,
-    auditEveryMs: 0,
-    auditBatch: 1000,
-    witnessUrl: undefined,
-    witnessToken: undefined,
-    witnessTimeoutMs: 2000,
-    checkpointEveryMs: 10_000,
-    checkpointEveryLeaves: 10_000,
-    auditDatabaseUrl: undefined,
-    liveEveryMs: 200,
-    liveMaxConnections: 100,
-    plugEveryMs: 60_000,
-    checksEveryMs: 0,
-    verifyEveryMs: 0,
-    sessionHours: 12,
-    ...overrides,
-  }
+export interface TestConfig {
+  core: CoreConfig
+  api: ApiConfig
+  worker: WorkerConfig
 }
 
-export async function startApi(config: ApiConfig, port = 0): Promise<{ app: NestExpressApplication; url: string }> {
+export function testConfig(env: Env): TestConfig {
+  const all: Env = {
+    PORT: '0',
+    WORKER_PORT: '0',
+    PSP_API_KEY: 'sk_test_api',
+    PSP_TIMEOUT_MS: '500',
+    HOT_ACCOUNT_SHARDS: '4',
+    RATE_LIMIT_PER_KEY: '10000',
+    RATE_LIMIT_PER_IP: '10000',
+    RECOVERY_EVERY_MS: '0',
+    SETTLEMENT_EVERY_MS: '0',
+    AUDIT_EVERY_MS: '0',
+    WITNESS_TIMEOUT_MS: '2000',
+    LIVE_EVERY_MS: '200',
+    CHECKS_EVERY_MS: '0',
+    VERIFY_EVERY_MS: '0',
+    ...env,
+  }
+  return { core: loadCoreConfig(all), api: loadApiConfig(all), worker: loadWorkerConfig(all) }
+}
+
+export async function startApi(config: { core: CoreConfig; api: ApiConfig }, port = 0): Promise<{ app: NestExpressApplication; url: string }> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(config), {
     bodyParser: false,
     rawBody: true,
     logger: false,
   })
-  configureApp(app, config)
+  configureApp(app, config.api)
   await app.listen(port, '127.0.0.1')
   return { app, url: await app.getUrl() }
 }
@@ -182,10 +157,13 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
     },
     () => undefined,
   )
-  const config = apiConfig(ledgerDb.url('ledger_app'), psp.url, {
-    webhookSecret: options.webhooks ? WEBHOOK_SECRET : undefined,
-    auditDatabaseUrl: ledgerDb.url('ledger_audit'),
-  })
+  const env = {
+    DATABASE_URL: ledgerDb.url('ledger_app'),
+    PSP_URL: psp.url,
+    PSP_WEBHOOK_SECRET: options.webhooks ? WEBHOOK_SECRET : undefined,
+    AUDIT_DATABASE_URL: ledgerDb.url('ledger_audit'),
+  }
+  const config = testConfig(env)
   const { app, url } = await startApi(config, apiPort)
   const stack: Stack = {
     ledgerDb,
@@ -193,6 +171,7 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
     psp,
     app,
     url,
+    env,
     config,
     owner,
     admin,

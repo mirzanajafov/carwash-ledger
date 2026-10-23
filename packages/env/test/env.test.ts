@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nonNegativeInteger, optional, positiveInteger, positiveNumber, required } from '../src/index.ts'
+import { list, nonNegativeInteger, oneOf, optional, positiveInteger, positiveNumber, required } from '../src/index.ts'
 
 describe('reading the environment', () => {
   it('falls back only when a number is missing or empty, and refuses anything that is not a whole number', () => {
@@ -27,5 +27,18 @@ describe('reading the environment', () => {
     expect(() => required({ TOKEN: '' }, 'TOKEN')).toThrow('TOKEN is required')
     expect(required({ TOKEN: 't' }, 'TOKEN')).toBe('t')
     expect(optional({ URL: '' }, 'URL')).toBeUndefined()
+  })
+
+  it('takes one of a fixed set of words, and names the set when the value is not in it', () => {
+    const modes = ['sharded', 'derived', 'locked'] as const
+    expect(oneOf({}, 'MODE', modes, 'sharded')).toBe('sharded')
+    expect(oneOf({ MODE: 'derived' }, 'MODE', modes, 'sharded')).toBe('derived')
+    expect(() => oneOf({ MODE: 'Derived' }, 'MODE', modes, 'sharded')).toThrow('MODE must be one of sharded, derived, locked')
+  })
+
+  it('reads a comma-separated list, trimmed and without empty items', () => {
+    expect(list({}, 'BROKERS', '')).toEqual([])
+    expect(list({ BROKERS: ' a:1, b:2,,' }, 'BROKERS', '')).toEqual(['a:1', 'b:2'])
+    expect(list({ CURRENCIES: '' }, 'CURRENCIES', 'EUR')).toEqual(['EUR'])
   })
 })

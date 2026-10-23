@@ -28,7 +28,9 @@ export interface FeeContract {
   fixed: bigint
 }
 
-export type Fallback = 'unique' | 'oldest' | 'none'
+export const FALLBACKS = ['unique', 'oldest', 'none'] as const
+
+export type Fallback = (typeof FALLBACKS)[number]
 
 export interface ReconcileOptions {
   contract: FeeContract

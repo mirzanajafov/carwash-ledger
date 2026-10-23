@@ -31,3 +31,18 @@ export function positiveNumber(env: Env, name: string, fallback: number): number
   if (!/^\d+(\.\d+)?$/.test(raw) || !(value > 0)) throw new Error(`${name} must be a positive number`)
   return value
 }
+
+export function oneOf<const T extends string>(env: Env, name: string, values: readonly T[], fallback: T): T {
+  const raw = env[name]
+  if (raw === undefined || raw === '') return fallback
+  const value = values.find((candidate) => candidate === raw)
+  if (value === undefined) throw new Error(`${name} must be one of ${values.join(', ')}`)
+  return value
+}
+
+export function list(env: Env, name: string, fallback: string): string[] {
+  return (env[name] || fallback)
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item !== '')
+}

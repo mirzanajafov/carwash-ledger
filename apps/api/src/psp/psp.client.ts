@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import type { AttemptId } from '../ids.ts'
 import type { AttemptKind } from './answers.ts'
 
@@ -37,10 +37,10 @@ function route(call: PspCall): { path: string; body: Record<string, unknown> } {
 
 @Injectable()
 export class PspClient {
-  readonly #config: ApiConfig
+  readonly #config: CoreConfig
   readonly #logger = new Logger('psp')
 
-  constructor(@Inject(API_CONFIG) config: ApiConfig) {
+  constructor(@Inject(CORE_CONFIG) config: CoreConfig) {
     this.#config = config
   }
 

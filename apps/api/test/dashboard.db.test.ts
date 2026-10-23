@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { NestFactory } from '@nestjs/core'
 import { restore, sequenceBatch, tamper } from '@carwash/audit-pg'
+import type { Env } from '@carwash/env'
 import {
   InvariantChecksView,
   LiveBalance,
@@ -19,12 +20,11 @@ import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
 import { VerificationJob } from '../src/audit/verification-job.ts'
 import { VerificationRuns } from '../src/audit/verification-runs.ts'
-import type { ApiConfig } from '../src/config.ts'
 import { Database } from '../src/db/database.ts'
 import { Chart } from '../src/ledger/chart.service.ts'
 import { PAYMENTS } from '../src/live/live-feed.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
-import { startApi, startStack, type Stack } from './support.ts'
+import { startApi, startStack, testConfig, type Stack } from './support.ts'
 
 let stack: Stack
 
@@ -221,7 +221,7 @@ describe('the admin side of the dashboard', () => {
   })
 
   it('answers 503 for the checks while the witness is not answering', async () => {
-    const blind = await startApi({ ...stack.config, witnessUrl: 'http://127.0.0.1:9' })
+    const blind = await startApi(testConfig({ ...stack.env, WITNESS_URL: 'http://127.0.0.1:9' }))
     try {
       const answer = await stack.call('POST', '/v1/admin/checks', { as: 'admin', key: null, base: blind.url })
       expect(answer).toMatchObject({ status: 503, body: { error: { code: 'witness_unavailable' } } })
@@ -232,8 +232,8 @@ describe('the admin side of the dashboard', () => {
 })
 
 describe('verification runs', () => {
-  async function withWorker<T>(work: (job: VerificationJob) => Promise<T>, config: Partial<ApiConfig> = {}): Promise<T> {
-    const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, ...config }), { logger: false })
+  async function withWorker<T>(work: (job: VerificationJob) => Promise<T>, env: Env = {}): Promise<T> {
+    const worker = await NestFactory.createApplicationContext(WorkerModule.register(testConfig({ ...stack.env, ...env })), { logger: false })
     try {
       return await work(worker.get(VerificationJob))
     } finally {
@@ -319,7 +319,7 @@ describe('verification runs', () => {
     let stopping = Promise.resolve()
     await withTransaction(stack.admin, async (blocker) => {
       await blocker.query('LOCK TABLE audit_log IN ACCESS EXCLUSIVE MODE')
-      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, verifyEveryMs: 20 }), { logger: false })
+      const worker = await NestFactory.createApplicationContext(WorkerModule.register(testConfig({ ...stack.env, VERIFY_EVERY_MS: '20' })), { logger: false })
       try {
         await vi.waitFor(async () => expect((await latest()).body).toMatchObject({ status: 'running' }), { timeout: 5000 })
       } finally {
@@ -334,7 +334,7 @@ describe('verification runs', () => {
   })
 
   it('will not start a worker that cannot read the ledger as the audit role', async () => {
-    const starting = NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, auditDatabaseUrl: undefined }), {
+    const starting = NestFactory.createApplicationContext(WorkerModule.register(testConfig({ ...stack.env, AUDIT_DATABASE_URL: undefined })), {
       logger: false,
       abortOnError: false,
     })
@@ -350,7 +350,7 @@ describe('verification runs', () => {
         await job.runNext()
         await job.runNext()
       },
-      { witnessUrl: 'http://127.0.0.1:9', witnessToken: 'token' },
+      { WITNESS_URL: 'http://127.0.0.1:9', WITNESS_TOKEN: 'token' },
     )
     expect((await latest()).body).toMatchObject({ id: run, status: 'failed', attempts: 3, error: 'the witness could not be read', report: null })
   })

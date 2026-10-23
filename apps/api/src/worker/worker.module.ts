@@ -2,7 +2,7 @@ import { Module, type DynamicModule } from '@nestjs/common'
 import { AuditModule } from '../audit/audit.module.ts'
 import { Sequencer } from '../audit/sequencer.service.ts'
 import { VerificationJob } from '../audit/verification-job.ts'
-import type { ApiConfig } from '../config.ts'
+import { WORKER_CONFIG, type CoreConfig, type WorkerConfig } from '../config.ts'
 import { EventConsumers } from '../consumers/event-consumers.service.ts'
 import { CoreModule } from '../core/core.module.ts'
 import { HealthModule } from '../health/health.module.ts'
@@ -17,10 +17,19 @@ import { Scheduler } from './scheduler.service.ts'
 
 @Module({})
 export class WorkerModule {
-  static register(config: ApiConfig): DynamicModule {
+  static register(config: { core: CoreConfig; worker: WorkerConfig }): DynamicModule {
     return {
       module: WorkerModule,
-      imports: [CoreModule.register(config), HealthModule, AttemptsModule, AuditModule, IdempotencyModule, PspModule, SettlementModule, WebhooksModule],
+      imports: [
+        CoreModule.register(config.core, { provide: WORKER_CONFIG, useValue: config.worker }),
+        HealthModule,
+        AttemptsModule,
+        AuditModule,
+        IdempotencyModule,
+        PspModule,
+        SettlementModule,
+        WebhooksModule,
+      ],
       providers: [OutboxRelay, EventConsumers, Sequencer, Recovery, Scheduler, VerificationJob],
     }
   }

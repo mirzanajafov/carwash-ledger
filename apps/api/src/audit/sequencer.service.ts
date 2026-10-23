@@ -1,24 +1,24 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
 import { Checkpointer, sequenceBatch, WitnessClient, type CheckpointOutcome } from '@carwash/audit-pg'
 import { Failures, pause } from '@carwash/jobs'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, WORKER_CONFIG, type CoreConfig, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 
 @Injectable()
 export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
-  readonly #config: ApiConfig
+  readonly #config: WorkerConfig
   readonly #logger = new Logger('sequencer')
   readonly #stop = new AbortController()
   readonly #checkpointer: Checkpointer | undefined
   #loop: Promise<void> | undefined
 
-  constructor(db: Database, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, @Inject(WORKER_CONFIG) config: WorkerConfig, @Inject(CORE_CONFIG) { witnessUrl }: CoreConfig) {
     this.#db = db
     this.#config = config
-    if (config.witnessUrl && !config.witnessToken) throw new Error('WITNESS_TOKEN is required when WITNESS_URL is set')
-    if (config.witnessUrl && config.witnessToken) {
-      this.#checkpointer = new Checkpointer(db.pool, new WitnessClient(config.witnessUrl, config.witnessToken, config.witnessTimeoutMs))
+    if (witnessUrl && !config.witnessToken) throw new Error('WITNESS_TOKEN is required when WITNESS_URL is set')
+    if (witnessUrl && config.witnessToken) {
+      this.#checkpointer = new Checkpointer(db.pool, new WitnessClient(witnessUrl, config.witnessToken, config.witnessTimeoutMs))
     }
   }
 

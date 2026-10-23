@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { failpoint } from '@carwash/failpoints'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { WORKER_CONFIG, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
 import type { Attempt } from '../payments/attempt.ts'
@@ -15,10 +15,10 @@ export class Recovery {
   readonly #db: Database
   readonly #attempts: AttemptsService
   readonly #psp: PspClient
-  readonly #config: ApiConfig
+  readonly #config: WorkerConfig
   readonly #logger = new Logger('recovery')
 
-  constructor(db: Database, attempts: AttemptsService, psp: PspClient, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, attempts: AttemptsService, psp: PspClient, @Inject(WORKER_CONFIG) config: WorkerConfig) {
     this.#db = db
     this.#attempts = attempts
     this.#psp = psp

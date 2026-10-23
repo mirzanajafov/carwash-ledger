@@ -3,7 +3,7 @@ import { BREAK_CLASSES, type BreakClass, type BreakView, type SettlementDayList,
 import { postInTransaction, type EntryInput } from '@carwash/ledger'
 import { firstRow } from '@carwash/pg'
 import { reconcile, window, type LedgerItem } from '@carwash/recon'
-import { API_CONFIG, type ApiConfig } from '../config.ts'
+import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { journalEvents } from '../events/events.ts'
 import { Chart } from '../ledger/chart.service.ts'
@@ -46,10 +46,10 @@ export class Settlements {
   readonly #db: Database
   readonly #chart: Chart
   readonly #psp: PspClient
-  readonly #config: ApiConfig
+  readonly #config: CoreConfig
   readonly #logger = new Logger('settlements')
 
-  constructor(db: Database, chart: Chart, psp: PspClient, @Inject(API_CONFIG) config: ApiConfig) {
+  constructor(db: Database, chart: Chart, psp: PspClient, @Inject(CORE_CONFIG) config: CoreConfig) {
     this.#db = db
     this.#chart = chart
     this.#psp = psp
