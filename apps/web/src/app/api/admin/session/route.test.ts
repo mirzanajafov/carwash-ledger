@@ -5,10 +5,6 @@ import { upstream } from '@/test/upstream'
 vi.mock('next/headers', () => import('@/test/next-headers'))
 
 const CLEARED = '__Host-cw_admin=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure'
-const NOT_REVOKED = {
-  error: { code: 'not_revoked', message: 'you are logged out in this browser, but the API could not end the session, so it ends on its own when it expires' },
-}
-
 afterEach(() => {
   resetJar()
   vi.unstubAllEnvs()
@@ -37,32 +33,31 @@ describe('logging out', () => {
     expect(seen.map(({ method, url, headers }) => ({ method, url, authorization: headers.authorization }))).toEqual([
       { method: 'DELETE', url: '/v1/admin/sessions/current', authorization: 'Bearer cw_session_token' },
     ])
-    expect(await response.json()).toEqual({ admin: false })
+    expect(await response.json()).toEqual({ admin: false, revoked: true })
     expect(setCookieHeader()).toContain(CLEARED)
   })
 
-  it('clears the cookie without complaint when the session had already ended', async () => {
+  it('counts a session that had already ended as ended', async () => {
     const { response } = await logOutAgainst(401, { error: { code: 'unauthorized', message: 'the session has ended' } })
-    expect(await response.json()).toEqual({ admin: false })
+    expect(await response.json()).toEqual({ admin: false, revoked: true })
     expect(setCookieHeader()).toContain(CLEARED)
   })
 
-  it('still clears the cookie when the API could not end the session, and says the session lives until it expires', async () => {
+  it('still clears the cookie when the API could not end the session, which then ends at its expiry with no browser holding it', async () => {
     const { response } = await logOutAgainst(503, { error: { code: 'unavailable', message: 'the API is restarting' } })
-    expect(response.status).toBe(502)
-    expect(await response.json()).toEqual(NOT_REVOKED)
+    expect(await response.json()).toEqual({ admin: false, revoked: false })
     expect(setCookieHeader()).toContain(CLEARED)
   })
 
-  it('says the same when the API does not answer at all', async () => {
+  it('does the same when the API does not answer at all', async () => {
     jar.sent.set('__Host-cw_admin', 'cw_session_token')
     const response = await logOut('http://127.0.0.1:9')
-    expect(await response.json()).toEqual(NOT_REVOKED)
+    expect(await response.json()).toEqual({ admin: false, revoked: false })
     expect(setCookieHeader()).toContain(CLEARED)
   })
 
   it('asks the API nothing when there is no session cookie', async () => {
     const response = await logOut('http://127.0.0.1:9')
-    expect(await response.json()).toEqual({ admin: false })
+    expect(await response.json()).toEqual({ admin: false, revoked: false })
   })
 })
