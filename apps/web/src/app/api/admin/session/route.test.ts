@@ -5,6 +5,7 @@ import { upstream } from '@/test/upstream'
 vi.mock('next/headers', () => import('@/test/next-headers'))
 
 const CLEARED = '__Host-cw_admin=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure'
+
 afterEach(() => {
   resetJar()
   vi.unstubAllEnvs()
