@@ -1,9 +1,21 @@
+import { setTimeout as sleep } from 'node:timers/promises'
 import { AccountRegistry, createAccount, pgAccountLoader, postInTransaction, type Account } from '@carwash/ledger'
 import { checkout, firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { createTestDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
-import { LANES, Relay, RELAY_DEFAULTS, relayOnce, writeEvent, writeJournalEvents, type NewEvent, type OutboxRow, type Publisher } from '../src/index.ts'
+import {
+  LANES,
+  Relay,
+  RELAY_DEFAULTS,
+  relayOnce,
+  writeEvent,
+  writeJournalEvents,
+  type NewEvent,
+  type OutboxRow,
+  type Publisher,
+  type RelayOptions,
+} from '../src/index.ts'
 
 let db: TestDatabase
 let app: pg.Pool
@@ -31,6 +43,36 @@ async function commit(events: readonly NewEvent[]): Promise<void> {
 
 async function addEvents(keys: readonly string[]): Promise<void> {
   await commit(keys.map((key) => ({ topic: 'payments', key, type: 'test.event', payload: { key } })))
+}
+
+async function stream(options: Partial<RelayOptions>, idleFirstMs: number, gapMs: number): Promise<{ committedAt: number; publishedAt: number }[]> {
+  const committed = new Map<string, number>()
+  const published = new Map<string, number>()
+  const relay = new Relay(
+    app,
+    {
+      publish: async (rows) => {
+        for (const row of rows) published.set(row.key, performance.now())
+      },
+    },
+    options,
+  )
+  relay.start()
+  try {
+    await sleep(idleFirstMs)
+    for (let n = 0; n < 100; n++) {
+      const key = `stream-${n}`
+      await commit([{ topic: 'payments', key, type: 'test.stream', payload: { n } }])
+      committed.set(key, performance.now())
+      await sleep(gapMs)
+    }
+    const deadline = Date.now() + 10_000
+    while ((await unpublished()) > 0 && Date.now() < deadline) await sleep(20)
+  } finally {
+    await relay.stop()
+  }
+  expect(await unpublished()).toBe(0)
+  return [...committed].map(([key, committedAt]) => ({ committedAt, publishedAt: published.get(key) ?? Number.POSITIVE_INFINITY }))
 }
 
 async function unpublished(): Promise<number> {
@@ -192,25 +234,20 @@ describe('relayOnce', () => {
 })
 
 describe('Relay', () => {
-  it('only waits its poll interval when no lane has work, so a steady stream never queues up', async () => {
-    const relay = new Relay(app, new Recorder(), { workers: 1, batch: 500, pollMs: 200 })
-    relay.start()
-    try {
-      for (let n = 0; n < 100; n++) {
-        await commit([{ topic: 'payments', key: `stream-${n}`, type: 'test.stream', payload: { n } }])
-        await new Promise((resolve) => setTimeout(resolve, 10))
-      }
-      const deadline = Date.now() + 10_000
-      while ((await unpublished()) > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20))
-    } finally {
-      await relay.stop()
-    }
-    const { worst } = firstRow(
-      await app.query<{ worst: number }>(
-        `SELECT max(extract(epoch FROM published_at - created_at) * 1000)::float8 AS worst FROM outbox WHERE type = 'test.stream'`,
-      ),
-    )
-    expect(worst).toBeLessThan(400)
+  it('keeps a steady stream within two poll intervals of its commits, so it never queues up', async () => {
+    const pollMs = 200
+    const events = await stream({ workers: 1, batch: 500, pollMs, idleMaxMs: pollMs }, 0, 10)
+    expect(Math.max(...events.map((event) => event.publishedAt - event.committedAt))).toBeLessThan(2 * pollMs)
+  })
+
+  it('drops its idle backoff once it publishes, so only the first event of a stream waits for it', async () => {
+    const pollMs = 100
+    const idleMaxMs = 1000
+    const events = await stream({ workers: 1, batch: 500, pollMs, idleMaxMs }, 3 * idleMaxMs, 40)
+    const firstPublished = Math.min(...events.map((event) => event.publishedAt))
+    const later = events.filter((event) => event.committedAt > firstPublished)
+    expect(later.length).toBeGreaterThan(20)
+    expect(Math.max(...later.map((event) => event.publishedAt - event.committedAt))).toBeLessThan(4 * pollMs)
   })
 
   it('keeps each key in order while several relays and writers run at once', async () => {
@@ -225,7 +262,7 @@ describe('Relay', () => {
         }),
       )
       const deadline = Date.now() + 20_000
-      while ((await unpublished()) > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20))
+      while ((await unpublished()) > 0 && Date.now() < deadline) await sleep(20)
     } finally {
       await relay.stop()
     }
