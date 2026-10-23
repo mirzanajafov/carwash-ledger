@@ -1,6 +1,6 @@
 --- a/packages/audit-pg/src/checkpointer.ts
 +++ b/packages/audit-pg/src/checkpointer.ts
-@@ -28,7 +28,7 @@
+@@ -41,7 +41,7 @@
      const latest = await this.#witness.latest()
      const from = latest?.size ?? 0
      if (from > size) return { kind: 'behind', size, witnessed: from }

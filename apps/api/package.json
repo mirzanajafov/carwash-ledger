@@ -15,6 +15,7 @@
     "@carwash/audit-pg": "workspace:*",
     "@carwash/contracts": "workspace:*",
     "@carwash/failpoints": "workspace:*",
+    "@carwash/http": "workspace:*",
     "@carwash/invariants": "workspace:*",
     "@carwash/ledger": "workspace:*",
     "@carwash/outbox": "workspace:*",

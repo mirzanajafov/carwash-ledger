@@ -1,5 +1,17 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ORIGIN, toHex } from '@carwash/audit'
+import {
+  findJournal,
+  head,
+  latestCheckpoint,
+  leafByJournal,
+  leafBySeq,
+  proveConsistency,
+  proveInclusion,
+  recentCheckpoints,
+  rootAt,
+  treeSize,
+} from '@carwash/audit-pg'
 import type {
   AuditHeadView,
   CheckpointList,
@@ -12,9 +24,7 @@ import type {
 } from '@carwash/contracts'
 import { Database } from '../db/database.ts'
 import { invalidInput, notFound } from '../domain-errors.ts'
-import { findJournal, latestCheckpoint, leafByJournal, leafBySeq, recentCheckpoints } from './audit.repository.ts'
 import { runView, VerificationRuns } from './verification-runs.ts'
-import { head, proveConsistency, proveInclusion, rootAt, treeSize } from '@carwash/audit-pg'
 
 function size(value: string, name: string): number
 function size(value: string | undefined, name: string): number | undefined

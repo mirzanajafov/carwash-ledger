@@ -1,12 +1,12 @@
 import { createPublicKey, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
-import { checkpointBody, Frontier, ORIGIN, toHex } from '@carwash/audit'
+import { checkpointBody, Frontier, ORIGIN, toHex, type SignedCheckpoint } from '@carwash/audit'
 import type { Queryable } from '@carwash/pg'
 
 export interface SignedCopies {
   origin: string
   publicKey: string
   key: KeyObject
-  latest: { size: number; root: string; signature: string }
+  latest: SignedCheckpoint
   count: number
 }
 

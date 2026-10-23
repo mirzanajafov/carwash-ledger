@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@carwash/audit": "workspace:*",
+    "@carwash/contracts": "workspace:*",
     "@carwash/env": "workspace:*",
     "@carwash/http": "workspace:*",
     "zod": "catalog:"

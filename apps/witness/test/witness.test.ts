@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, assert, describe, expect, it } from 'vitest'
 import { checkpointBody, completedBy, consistencyProof, leafHash, rootOf, toHex, type Hash, type SubtreeSource } from '@carwash/audit'
-import { createWitnessServer, Refusal, Witness, type Signed } from '../src/index.ts'
+import { WitnessCheckpointView } from '@carwash/contracts'
+import { createWitnessServer, Refusal, Witness } from '../src/index.ts'
 
 const dirs: string[] = []
 
@@ -43,9 +44,9 @@ function submission(source: SubtreeSource, size: number, fromSize = 0) {
   }
 }
 
-async function signedHistory(witness: Witness): Promise<Signed[]> {
-  const signed: Signed[] = []
-  for await (const line of witness.history()) signed.push(JSON.parse(line) as Signed)
+async function signedHistory(witness: Witness): Promise<WitnessCheckpointView[]> {
+  const signed: WitnessCheckpointView[] = []
+  for await (const line of witness.history()) signed.push(WitnessCheckpointView.parse(JSON.parse(line)))
   return signed
 }
 
@@ -123,7 +124,7 @@ describe('the witness', () => {
     const lines = readFileSync(join(dir, 'checkpoints.jsonl'), 'utf8').trim().split('\n')
     const [oldest, newest] = lines
     assert(oldest && newest)
-    const forged = { ...(JSON.parse(newest) as Signed), root: toHex(rootOf(50, log(7, 50))) }
+    const forged = { ...WitnessCheckpointView.parse(JSON.parse(newest)), root: toHex(rootOf(50, log(7, 50))) }
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${oldest}\n${JSON.stringify(forged)}\n`)
     expect(() => new Witness(dir, 'test-log')).toThrow(/did not sign/)
     writeFileSync(join(dir, 'checkpoints.jsonl'), `${oldest}\n`)
@@ -149,10 +150,10 @@ describe('the witness', () => {
     const source = log(12, 200)
     const witness = new Witness(dir, 'test-log')
     for (let size = 10; size <= 200; size += 10) await witness.submit(submission(source, size, size === 10 ? 0 : size - 10))
-    const newest = witness.latest()
-    appendFileSync(join(dir, 'checkpoints.jsonl'), `${JSON.stringify({ ...newest, note: 'x'.repeat(10_000) })}\n\n`)
+    const newest = { ...witness.latest(), signed_at: 'x'.repeat(10_000) }
+    appendFileSync(join(dir, 'checkpoints.jsonl'), `${JSON.stringify(newest)}\n\n`)
     expect(statSync(join(dir, 'checkpoints.jsonl')).size).toBeGreaterThan(14_000)
-    expect(new Witness(dir, 'test-log').latest()).toEqual({ ...newest, note: 'x'.repeat(10_000) })
+    expect(new Witness(dir, 'test-log').latest()).toEqual(newest)
     appendFileSync(join(dir, 'checkpoints.jsonl'), 'x'.repeat(70_000))
     expect(() => new Witness(dir, 'test-log')).toThrow(/longer than 65536 bytes/)
   })
@@ -194,7 +195,7 @@ describe('the witness server', () => {
       expect(await fork.json()).toMatchObject({ error: { code: 'fork' } })
       expect((await post(submission(source, 60, 10))).status).toBe(201)
       expect(await (await fetch(`${base}/v1/checkpoints/latest`)).json()).toMatchObject({ size: 60, root: toHex(rootOf(60, source)) })
-      expect(((await (await fetch(`${base}/v1/checkpoints`)).json()) as { data: Signed[] }).data.map((c) => c.size)).toEqual([10, 60])
+      expect(await (await fetch(`${base}/v1/checkpoints`)).json()).toMatchObject({ data: [{ size: 10 }, { size: 60 }] })
     } finally {
       server.close()
     }

@@ -1,5 +1,4 @@
 import {
-  canonicalJournal,
   chainHash,
   completedBy,
   consistencyProof,
@@ -13,6 +12,7 @@ import {
   type SubtreeSource,
 } from '@carwash/audit'
 import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
+import { canonicalOf, readJournals } from './journals.ts'
 
 export const SEQUENCER_LOCK = 7_240_300
 
@@ -69,37 +69,13 @@ export async function proveConsistency(db: Queryable, first: number, second: num
   return withNodes(db, (source) => consistencyProof(first, second, source))
 }
 
-export interface JournalRow {
-  id: string
-  external_ref: string
-  micros: string
-  entries: [string, string, string][]
-}
-
-export function canonicalOf(journal: JournalRow): Uint8Array {
-  return canonicalJournal({
-    id: BigInt(journal.id),
-    externalRef: journal.external_ref,
-    createdAtMicros: BigInt(journal.micros),
-    entries: journal.entries.map(([id, accountId, amount]) => ({ id: BigInt(id), accountId: BigInt(accountId), amount: BigInt(amount) })),
-  })
-}
-
 export async function sequenceBatch(client: Transaction, limit: number): Promise<number> {
   const { locked } = firstRow(await client.query<{ locked: boolean }>('SELECT pg_try_advisory_xact_lock($1) AS locked', [SEQUENCER_LOCK]))
   if (!locked) return 0
   const { rows: queued } = await client.query<{ journal_id: string }>('SELECT q.journal_id::text FROM audit_queue q ORDER BY q.journal_id LIMIT $1', [limit])
   if (queued.length === 0) return 0
   const ids = queued.map((q) => q.journal_id)
-  const { rows: journals } = await client.query<JournalRow>(
-    `SELECT j.id::text, j.external_ref, (extract(epoch FROM j.created_at) * 1000000)::bigint::text AS micros,
-            json_agg(json_build_array(e.id::text, e.account_id::text, e.amount::text) ORDER BY e.id) AS entries
-     FROM journals j JOIN entries e ON e.journal_id = j.id
-     WHERE j.id = ANY($1::bigint[])
-     GROUP BY j.id
-     ORDER BY j.id`,
-    [ids],
-  )
+  const journals = await readJournals(client, ids)
   if (journals.length !== ids.length) throw new Error(`${ids.length - journals.length} queued journals have no rows`)
   const size = await treeSize(client)
   const frontier = await readNodes(
@@ -138,4 +114,14 @@ export async function sequenceBatch(client: Transaction, limit: number): Promise
   await client.query('INSERT INTO audit_nodes (level, idx, hash) SELECT * FROM unnest($1::smallint[], $2::bigint[], $3::bytea[])', [levels, indexes, hashes])
   await client.query('DELETE FROM audit_queue WHERE journal_id = ANY($1::bigint[])', [ids])
   return journals.length
+}
+
+export async function leafBySeq(db: Queryable, seq: number): Promise<{ journal_id: string; leaf: Buffer } | undefined> {
+  const { rows } = await db.query<{ journal_id: string; leaf: Buffer }>('SELECT journal_id::text, leaf FROM audit_log WHERE seq = $1', [seq])
+  return rows[0]
+}
+
+export async function leafByJournal(db: Queryable, journalId: string): Promise<{ seq: string; leaf: Buffer } | undefined> {
+  const { rows } = await db.query<{ seq: string; leaf: Buffer }>('SELECT seq::text, leaf FROM audit_log WHERE journal_id = $1', [journalId])
+  return rows[0]
 }

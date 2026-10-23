@@ -1,4 +1,5 @@
 import type { IncomingMessage, Server } from 'node:http'
+import type { WitnessKeyView } from '@carwash/contracts'
 import { bearerMatches, HttpError, parse, readJson, serve, type Reply } from '@carwash/http'
 import * as z from 'zod/mini'
 import { Refusal, Witness } from './witness.ts'
@@ -40,7 +41,9 @@ export function createWitnessServer(witness: Witness, token: string): Server {
     const url = new URL(request.url ?? '/', 'http://witness')
     const route = `${String(request.method)} ${url.pathname}`
     if (route === 'GET /health') return { status: 200, json: { ok: true } }
-    if (route === 'GET /v1/key') return { status: 200, json: { origin: witness.origin, algorithm: 'ed25519', public_key: witness.publicKey } }
+    if (route === 'GET /v1/key') {
+      return { status: 200, json: { origin: witness.origin, algorithm: 'ed25519', public_key: witness.publicKey } satisfies WitnessKeyView }
+    }
     if (route === 'GET /v1/checkpoints/latest') {
       const latest = witness.latest()
       if (!latest) throw new HttpError(404, 'none', 'nothing is signed yet')

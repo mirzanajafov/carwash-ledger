@@ -1,15 +1,4 @@
-export interface SignedCheckpoint {
-  size: number
-  root: string
-  signature: string
-  signed_at: string
-}
-
-export interface WitnessKey {
-  origin: string
-  algorithm: string
-  public_key: string
-}
+import { errorOf, WitnessCheckpointView, WitnessKeyView } from '@carwash/contracts'
 
 export interface CheckpointRequest {
   size: number
@@ -18,7 +7,7 @@ export interface CheckpointRequest {
   proof: string[]
 }
 
-export type SubmitReply = { kind: 'signed'; checkpoint: SignedCheckpoint; fresh: boolean } | { kind: 'refused'; code: string; message: string }
+export type SubmitReply = { kind: 'signed'; checkpoint: WitnessCheckpointView; fresh: boolean } | { kind: 'refused'; code: string; message: string }
 
 export class WitnessClient {
   readonly #url: string
@@ -31,26 +20,24 @@ export class WitnessClient {
     this.#timeoutMs = timeoutMs
   }
 
-  async key(): Promise<WitnessKey> {
+  async key(): Promise<WitnessKeyView> {
     const { status, body } = await this.#request('GET', '/v1/key')
     if (status !== 200) throw new Error(`the witness answered ${status} for its key`)
-    return body as WitnessKey
+    return WitnessKeyView.parse(body)
   }
 
-  async latest(): Promise<SignedCheckpoint | undefined> {
+  async latest(): Promise<WitnessCheckpointView | undefined> {
     const { status, body } = await this.#request('GET', '/v1/checkpoints/latest')
     if (status === 404) return undefined
     if (status !== 200) throw new Error(`the witness answered ${status} for its latest checkpoint`)
-    return body as SignedCheckpoint
+    return WitnessCheckpointView.parse(body)
   }
 
   async submit(request: CheckpointRequest): Promise<SubmitReply> {
     const { status, body } = await this.#request('POST', '/v1/checkpoints', request)
-    if (status === 200 || status === 201) return { kind: 'signed', checkpoint: body as SignedCheckpoint, fresh: status === 201 }
-    if (status === 409) {
-      const { error } = body as { error: { code: string; message: string } }
-      return { kind: 'refused', code: error.code, message: error.message }
-    }
+    if (status === 200 || status === 201) return { kind: 'signed', checkpoint: WitnessCheckpointView.parse(body), fresh: status === 201 }
+    const refused = status === 409 ? errorOf(body) : undefined
+    if (refused) return { kind: 'refused', code: refused.code, message: refused.message }
     throw new Error(`the witness answered ${status}: ${JSON.stringify(body)}`)
   }
 
