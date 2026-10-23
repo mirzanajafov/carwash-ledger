@@ -12,7 +12,7 @@ import { Database } from '../src/db/database.ts'
 import { findAttempt } from '../src/payments/attempts.repository.ts'
 import { WebhooksService } from '../src/webhooks/webhooks.service.ts'
 import { Recovery } from '../src/worker/recovery.service.ts'
-import { Scheduler } from '../src/worker/scheduler.ts'
+import { Scheduler } from '../src/worker/scheduler.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
 import { count, startStack, WEBHOOK_SECRET, type CallOptions, type Reply, type Stack } from './support.ts'
 
@@ -204,22 +204,6 @@ describe('the recovery job', () => {
     }
   })
 
-  it('stops its loops before the database pools close when the worker shuts down', async () => {
-    const stopping = vi.spyOn(Scheduler.prototype, 'onModuleDestroy')
-    const closing = vi.spyOn(Database.prototype, 'onModuleDestroy')
-    try {
-      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 10 }), { logger: false })
-      await worker.close()
-      const [stopped] = stopping.mock.invocationCallOrder
-      const [closed] = closing.mock.invocationCallOrder
-      assert(stopped !== undefined && closed !== undefined)
-      expect(stopped).toBeLessThan(closed)
-    } finally {
-      stopping.mockRestore()
-      closing.mockRestore()
-    }
-  })
-
   it('leaves an attempt whose answer it refused for a person, instead of asking again forever', async () => {
     const key = randomUUID()
     expect((await call('POST', '/v1/payments', { key, body: pay('tok_wrong_amount_capture') })).body).toMatchObject({ error: { code: 'psp_answer_rejected' } })
@@ -248,5 +232,23 @@ describe('the recovery job', () => {
     expect(violations(await checkLedger(stack.admin))).toEqual([])
     expect(violations(await checkPayments(stack.admin))).toEqual([])
     expect(violations([await checkAgainstPsp(stack.admin, stack.pspSql)])).toEqual([])
+  })
+})
+
+describe('the worker', () => {
+  it('stops its loops before the database pools close when the worker shuts down', async () => {
+    const stopping = vi.spyOn(Scheduler.prototype, 'onModuleDestroy')
+    const closing = vi.spyOn(Database.prototype, 'onModuleDestroy')
+    try {
+      const worker = await NestFactory.createApplicationContext(WorkerModule.register({ ...stack.config, recoveryEveryMs: 10 }), { logger: false })
+      await worker.close()
+      const [stopped] = stopping.mock.invocationCallOrder
+      const [closed] = closing.mock.invocationCallOrder
+      assert(stopped !== undefined && closed !== undefined)
+      expect(stopped).toBeLessThan(closed)
+    } finally {
+      stopping.mockRestore()
+      closing.mockRestore()
+    }
   })
 })

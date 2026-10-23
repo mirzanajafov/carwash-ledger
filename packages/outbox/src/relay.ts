@@ -147,11 +147,11 @@ export class Relay {
 }
 
 export function pruneOutbox(db: Queryable, retentionHours: number, batch = 5000): Promise<number> {
-  return deleteInBatches(
-    db,
-    `DELETE FROM outbox WHERE id IN (
-       SELECT id FROM outbox WHERE published_at < now() - make_interval(hours => $1) ORDER BY id LIMIT $2)`,
-    [retentionHours],
-    batch,
+  return deleteInBatches(batch, (limit) =>
+    db.query(
+      `DELETE FROM outbox WHERE id IN (
+         SELECT id FROM outbox WHERE published_at < now() - make_interval(hours => $1) ORDER BY id LIMIT $2)`,
+      [retentionHours, limit],
+    ),
   )
 }

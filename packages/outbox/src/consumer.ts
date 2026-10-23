@@ -1,6 +1,6 @@
 import type { KafkaJS } from '@confluentinc/kafka-javascript'
 import { failpoint } from '@carwash/failpoints'
-import { exponentialBackoff, retryLoop } from '@carwash/jobs'
+import { exponentialBackoff, Failures, pause } from '@carwash/jobs'
 import { deleteInBatches, withTransaction, type Queryable, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 import { Envelope, type Topic } from './events.ts'
@@ -109,19 +109,25 @@ export class EventConsumer {
   }
 
   async #applyUntilDone(events: readonly ConsumedEvent[]): Promise<void> {
-    const apply = () => applyOnce(this.#pool, this.#spec, events)
-    const applied = await retryLoop(this.#spec.name, apply, exponentialBackoff, { signal: this.#stop.signal, log: this.#log, logEvery: 50 })
-    if (applied === undefined) throw new Error(`${this.#spec.name} stopped before it applied the batch`)
-    this.applied += applied
+    const failures = new Failures(this.#spec.name, this.#log, 50)
+    for (;;) {
+      try {
+        this.applied += await applyOnce(this.#pool, this.#spec, events)
+        return
+      } catch (error) {
+        if (this.#stop.signal.aborted) throw error
+        await pause(exponentialBackoff(failures.record(error)), this.#stop.signal)
+      }
+    }
   }
 }
 
 export function pruneInbox(db: Queryable, retentionDays: number, batch = 5000): Promise<number> {
-  return deleteInBatches(
-    db,
-    `DELETE FROM inbox WHERE ctid IN (
-       SELECT ctid FROM inbox WHERE received_at < now() - make_interval(days => $1) LIMIT $2)`,
-    [retentionDays],
-    batch,
+  return deleteInBatches(batch, (limit) =>
+    db.query(
+      `DELETE FROM inbox WHERE ctid IN (
+         SELECT ctid FROM inbox WHERE received_at < now() - make_interval(days => $1) LIMIT $2)`,
+      [retentionDays, limit],
+    ),
   )
 }

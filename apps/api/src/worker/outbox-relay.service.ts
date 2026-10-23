@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
-import { linearBackoff, retryLoop } from '@carwash/jobs'
+import { linearBackoff, retryUntilStopped } from '@carwash/jobs'
 import { ensureTopics, kafkaClient, KafkaPublisher, Relay, topicSpecs } from '@carwash/outbox'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -49,7 +49,11 @@ export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
         throw error
       }
     }
-    await retryLoop('cannot reach Kafka yet', start, linearBackoff, { signal: this.#stop.signal, log: (message) => this.#logger.warn(message), logEvery: 30 })
+    await retryUntilStopped('cannot reach Kafka yet', linearBackoff, start, {
+      signal: this.#stop.signal,
+      log: (message) => this.#logger.warn(message),
+      logEvery: 30,
+    })
   }
 
   async #startRelay(brokers: string[]): Promise<void> {

@@ -208,6 +208,9 @@ importers:
       '@carwash/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@carwash/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@carwash/pg':
         specifier: workspace:*
         version: link:../../packages/pg

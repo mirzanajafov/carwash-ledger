@@ -187,13 +187,13 @@ export class IdempotencyService {
     if (deleted.rowCount === 0) await this.release(owned)
   }
 
-  sweep(batch = 1000): Promise<number> {
-    return deleteInBatches(
-      this.#db.pool,
-      `DELETE FROM idempotency_keys WHERE (client_id, key) IN (
-         SELECT client_id, key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
-      [this.#config.idempotencyWindowSeconds],
-      batch,
+  sweep(): Promise<number> {
+    return deleteInBatches(1000, (limit) =>
+      this.#db.pool.query(
+        `DELETE FROM idempotency_keys WHERE (client_id, key) IN (
+           SELECT client_id, key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
+        [this.#config.idempotencyWindowSeconds, limit],
+      ),
     )
   }
 }

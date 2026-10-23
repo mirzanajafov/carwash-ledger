@@ -203,13 +203,13 @@ export class Psp {
     return operationJson(rows[0])
   }
 
-  sweepExpiredKeys(batch = 1000): Promise<number> {
-    return deleteInBatches(
-      this.#pool,
-      `DELETE FROM idempotency_keys WHERE key IN (
-         SELECT key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
-      [this.#settings.idempotencyWindowSeconds],
-      batch,
+  sweepExpiredKeys(): Promise<number> {
+    return deleteInBatches(1000, (limit) =>
+      this.#pool.query(
+        `DELETE FROM idempotency_keys WHERE key IN (
+           SELECT key FROM idempotency_keys WHERE created_at <= now() - make_interval(secs => $1) LIMIT $2)`,
+        [this.#settings.idempotencyWindowSeconds, limit],
+      ),
     )
   }
 

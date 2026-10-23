@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
-import { linearBackoff, retryLoop } from '@carwash/jobs'
+import { linearBackoff, retryUntilStopped } from '@carwash/jobs'
 import { EventConsumer, ensureTopics, kafkaClient, topicSpecs } from '@carwash/outbox'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -41,7 +41,7 @@ export class EventConsumers implements OnApplicationBootstrap, OnModuleDestroy {
     const brokers = [...this.#config.kafkaBrokers]
     const prefix = this.#config.kafkaTopicPrefix
     const kafka = kafkaClient({ brokers, clientId: 'carwash-consumers' })
-    await retryLoop('cannot start the consumers yet', () => this.#startConsumers(kafka, prefix), linearBackoff, {
+    await retryUntilStopped('cannot start the consumers yet', linearBackoff, () => this.#startConsumers(kafka, prefix), {
       signal: this.#stop.signal,
       log: (message) => this.#logger.warn(message),
       logEvery: 30,

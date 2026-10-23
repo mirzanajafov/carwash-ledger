@@ -1,6 +1,6 @@
-import { setTimeout as sleep } from 'node:timers/promises'
 import { restore, tamper, type TamperClass, type Tampered } from '@carwash/audit-pg'
 import type { TamperView } from '@carwash/contracts'
+import { Failures, pause } from '@carwash/jobs'
 import { firstRow, withTransaction, type Queryable, type Transaction } from '@carwash/pg'
 import type pg from 'pg'
 
@@ -91,19 +91,18 @@ export class TamperService {
 
   async restoreWhenDue(signal: AbortSignal): Promise<void> {
     if (this.#autoRestoreMs <= 0) return
-    let failures = 0
+    const failures = new Failures('tamper: the automatic restore failed', (message) => process.stderr.write(`${message}\n`), 50)
     while (!signal.aborted) {
       let waitMs = CHECK_EVERY_MS
       try {
         const dueInMs = await msUntilDue(this.#pool, this.#autoRestoreMs)
         if (dueInMs === 0) await this.#serial(() => this.#restore((client) => lockDueUndo(client, this.#autoRestoreMs)))
         else if (dueInMs !== undefined) waitMs = Math.min(dueInMs, CHECK_EVERY_MS)
-        failures = 0
+        failures.clear()
       } catch (error) {
-        failures++
-        if (failures === 1 || failures % 50 === 0) process.stderr.write(`tamper: the automatic restore failed ${failures} times in a row: ${String(error)}\n`)
+        failures.record(error)
       }
-      await sleep(waitMs, undefined, { signal }).catch(() => undefined)
+      await pause(waitMs, signal)
     }
   }
 

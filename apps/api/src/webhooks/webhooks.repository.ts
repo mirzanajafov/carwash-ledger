@@ -39,12 +39,12 @@ export async function markWebhookChecked(db: Queryable, id: string, outcome: Web
   await db.query(`UPDATE webhook_events SET outcome = $2, attempt_id = $3, checks = checks + 1, checked_at = now() WHERE id = $1`, [id, outcome, attemptId])
 }
 
-export function pruneWebhookEvents(db: Queryable, retentionDays: number, batch = 1000): Promise<number> {
-  return deleteInBatches(
-    db,
-    `DELETE FROM webhook_events WHERE id IN (
-       SELECT id FROM webhook_events WHERE received_at <= now() - make_interval(days => $1) LIMIT $2)`,
-    [retentionDays],
-    batch,
+export function pruneWebhookEvents(db: Queryable, retentionDays: number): Promise<number> {
+  return deleteInBatches(1000, (limit) =>
+    db.query(
+      `DELETE FROM webhook_events WHERE id IN (
+         SELECT id FROM webhook_events WHERE received_at <= now() - make_interval(days => $1) LIMIT $2)`,
+      [retentionDays, limit],
+    ),
   )
 }

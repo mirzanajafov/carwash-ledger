@@ -13,7 +13,7 @@ import { SettlementModule } from '../settlement/settlement.module.ts'
 import { WebhooksModule } from '../webhooks/webhooks.module.ts'
 import { OutboxRelay } from './outbox-relay.service.ts'
 import { Recovery } from './recovery.service.ts'
-import { Scheduler } from './scheduler.ts'
+import { Scheduler } from './scheduler.service.ts'
 
 @Module({})
 export class WorkerModule {

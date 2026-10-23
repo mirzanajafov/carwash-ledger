@@ -54,14 +54,19 @@ export async function runEvery(label: string, intervalMs: number, task: () => Pr
   }
 }
 
-export async function retryLoop<T>(label: string, task: () => Promise<T>, delayMs: (failures: number) => number, options: LoopOptions): Promise<T | undefined> {
+export async function retryUntilStopped(
+  label: string,
+  delayMs: (failures: number) => number,
+  task: () => Promise<unknown>,
+  options: LoopOptions,
+): Promise<void> {
   const failures = new Failures(label, options.log, options.logEvery)
   while (!options.signal.aborted) {
     try {
-      return await task()
+      await task()
+      return
     } catch (error) {
       await pause(delayMs(failures.record(error)), options.signal)
     }
   }
-  return undefined
 }
