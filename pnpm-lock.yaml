@@ -428,9 +428,15 @@ importers:
       '@prisma/client':
         specifier: ^7.10.0
         version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^18.0.3
+        version: 18.0.6
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      prisma:
+        specifier: ^7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -438,12 +444,6 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
-      dotenv:
-        specifier: ^18.0.3
-        version: 18.0.6
-      prisma:
-        specifier: ^7.10.0
-        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
