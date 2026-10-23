@@ -3,6 +3,7 @@ import { finished } from 'node:stream/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { nonNegativeInteger, positiveInteger } from '@carwash/env'
 import { appendJsonLine, createResultsDir, writeJson } from '@carwash/lab'
 import type { BalanceMode } from '@carwash/ledger'
 import { prepareTemplate } from '@carwash/testkit'
@@ -10,7 +11,7 @@ import { describeLedgerRun, runLedger, summarizeLedger, type Lab, type LedgerOpt
 import { describePaymentsRun, runPayments, summarizePayments, type PaymentsOptions, type PaymentsReport } from './payments/run.ts'
 import { LocalKafka } from './kafka.ts'
 import { createRoles, LocalPostgres } from './postgres.ts'
-import { campaignFailed } from './results.ts'
+import { campaignFailed } from './campaign.ts'
 import { Toxiproxy } from './toxiproxy.ts'
 
 const { values } = parseArgs({
@@ -66,10 +67,10 @@ const ledgerOptions: LedgerOptions = {
   ...common,
   rate: Number(values.rate ?? 150),
   posters: Number(values.posters),
-  pool: Number(values.pool),
+  pool: positiveInteger({ pool: values.pool }, 'pool', 8),
   reversalShare: Number(values.reversals),
   failpointProbability: Number(values.failpoints ?? 0.001),
-  snapshotMs: Number(values['snapshot-ms']),
+  snapshotMs: nonNegativeInteger({ 'snapshot-ms': values['snapshot-ms'] }, 'snapshot-ms', 100),
   receivable: values.receivable as BalanceMode,
   fees: values.fees as BalanceMode,
   shards: Number(values.shards),

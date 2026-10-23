@@ -1,7 +1,8 @@
-import { mulberry32, type Random } from '@carwash/lab'
+import { PROGRAMS } from '@carwash/contracts'
+import { mulberry32, pick, type Random } from '@carwash/lab'
 import { contractFee, type FeeContract, type FileLine, type Kind, type LedgerItem } from '@carwash/recon'
 
-export const PRICES = [900n, 1500n, 2400n, 3500n, 4900n] as const
+export const PRICES = PROGRAMS.map((program) => BigInt(program.price))
 
 export const FAULTS = ['nextDay', 'feeDifference', 'wrongAmount', 'missingLine', 'duplicateLine', 'droppedReference'] as const
 
@@ -86,8 +87,7 @@ export function generate(options: GeneratorOptions): World {
   for (let day = 0; day < options.days; day++) {
     for (let n = 0; n < options.perDay; n++) {
       const at = day * DAY_MS + Math.floor(random() * DAY_MS)
-      const price = PRICES[Math.floor(random() * PRICES.length)]
-      if (price === undefined) throw new Error('there is no price to pick')
+      const price = pick(random, PRICES)
       const captured = random() < options.partialShare ? price / 2n + BigInt(Math.floor(random() * Number(price / 2n))) : price
       add('capture', captured, at, `cap-${day}-${n}`)
       if (random() < options.refundShare) {

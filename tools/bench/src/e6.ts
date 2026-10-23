@@ -20,7 +20,7 @@ import {
   type WitnessAnchor,
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
-import { appendJsonLine, createResultsDir, distribution, median, mulberry32, pick, tenths, writeJson } from '@carwash/lab'
+import { appendJsonLine, createResultsDir, distribution, median, mulberry32, pick, tenths, writeJson, type Random } from '@carwash/lab'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
 import { firstRow, inRollback, inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
@@ -169,7 +169,7 @@ async function sizes(lab: Lab) {
   return Object.fromEntries(rows.map((r) => [r.name, Number(r.bytes)]))
 }
 
-async function proofs(lab: Lab, size: number, count: number, random: () => number) {
+async function proofs(lab: Lab, size: number, count: number, random: Random) {
   const ms: number[] = []
   const lengths: number[] = []
   for (let i = 0; i < count; i++) {

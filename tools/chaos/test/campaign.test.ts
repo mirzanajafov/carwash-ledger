@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { campaignFailed } from '../src/results.ts'
+import { campaignFailed } from '../src/campaign.ts'
 
 describe('a campaign that should fail CI', () => {
   it('fails on any run with a violation or any harness error, and passes a clean one', () => {

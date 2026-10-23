@@ -1,3 +1,4 @@
+import { PROGRAMS } from '@carwash/contracts'
 import { between, mulberry32, pick, type Random } from '@carwash/lab'
 import { arrivals, TOXIC_KINDS, type ToxicKind } from '../plan.ts'
 
@@ -17,7 +18,7 @@ const PROXY_WEIGHTS: Record<ProxyName, number> = {
   witness: 0.1,
 }
 
-export const PRICES = [900, 1500, 2400, 3500, 4900] as const
+export const PRICES = PROGRAMS.map((program) => program.price)
 
 export interface PaymentJourney {
   at: number

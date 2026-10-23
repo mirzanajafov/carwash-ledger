@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { nonNegativeInteger } from '@carwash/env'
 import { appendJsonLine, createResultsDir, median, mulberry32, percentile, pick, writeJson } from '@carwash/lab'
 import { ensureTopics, kafkaClient, topicSpecs, writeEvent } from '@carwash/outbox'
 import { firstRow, withTransaction } from '@carwash/pg'
@@ -30,6 +31,8 @@ const { values } = parseArgs({
     out: { type: 'string', default: 'results/e4' },
   },
 })
+
+const pauseMs = nonNegativeInteger({ pause: values.pause }, 'pause', 10)
 
 const HERE = fileURLToPath(new URL('.', import.meta.url))
 const BROKERS = values.brokers.split(',')
@@ -114,7 +117,7 @@ async function openLab(name: string): Promise<Lab> {
   await owner.query('GRANT SELECT, INSERT ON e4_consumed TO ledger_app')
   const prefix = `e4-${Date.now()}-${name}.`
   await ensureTopics(kafka, topicSpecs(prefix))
-  const env = { ...process.env, E4_DB_URL: db.url('ledger_app'), E4_BROKERS: BROKERS.join(','), E4_PREFIX: prefix, E4_PAUSE_MS: values.pause }
+  const env = { ...process.env, E4_DB_URL: db.url('ledger_app'), E4_BROKERS: BROKERS.join(','), E4_PREFIX: prefix, E4_PAUSE_MS: String(pauseMs) }
   const relay = child('e4-relay.ts', env)
   const consumer = child('e4-consumer.ts', env)
   await Promise.all([relay.ready, consumer.ready])

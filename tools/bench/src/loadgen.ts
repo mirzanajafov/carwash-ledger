@@ -47,7 +47,7 @@ export function poissonSchedule(rate: number, totalMs: number, seed: number): Fl
   return Float64Array.from(times)
 }
 
-function distribution(values: number[]): Distribution {
+function quantiles(values: number[]): Distribution {
   const sorted = Float64Array.from(values).sort()
   return {
     p50: percentile(sorted, 50),
@@ -144,8 +144,8 @@ export async function runOpenLoop(options: LoadOptions): Promise<LoadResult> {
     errors,
     dropped,
     achievedPerSecond: completedInWindow / (options.durationMs / 1000),
-    latencyMs: distribution(latencies),
-    lagMs: distribution(lags),
+    latencyMs: quantiles(latencies),
+    lagMs: quantiles(lags),
     generatorCpuPercent: ((cpu.user + cpu.system) / 1000 / Math.max(1, wallAtEnd - wallAtStart)) * 100,
     ...(firstError === undefined ? {} : { firstError }),
   }

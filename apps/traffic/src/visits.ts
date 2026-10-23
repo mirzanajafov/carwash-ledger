@@ -1,5 +1,5 @@
 import { PROGRAMS } from '@carwash/contracts'
-import { pick, type Random } from '@carwash/lab'
+import { exponential, pick, type Random } from '@carwash/lab'
 
 export interface Visit {
   program: string
@@ -29,5 +29,5 @@ export function visit(random: Random, merchants: readonly string[]): Visit {
 }
 
 export function gapMs(random: Random, perMinute: number): number {
-  return (-Math.log(1 - random()) / perMinute) * 60_000
+  return exponential(random, 60_000 / perMinute)
 }

@@ -1,5 +1,5 @@
 import { writeSync } from 'node:fs'
-import { positiveInteger, required } from '@carwash/env'
+import { optional, positiveInteger, required } from '@carwash/env'
 import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
 import {
   AccountRegistry,
@@ -22,7 +22,7 @@ const pool = createPool({
 })
 const poster = new PgCtePoster(pool, new AccountRegistry(pgAccountLoader(pool)))
 
-armFailpoints(parseFailpoints(process.env.CHAOS_FAILPOINTS ?? ''), (name) => {
+armFailpoints(parseFailpoints(optional(process.env, 'CHAOS_FAILPOINTS') ?? ''), (name) => {
   writeSync(2, `failpoint ${name}\n`)
   process.kill(process.pid, 'SIGKILL')
 })

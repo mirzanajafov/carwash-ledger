@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
 import { checkLedger, violations } from '@carwash/invariants'
-import { createResultsDir, distribution, mulberry32, tenths, writeJson } from '@carwash/lab'
+import { createResultsDir, distribution, mulberry32, tenths, writeJson, type Random } from '@carwash/lab'
 import { AccountRegistry, backfillEntryCurrency, PgCtePoster, pgAccountLoader, type BackfillResult } from '@carwash/ledger'
 import { createPool, firstRow } from '@carwash/pg'
 import { createTestDatabase, migrationNames, migrationSql, prepareTemplate, type TestDatabase } from '@carwash/testkit'
@@ -62,7 +62,7 @@ class Load {
   readonly #accounts: SeedAccounts
   readonly #rate: number
   readonly #maxInFlight: number
-  readonly #random: () => number
+  readonly #random: Random
   readonly #prefix: string
   readonly #recent: Request[] = []
   #inFlight = 0
@@ -293,6 +293,7 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
     const bins = Array.from({ length: seconds }, (_, s) => {
       const inBin = load.requests.filter((r) => Math.floor(r.at / 1000) === s)
       const ok = inBin.filter((r) => r.error === null).map((r) => r.ms)
+      const okMs = distribution(ok)
       const errors: Record<string, number> = {}
       for (const r of inBin) if (r.error !== null) errors[r.error] = (errors[r.error] ?? 0) + 1
       const lock = samples.filter((x) => Math.floor(x.at / 1000) === s)
@@ -301,14 +302,14 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
         requests: inBin.length,
         ok: ok.length,
         errors,
-        p50: tenths(distribution(ok).p50),
-        p99: tenths(distribution(ok).p99),
+        p50: tenths(okMs.p50),
+        p99: tenths(okMs.p99),
         longestLockMs: Math.max(0, ...lock.map((x) => x.longestMs)),
         waiting: Math.max(0, ...lock.map((x) => x.waiting)),
       }
     })
     const during = load.requests.filter((r) => r.at >= changeStarted && r.at < changeEnded)
-    const duringOk = during.filter((r) => r.error === null).map((r) => r.ms)
+    const duringMs = distribution(during.filter((r) => r.error === null).map((r) => r.ms))
     const result = {
       procedure: name,
       changeMs: Math.round(changeEnded - changeStarted),
@@ -325,9 +326,9 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
         requests: during.length,
         errors: during.filter((r) => r.error !== null).length,
         errorRate: during.length > 0 ? tenths((100 * during.filter((r) => r.error !== null).length) / during.length) / 100 : 0,
-        p50: tenths(distribution(duringOk).p50),
-        p99: tenths(distribution(duringOk).p99),
-        max: tenths(distribution(duringOk).max),
+        p50: tenths(duringMs.p50),
+        p99: tenths(duringMs.p99),
+        max: tenths(duringMs.max),
       },
       longestLockWaitMs: Math.max(0, ...samples.map((x) => x.longestMs)),
       walBytes: await walBytes(admin, before.lsn, after.lsn),

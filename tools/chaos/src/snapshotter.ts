@@ -1,6 +1,6 @@
 import { writeSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { positiveInteger, required } from '@carwash/env'
+import { nonNegativeInteger, optional, required } from '@carwash/env'
 import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
 import { takeSnapshots } from '@carwash/ledger'
 import { createPool } from '@carwash/pg'
@@ -12,9 +12,9 @@ const pool = createPool({
   connectionTimeoutMillis: 3000,
   query_timeout: 5000,
 })
-const everyMs = positiveInteger(process.env, 'CHAOS_SNAPSHOT_MS', 100)
+const everyMs = nonNegativeInteger(process.env, 'CHAOS_SNAPSHOT_MS', 100)
 
-armFailpoints(parseFailpoints(process.env.CHAOS_FAILPOINTS ?? ''), (name) => {
+armFailpoints(parseFailpoints(optional(process.env, 'CHAOS_FAILPOINTS') ?? ''), (name) => {
   writeSync(2, `failpoint ${name}\n`)
   process.kill(process.pid, 'SIGKILL')
 })

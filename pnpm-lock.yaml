@@ -679,6 +679,9 @@ importers:
       '@carwash/audit-pg':
         specifier: workspace:*
         version: link:../../packages/audit-pg
+      '@carwash/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@carwash/db':
         specifier: workspace:*
         version: link:../../packages/db
