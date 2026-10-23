@@ -2,12 +2,12 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
 import { checkLedger, violations } from '@carwash/invariants'
+import { createResultsDir, distribution, mulberry32, tenths, writeJson } from '@carwash/lab'
 import { AccountRegistry, backfillEntryCurrency, PgCtePoster, pgAccountLoader, type BackfillResult } from '@carwash/ledger'
 import { createPool, firstRow } from '@carwash/pg'
 import { createTestDatabase, migrationNames, migrationSql, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import pg from 'pg'
-import { createResultsDir, describeEnvironment, percentile, writeJson } from './env.ts'
-import { mulberry32 } from './loadgen.ts'
+import { describeEnvironment } from './environment.ts'
 import { createSeedAccounts, grossOf, MERCHANTS, seedJournals, type SeedAccounts } from './ledger-seed.ts'
 
 const { values } = parseArgs({
@@ -47,15 +47,6 @@ interface Sample {
 interface Mark {
   at: number
   what: string
-}
-
-function stats(xs: readonly number[]) {
-  const sorted = Float64Array.from(xs).sort()
-  return { n: sorted.length, p50: percentile(sorted, 50), p99: percentile(sorted, 99), max: sorted.at(-1) ?? Number.NaN }
-}
-
-function round(x: number): number {
-  return Math.round(x * 10) / 10
 }
 
 function migration(step: 'expand' | 'check' | 'validate' | 'finish'): string {
@@ -115,7 +106,7 @@ class Load {
   recentP99(windowMs: number): number {
     const from = this.now() - windowMs
     while (this.#recent[0] !== undefined && this.#recent[0].end < from) this.#recent.shift()
-    return stats(this.#recent.map((r) => r.ms)).p99
+    return distribution(this.#recent.map((r) => r.ms)).p99
   }
 
   #fire(at: number): void {
@@ -168,7 +159,7 @@ function perCall(from: Record<string, { calls: number; ms: number }>, to: Record
     FUNCTIONS.map((name) => {
       const calls = (to[name]?.calls ?? 0) - (from[name]?.calls ?? 0)
       const ms = (to[name]?.ms ?? 0) - (from[name]?.ms ?? 0)
-      return [name, { calls, usPerCall: calls > 0 ? round((ms * 1000) / calls) : null }]
+      return [name, { calls, usPerCall: calls > 0 ? tenths((ms * 1000) / calls) : null }]
     }),
   )
 }
@@ -255,7 +246,7 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
     load.start()
     mark('load')
     await sleep(Number(values.before) * 1000)
-    const baseline = stats(load.requests.filter((r) => r.error === null && r.at >= 5000).map((r) => r.ms))
+    const baseline = distribution(load.requests.filter((r) => r.error === null && r.at >= 5000).map((r) => r.ms))
     const atChange = await functionStats(admin)
     const changeStarted = load.now()
     mark('change')
@@ -310,8 +301,8 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
         requests: inBin.length,
         ok: ok.length,
         errors,
-        p50: round(stats(ok).p50),
-        p99: round(stats(ok).p99),
+        p50: tenths(distribution(ok).p50),
+        p99: tenths(distribution(ok).p99),
         longestLockMs: Math.max(0, ...lock.map((x) => x.longestMs)),
         waiting: Math.max(0, ...lock.map((x) => x.waiting)),
       }
@@ -329,14 +320,14 @@ async function procedure(name: string, base: TestDatabase, accounts: SeedAccount
         workMs: Math.round(backfill.workMs),
         pausedMs: Math.round(backfill.pausedMs),
       },
-      baseline: { p50: round(baseline.p50), p99: round(baseline.p99) },
+      baseline: { p50: tenths(baseline.p50), p99: tenths(baseline.p99) },
       duringChange: {
         requests: during.length,
         errors: during.filter((r) => r.error !== null).length,
-        errorRate: during.length > 0 ? round((100 * during.filter((r) => r.error !== null).length) / during.length) / 100 : 0,
-        p50: round(stats(duringOk).p50),
-        p99: round(stats(duringOk).p99),
-        max: round(stats(duringOk).max),
+        errorRate: during.length > 0 ? tenths((100 * during.filter((r) => r.error !== null).length) / during.length) / 100 : 0,
+        p50: tenths(distribution(duringOk).p50),
+        p99: tenths(distribution(duringOk).p99),
+        max: tenths(distribution(duringOk).max),
       },
       longestLockWaitMs: Math.max(0, ...samples.map((x) => x.longestMs)),
       walBytes: await walBytes(admin, before.lsn, after.lsn),

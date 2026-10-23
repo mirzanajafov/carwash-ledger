@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { errorOf } from '@carwash/contracts'
 import { canonicalJson } from '@carwash/http'
-import type { Random } from '../random.ts'
+import type { Random } from '@carwash/lab'
 
 export type RequestKind = 'create' | 'capture' | 'cancel' | 'refund' | 'payout' | 'merchant' | 'probe'
 

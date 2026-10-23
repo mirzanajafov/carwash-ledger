@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { gapMs, mulberry32, PROGRAMS, visit } from '../src/visits.ts'
+import { PROGRAMS } from '@carwash/contracts'
+import { mulberry32 } from '@carwash/lab'
+import { gapMs, visit } from '../src/visits.ts'
 
 describe('the car wash visits', () => {
   it('sells the five programs, captures most at once, and refunds a few for less than they paid', () => {

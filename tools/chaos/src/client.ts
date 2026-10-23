@@ -1,5 +1,5 @@
+import type { Random } from '@carwash/lab'
 import type { EntrySpec, Outcome } from './messages.ts'
-import type { Random } from './random.ts'
 
 export interface Op {
   ref: string

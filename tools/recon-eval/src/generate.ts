@@ -1,3 +1,4 @@
+import { mulberry32, type Random } from '@carwash/lab'
 import { contractFee, type FeeContract, type FileLine, type Kind, type LedgerItem } from '@carwash/recon'
 
 export const PRICES = [900n, 1500n, 2400n, 3500n, 4900n] as const
@@ -29,18 +30,7 @@ export interface World {
 
 export const DAY_MS = 86_400_000
 
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-function pickFault(random: () => number, rates: Record<Fault, number>): Fault | null {
+function pickFault(random: Random, rates: Record<Fault, number>): Fault | null {
   let draw = random()
   for (const fault of FAULTS) {
     if (draw < rates[fault]) return fault

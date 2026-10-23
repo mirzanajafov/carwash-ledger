@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@carwash/contracts": "workspace:*",
+    "@carwash/lab": "workspace:*",
     "@carwash/recon": "workspace:*"
   },
   "devDependencies": {

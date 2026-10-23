@@ -1,18 +1,18 @@
+import { nonNegativeInteger, required } from '@carwash/env'
 import { createPool } from '@carwash/pg'
 import { KafkaPublisher, Relay } from '@carwash/outbox'
 
-const url = process.env.E4_DB_URL
-const brokers = process.env.E4_BROKERS
-const prefix = process.env.E4_PREFIX
-if (!url || !brokers || !prefix) throw new Error('E4_DB_URL, E4_BROKERS and E4_PREFIX are required')
+const url = required(process.env, 'E4_DB_URL')
+const brokers = required(process.env, 'E4_BROKERS').split(',')
+const prefix = required(process.env, 'E4_PREFIX')
 const pool = createPool({ connectionString: url, max: 8 })
 const publisher = await KafkaPublisher.connect({
-  brokers: brokers.split(','),
+  brokers,
   clientId: 'e4-relay',
   deliveryTimeoutMs: 10_000,
   topicPrefix: prefix,
 })
-const relay = new Relay(pool, publisher, { workers: 4, batch: 500, pollMs: 50, pauseMs: Number(process.env.E4_PAUSE_MS ?? 10) }, (message) =>
+const relay = new Relay(pool, publisher, { workers: 4, batch: 500, pollMs: 50, pauseMs: nonNegativeInteger(process.env, 'E4_PAUSE_MS', 10) }, (message) =>
   console.log(`e4-relay: ${message}`),
 )
 relay.start()

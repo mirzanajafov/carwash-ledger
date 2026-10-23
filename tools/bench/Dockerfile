@@ -14,6 +14,7 @@ COPY packages/outbox/package.json packages/outbox/
 COPY packages/pg/package.json packages/pg/
 COPY packages/invariants/package.json packages/invariants/
 COPY packages/jobs/package.json packages/jobs/
+COPY packages/lab/package.json packages/lab/
 COPY packages/testkit/package.json packages/testkit/
 COPY apps/witness/package.json apps/witness/
 COPY tools/bench/package.json tools/bench/

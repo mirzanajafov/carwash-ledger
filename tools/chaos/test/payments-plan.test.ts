@@ -1,6 +1,6 @@
+import { mulberry32 } from '@carwash/lab'
 import { describe, expect, it } from 'vitest'
 import { planPayments, PRICES, PROXIES, SERVICES, split, type PaymentsPlanOptions } from '../src/payments/plan.ts'
-import { mulberry32 } from '../src/random.ts'
 
 const options: PaymentsPlanOptions = {
   seed: 3,

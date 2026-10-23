@@ -20,14 +20,15 @@ import {
   type WitnessAnchor,
 } from '@carwash/audit-pg'
 import { checkLedger, violations } from '@carwash/invariants'
+import { appendJsonLine, createResultsDir, distribution, median, mulberry32, pick, tenths, writeJson } from '@carwash/lab'
 import { AccountRegistry, PgCtePoster, pgAccountLoader } from '@carwash/ledger'
 import { firstRow, inRollback, inSnapshot, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import { createWitnessServer, Witness } from '@carwash/witness'
 import type pg from 'pg'
-import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
+import { describeEnvironment } from './environment.ts'
 import { createSeedAccounts, grossOf, seedJournals, type SeedAccounts } from './ledger-seed.ts'
-import { mulberry32, pick, runOpenLoop } from './loadgen.ts'
+import { runOpenLoop } from './loadgen.ts'
 
 const { values } = parseArgs({
   options: {
@@ -61,15 +62,6 @@ interface Lab {
 
 interface Timing {
   ms: number
-}
-
-function stats(xs: readonly number[]) {
-  const sorted = Float64Array.from(xs).sort()
-  return { n: sorted.length, p50: percentile(sorted, 50), p99: percentile(sorted, 99), max: sorted.at(-1) ?? Number.NaN }
-}
-
-function round(x: number): number {
-  return Math.round(x * 10) / 10
 }
 
 function timed<C extends pg.ClientBase>(client: C, clock: Timing): C {
@@ -146,7 +138,7 @@ async function sequenceAll(lab: Lab, checkpointEvery: number, closeWithCheckpoin
       const outcome = await lab.checkpointer.run()
       const ms = performance.now() - at
       checkpointMs += ms
-      checkpoints.push({ size, ms: round(ms), kind: outcome.kind })
+      checkpoints.push({ size, ms: tenths(ms), kind: outcome.kind })
       while (nextCheckpoint <= size) nextCheckpoint += checkpointEvery
     }
     if (sequenced === 0) break
@@ -189,7 +181,7 @@ async function proofs(lab: Lab, size: number, count: number, random: () => numbe
   }
   return {
     size,
-    ms: stats(ms),
+    ms: distribution(ms),
     hashes: { min: Math.min(...lengths), max: Math.max(...lengths) },
     bytes: { min: 32 * Math.min(...lengths), max: 32 * Math.max(...lengths) },
   }
@@ -272,7 +264,7 @@ async function lag(dir: string) {
       if (performance.now() - lastCheckpoint >= 10_000) {
         lastCheckpoint = performance.now()
         const outcome = await lab.checkpointer.run()
-        if (outcome.kind === 'signed') checkpoints.push({ size: outcome.size, ms: round(performance.now() - lastCheckpoint) })
+        if (outcome.kind === 'signed') checkpoints.push({ size: outcome.size, ms: tenths(performance.now() - lastCheckpoint) })
       }
       await sleep(1000, undefined, { signal: stop.signal }).catch(() => undefined)
     }
@@ -309,9 +301,9 @@ async function lag(dir: string) {
        WHERE j.created_at >= $1::timestamptz + make_interval(secs => $2::double precision / 1000)`,
       [startedAt, warmupMs],
     )
-    const result = { load, lagMs: stats(rows.map((r) => r.ms)), checkpoints }
+    const result = { load, lagMs: distribution(rows.map((r) => r.ms)), checkpoints }
     writeJson(join(dir, 'lag.json'), result)
-    console.log(`lag at ${values.rate}/s: p50 ${round(result.lagMs.p50)} ms, p99 ${round(result.lagMs.p99)} ms, max ${round(result.lagMs.max)} ms`)
+    console.log(`lag at ${values.rate}/s: p50 ${tenths(result.lagMs.p50)} ms, p99 ${tenths(result.lagMs.p99)} ms, max ${tenths(result.lagMs.max)} ms`)
   } finally {
     stop.abort()
     await sequencer.catch(() => undefined)
@@ -359,7 +351,7 @@ async function trials(dir: string) {
           caught: withWitness.findings > 0,
           named: named(tamperClass, seq, withWitness),
           caughtWithoutWitness: without.findings > 0,
-          ms: round(ms),
+          ms: tenths(ms),
         }
         appendJsonLine(join(dir, 'trials.jsonl'), trial)
         const key = `class ${tamperClass}, ${inside ? 'covered' : 'above the last checkpoint'}`
@@ -372,7 +364,7 @@ async function trials(dir: string) {
       }
       console.log(`class ${tamperClass} done`)
     }
-    const result = Object.fromEntries(Object.entries(summary).map(([key, row]) => [key, { ...row, ms: stats(row.ms) }]))
+    const result = Object.fromEntries(Object.entries(summary).map(([key, row]) => [key, { ...row, ms: distribution(row.ms) }]))
     writeJson(join(dir, 'trials.json'), { size, checkpointEvery: every, covered, result })
     console.log(JSON.stringify(result, null, 2))
   } finally {

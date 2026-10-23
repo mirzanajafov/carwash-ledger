@@ -5,12 +5,13 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { appendJsonLine, createResultsDir, median, mulberry32, percentile, pick, writeJson } from '@carwash/lab'
 import { ensureTopics, kafkaClient, topicSpecs, writeEvent } from '@carwash/outbox'
 import { firstRow, withTransaction } from '@carwash/pg'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { appendJsonLine, createResultsDir, describeEnvironment, median, percentile, writeJson } from './env.ts'
-import { mulberry32, pick, runOpenLoop, type LoadResult } from './loadgen.ts'
+import { describeEnvironment } from './environment.ts'
+import { runOpenLoop, type LoadResult } from './loadgen.ts'
 
 const { values } = parseArgs({
   options: {

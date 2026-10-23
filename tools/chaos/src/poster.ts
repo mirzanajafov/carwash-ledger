@@ -1,4 +1,5 @@
 import { writeSync } from 'node:fs'
+import { positiveInteger, required } from '@carwash/env'
 import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
 import {
   AccountRegistry,
@@ -14,8 +15,8 @@ import { createPool } from '@carwash/pg'
 import { describeError, type FromWorker, type Outcome, type ToWorker } from './messages.ts'
 
 const pool = createPool({
-  connectionString: process.env.CHAOS_DB_URL,
-  max: Number(process.env.CHAOS_POOL ?? 8),
+  connectionString: required(process.env, 'CHAOS_DB_URL'),
+  max: positiveInteger(process.env, 'CHAOS_POOL', 8),
   connectionTimeoutMillis: 3000,
   query_timeout: 5000,
 })

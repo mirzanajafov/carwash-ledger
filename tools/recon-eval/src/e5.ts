@@ -1,7 +1,7 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { createResultsDir, writeJson } from '@carwash/lab'
 import type { Fallback } from '@carwash/recon'
 import { evaluate, type Evaluation } from './evaluate.ts'
 import { FAULTS, generate, type Fault } from './generate.ts'
@@ -79,15 +79,10 @@ const summary = [...groups.values()].map((group) => {
   }
 })
 
-const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
-const dir = join(fileURLToPath(new URL('..', import.meta.url)), values.out, stamp)
-mkdirSync(dir, { recursive: true })
-writeFileSync(
-  join(dir, 'run.json'),
-  `${JSON.stringify({ experiment: 'e5', options: values, contract: { bps: 120, fixed: 8 }, node: process.version }, null, 2)}\n`,
-)
-writeFileSync(join(dir, 'cells.json'), `${JSON.stringify(cells, null, 2)}\n`)
-writeFileSync(join(dir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
+const dir = createResultsDir(join(fileURLToPath(new URL('..', import.meta.url)), values.out))
+writeJson(join(dir, 'run.json'), { experiment: 'e5', options: values, contract: { bps: 120, fixed: 8 }, node: process.version })
+writeJson(join(dir, 'cells.json'), cells)
+writeJson(join(dir, 'summary.json'), summary)
 console.log(`writing to ${dir}`)
 for (const row of summary) {
   const rates = Object.entries(row.faults)

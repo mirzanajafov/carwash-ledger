@@ -1,17 +1,18 @@
 import { writeSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { positiveInteger, required } from '@carwash/env'
 import { armFailpoints, disarmFailpoints, parseFailpoints } from '@carwash/failpoints'
 import { takeSnapshots } from '@carwash/ledger'
 import { createPool } from '@carwash/pg'
 import { describeError, type FromWorker, type ToWorker } from './messages.ts'
 
 const pool = createPool({
-  connectionString: process.env.CHAOS_DB_URL,
+  connectionString: required(process.env, 'CHAOS_DB_URL'),
   max: 1,
   connectionTimeoutMillis: 3000,
   query_timeout: 5000,
 })
-const everyMs = Number(process.env.CHAOS_SNAPSHOT_MS ?? 100)
+const everyMs = positiveInteger(process.env, 'CHAOS_SNAPSHOT_MS', 100)
 
 armFailpoints(parseFailpoints(process.env.CHAOS_FAILPOINTS ?? ''), (name) => {
   writeSync(2, `failpoint ${name}\n`)

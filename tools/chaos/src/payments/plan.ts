@@ -1,5 +1,5 @@
+import { between, mulberry32, pick, type Random } from '@carwash/lab'
 import { arrivals, TOXIC_KINDS, type ToxicKind } from '../plan.ts'
-import { between, mulberry32, pick, type Random } from '../random.ts'
 
 export const SERVICES = ['api-0', 'api-1', 'worker', 'witness'] as const
 export type ServiceName = (typeof SERVICES)[number]

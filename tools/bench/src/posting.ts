@@ -2,11 +2,11 @@ import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
 import { createPrisma, type PrismaClient } from '@carwash/db'
+import { median, percentile, pick, writeResults } from '@carwash/lab'
 import { AccountRegistry, PgCtePoster, pgAccountLoader, type BalanceMode, type Poster } from '@carwash/ledger'
 import { createTestDatabase, prepareTemplate, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
-import { describeEnvironment, median, percentile, writeResults } from './env.ts'
-import { pick } from './loadgen.ts'
+import { describeEnvironment } from './environment.ts'
 import { PrismaApiPoster, PrismaCtePoster, PrismaSqlPoster } from './prisma-posters.ts'
 
 const VARIANTS = ['prisma-api', 'prisma-sql', 'prisma-cte', 'pg-cte'] as const

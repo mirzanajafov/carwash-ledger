@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { percentile, writeResults } from '@carwash/lab'
 import { createTestDatabase, prepareTemplate } from '@carwash/testkit'
-import { describeEnvironment, percentile, writeResults } from './env.ts'
+import { describeEnvironment } from './environment.ts'
 import { runPgbench } from './pgbench.ts'
 
 const { values } = parseArgs({

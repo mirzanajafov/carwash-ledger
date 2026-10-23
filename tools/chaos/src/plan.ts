@@ -1,4 +1,4 @@
-import { between, exponential, mulberry32, pick, type Random } from './random.ts'
+import { between, exponential, mulberry32, pick, type Random } from '@carwash/lab'
 
 export const TOXIC_KINDS = ['latency', 'timeout', 'reset_peer', 'limit_data', 'down'] as const
 
