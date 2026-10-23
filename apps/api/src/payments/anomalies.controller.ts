@@ -1,7 +1,7 @@
-import { Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query, Req } from '@nestjs/common'
+import { Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import type { AnomalyList, AnomalyView } from '@carwash/contracts'
 import { AdminOnly, type AuthedRequest } from '../auth/access.guard.ts'
-import { invalidInput } from '../domain-errors.ts'
+import { AnomaliesQuery, AnomalyParams } from '../http/dto.ts'
 import type { AnomalyRow } from './anomalies.repository.ts'
 import { AnomaliesService, acceptable } from './anomalies.service.ts'
 
@@ -40,22 +40,20 @@ export class AnomaliesController {
   }
 
   @Get()
-  async list(@Query('state') state = 'open', @Query('limit') limit = '50'): Promise<AnomalyList> {
-    if (state !== 'open' && state !== 'resolved') throw invalidInput('state must be open or resolved')
-    const n = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 200)
-    const rows = await this.#anomalies.list(state === 'open', n)
+  async list(@Query() { state, limit }: AnomaliesQuery): Promise<AnomalyList> {
+    const rows = await this.#anomalies.list(state === 'open', limit)
     return { object: 'list', data: rows.map(view) }
   }
 
   @Post(':id/accept')
   @HttpCode(200)
-  async accept(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number): Promise<AnomalyView> {
+  async accept(@Req() request: AuthedRequest, @Param() { id }: AnomalyParams): Promise<AnomalyView> {
     return view(await this.#anomalies.accept(id, request.client.id))
   }
 
   @Post(':id/dispute')
   @HttpCode(200)
-  async dispute(@Req() request: AuthedRequest, @Param('id', ParseIntPipe) id: number): Promise<AnomalyView> {
+  async dispute(@Req() request: AuthedRequest, @Param() { id }: AnomalyParams): Promise<AnomalyView> {
     return view(await this.#anomalies.dispute(id, request.client.id))
   }
 }

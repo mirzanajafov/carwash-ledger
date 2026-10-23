@@ -3,7 +3,7 @@ import { checkLedger, checkSettlement, violations } from '@carwash/invariants'
 import { firstRow } from '@carwash/pg'
 import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { startStack, type Stack } from './support.ts'
+import { invalid, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 let today: number
@@ -108,5 +108,18 @@ describe('settlement', () => {
     expect(await breaksFor((await scenario('missingLine', 1500, today + 5)).payment)).toEqual(['missing_line'])
     const listed = BreakList.parse((await stack.call('GET', `/v1/reconciliation/breaks?from=${today}&through=${today + 5}`, { as: 'admin' })).body)
     expect(listed.data.map((b) => b.class).sort()).toEqual(['duplicate_line', 'fee_difference', 'missing_line', 'wrong_amount'])
+  })
+
+  it('refuses a query it cannot use, and says which parameter is wrong', async () => {
+    const get = (path: string) => stack.call('GET', path, { as: 'admin' })
+    expect(await get('/v1/reconciliation/days?limit=0')).toEqual(invalid('limit must be between 1 and 60'))
+    expect(await get('/v1/reconciliation/days?limit=')).toEqual(invalid('limit must be between 1 and 60'))
+    expect(await get('/v1/reconciliation/days?limit=7.5')).toEqual(invalid('limit must be between 1 and 60'))
+    expect(await get('/v1/reconciliation/days?currency=eur')).toEqual(invalid('currency must be a three-letter currency code'))
+    expect(await get('/v1/reconciliation/days/1e3')).toEqual(invalid('day must be a day number'))
+    expect(await get('/v1/reconciliation/breaks')).toEqual(invalid('from must be a day number'))
+    expect(await get(`/v1/reconciliation/breaks?from=${today}&through=-1`)).toEqual(invalid('through must be a day number'))
+    expect(await get('/v1/reconciliation/days?sort=day')).toEqual(invalid('property sort should not exist'))
+    expect((await get('/v1/reconciliation/days')).status).toBe(200)
   })
 })

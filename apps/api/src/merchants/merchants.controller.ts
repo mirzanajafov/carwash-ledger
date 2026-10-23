@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseInterceptors } from '@nestjs/common'
 import { AdminOnly } from '../auth/access.guard.ts'
-import { MerchantBody } from '../http/dto.ts'
+import { MerchantBody, MerchantParams } from '../http/dto.ts'
 import { IdempotencyService, type KeyedRequest, type Reply } from '../idempotency/idempotency.service.ts'
 import { Keyed } from '../idempotency/keyed.decorator.ts'
 import { ReplyInterceptor } from '../idempotency/reply.interceptor.ts'
@@ -24,7 +24,7 @@ export class MerchantsController {
   }
 
   @Get(':code')
-  get(@Param('code') code: string) {
+  get(@Param() { code }: MerchantParams) {
     return this.#merchants.get(code)
   }
 }

@@ -3,6 +3,7 @@ import type { BalanceView } from '@carwash/contracts'
 import { findAccounts, readBalance } from '@carwash/ledger'
 import { Database } from '../db/database.ts'
 import { notFound } from '../domain-errors.ts'
+import { AccountParams } from '../http/dto.ts'
 
 @Controller('v1/accounts')
 export class AccountsController {
@@ -13,7 +14,7 @@ export class AccountsController {
   }
 
   @Get(':code/balance')
-  async balance(@Param('code') code: string): Promise<BalanceView> {
+  async balance(@Param() { code }: AccountParams): Promise<BalanceView> {
     const account = (await findAccounts(this.#db.pool, [code])).get(code)
     if (!account) throw notFound(`account ${code}`)
     return {
