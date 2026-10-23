@@ -450,8 +450,9 @@ model ReconBreak {
 }
 
 model Reconciliation {
-  currency String @id @db.Char(3)
+  currency String   @id @db.Char(3)
   files    Int
+  readAt   DateTime @map("read_at") @db.Timestamptz(6)
 
   @@map("reconciliations")
 }

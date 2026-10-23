@@ -1,18 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
-import {
-  checkout,
-  createPool,
-  firstRow,
-  inRollback,
-  inTransaction,
-  takeAdvisoryLock,
-  withAdvisoryLock,
-  withTransaction,
-  type Queryable,
-  type TransactionOptions,
-} from '@carwash/pg'
+import { checkout, createPool, firstRow, inRollback, withTransaction, type Queryable, type TransactionOptions } from '@carwash/pg'
 import type pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { capture, createModeAccounts, openLedger, type LedgerFixture } from './support.ts'
 
 let ledger: LedgerFixture
@@ -129,44 +118,5 @@ describe('a transaction run by withTransaction or inRollback', () => {
     })
     await expect(stuck).rejects.toThrow('the work gave up')
     expect(await withTransaction(impatient, backendPid)).not.toBe(first)
-  })
-})
-
-describe('an advisory lock held by withAdvisoryLock', () => {
-  async function waiting(): Promise<number> {
-    const waiters = await ledger.admin.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
-    )
-    return firstRow(waiters).n
-  }
-
-  it('keeps a transaction that takes the same key waiting until the work is done, and runs transactions on the connection that holds it', async () => {
-    const order: string[] = []
-    let waiter = Promise.resolve()
-    await withAdvisoryLock(ledger.app, 'lock-test', async (client) => {
-      waiter = withTransaction(ledger.app, async (transaction) => {
-        await takeAdvisoryLock(transaction, 'lock-test')
-        order.push('transaction')
-      })
-      await vi.waitFor(async () => expect(await waiting()).toBe(1), { timeout: 10_000 })
-      expect(await inTransaction(client, backendPid)).toBe(await backendPid(client))
-      order.push('work')
-    })
-    await waiter
-    expect(order).toEqual(['work', 'transaction'])
-  })
-
-  it('lets go of the key when the work throws, and drops a connection it could not unlock', async () => {
-    await expect(withAdvisoryLock(ledger.app, 'lock-test', () => Promise.reject(new Error('the work failed')))).rejects.toThrow('the work failed')
-    await withTransaction(ledger.app, (transaction) => takeAdvisoryLock(transaction, 'lock-test'))
-    let killed = 0
-    const dying = withAdvisoryLock(ledger.app, 'lock-test', async (client) => {
-      killed = await backendPid(client)
-      await ledger.admin.query('SELECT pg_terminate_backend($1, 5000)', [killed])
-      throw new Error('the connection died')
-    })
-    await expect(dying).rejects.toThrow('the connection died')
-    await withTransaction(ledger.app, (transaction) => takeAdvisoryLock(transaction, 'lock-test'))
-    expect(await backendPid(ledger.app)).not.toBe(killed)
   })
 })

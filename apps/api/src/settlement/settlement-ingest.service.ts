@@ -57,10 +57,10 @@ export class SettlementIngestService {
   }
 
   async ingestAndReconcile(day: number, currency: string): Promise<Pick<SettlementView, 'outcome' | 'reconciliation'>> {
-    const calendar = await this.#psp.calendar()
-    if (calendar.kind === 'unknown') throw new PspUnavailableError(`the PSP's calendar is not available (${calendar.reason})`, 5)
     const outcome = await this.ingest(day, currency)
     if (outcome === 'not_ready') return { outcome }
+    const calendar = await this.#psp.calendar()
+    if (calendar.kind === 'unknown') throw new PspUnavailableError(`the PSP's calendar is not available (${calendar.reason})`, 5)
     return { outcome, reconciliation: await this.#reconciliation.reconcile(currency, calendar.daySeconds) }
   }
 

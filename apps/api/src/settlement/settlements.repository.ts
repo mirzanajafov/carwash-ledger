@@ -90,20 +90,29 @@ export async function insertFile(client: Transaction, file: ParsedFile, journalI
   )
 }
 
-export async function filesSoFar(db: Queryable, currency: string): Promise<{ count: number; latest: number | null }> {
+export interface FilesSoFar {
+  count: number
+  latest: number | null
+  readAt: string
+}
+
+export async function filesSoFar(db: Queryable, currency: string): Promise<FilesSoFar> {
   return firstRow(
-    await db.query<{ count: number; latest: number | null }>(
-      'SELECT count(*)::int AS count, max(day)::int AS latest FROM settlement_files WHERE currency = $1',
+    await db.query<FilesSoFar>(
+      'SELECT count(*)::int AS count, max(day)::int AS latest, clock_timestamp()::text AS "readAt" FROM settlement_files WHERE currency = $1',
       [currency],
     ),
   )
 }
 
-export async function recordReconciliation(client: Transaction, currency: string, files: number): Promise<void> {
-  await client.query('INSERT INTO reconciliations (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
-    currency,
-    files,
-  ])
+export async function recordReconciliation(client: Transaction, currency: string, files: FilesSoFar): Promise<boolean> {
+  const recorded = await client.query(
+    `INSERT INTO reconciliations (currency, files, read_at) VALUES ($1, $2, $3)
+     ON CONFLICT (currency) DO UPDATE SET files = excluded.files, read_at = excluded.read_at
+     WHERE reconciliations.read_at < excluded.read_at`,
+    [currency, files.count, files.readAt],
+  )
+  return recorded.rowCount === 1
 }
 
 export async function reconciliationDue(db: Queryable, currency: string): Promise<boolean> {

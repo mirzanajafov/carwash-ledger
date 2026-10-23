@@ -1,6 +1,6 @@
 import { BreakList, PaymentView, SettlementDayView, SettlementView } from '@carwash/contracts'
 import { checkLedger, checkSettlement, violations } from '@carwash/invariants'
-import { firstRow, inRollback, takeAdvisoryLock, withTransaction } from '@carwash/pg'
+import { firstRow, inRollback, takeAdvisoryLock } from '@carwash/pg'
 import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp'
 import type { INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
@@ -10,7 +10,7 @@ import { ReconciliationService } from '../src/settlement/reconciliation.service.
 import { SettlementIngestService } from '../src/settlement/settlement-ingest.service.ts'
 import { settlementsKey } from '../src/settlement/settlements.repository.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
-import { invalid, startStack, type Stack } from './support.ts'
+import { count, invalid, startStack, type Stack } from './support.ts'
 
 let stack: Stack
 let today: number
@@ -204,20 +204,18 @@ describe('settlement', () => {
     }
   })
 
-  it('makes a reconcile wait for an ingest in progress, and match with the file it brought', async () => {
-    const day = (await latestDay()) + 1
-    await withWorker(day + 1, async (worker) => {
-      let reconciled: ReturnType<ReconciliationService['reconcile']> = Promise.resolve(undefined)
-      await withTransaction(stack.admin, async (client) => {
-        await takeAdvisoryLock(client, settlementsKey('EUR'))
-        reconciled = worker.get(ReconciliationService).reconcile('EUR', 86_400)
-        await vi.waitFor(async () => expect(await waitingForTheLock()).toBe(1), { timeout: 10_000 })
-        await client.query(`INSERT INTO settlement_files (id, day, currency, lines, gross, fee, net) VALUES ($1, $2, 'EUR', 0, 0, 0, 0)`, [
-          `stl_EUR_${day}`,
-          day,
-        ])
-      })
-      expect((await reconciled)?.through).toBe(day)
-    })
+  it('keeps what a newer reconcile wrote when an older one finishes after it', async () => {
+    const day = await latestDay()
+    const written = "INSERT INTO recon_breaks (currency, day, class, detail) VALUES ('EUR', $1, 'unknown_line', 'written by a newer reconcile')"
+    await stack.admin.query(written, [day])
+    await stack.admin.query("UPDATE reconciliations SET read_at = now() + interval '1 hour' WHERE currency = 'EUR'")
+    try {
+      await stack.app.get(ReconciliationService).reconcile('EUR', 86_400)
+      expect(await count(stack.admin, "SELECT count(*)::int AS n FROM recon_breaks WHERE detail = 'written by a newer reconcile'")).toBe(1)
+    } finally {
+      await stack.admin.query("UPDATE reconciliations SET read_at = now() WHERE currency = 'EUR'")
+    }
+    await stack.app.get(ReconciliationService).reconcile('EUR', 86_400)
+    expect(await count(stack.admin, "SELECT count(*)::int AS n FROM recon_breaks WHERE detail = 'written by a newer reconcile'")).toBe(0)
   })
 })
