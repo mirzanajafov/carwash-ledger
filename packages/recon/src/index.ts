@@ -1,8 +1,6 @@
+import type { BreakClass } from '@carwash/contracts'
+
 export type Kind = 'capture' | 'refund'
-
-export type BreakClass = 'missing_line' | 'duplicate_line' | 'wrong_amount' | 'fee_difference' | 'unknown_line'
-
-export const BREAK_CLASSES: readonly BreakClass[] = ['missing_line', 'duplicate_line', 'wrong_amount', 'fee_difference', 'unknown_line']
 
 export interface FileLine {
   fileId: string

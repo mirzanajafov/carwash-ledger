@@ -1,4 +1,5 @@
-import { reconcile, window, type Break, type BreakClass, type Fallback, type FeeContract, type FileLine } from '@carwash/recon'
+import type { BreakClass } from '@carwash/contracts'
+import { reconcile, window, type Break, type Fallback, type FeeContract, type FileLine } from '@carwash/recon'
 import { FAULTS, type Fault, type LabelledItem, type World } from './generate.ts'
 
 export interface EvalOptions {

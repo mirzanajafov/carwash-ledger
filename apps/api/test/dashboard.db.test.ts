@@ -7,6 +7,7 @@ import {
   LiveBalance,
   LiveJournal,
   LivePayment,
+  liveEvent,
   OpenedSessionView,
   PaymentView,
   SessionView,
@@ -16,7 +17,6 @@ import {
 import { PgCtePoster } from '@carwash/ledger'
 import { firstRow, inRollback, withTransaction } from '@carwash/pg'
 import { afterAll, assert, beforeAll, describe, expect, it, vi } from 'vitest'
-import * as z from 'zod/mini'
 import { VerificationJob } from '../src/audit/verification-job.ts'
 import { VerificationRuns } from '../src/audit/verification-runs.ts'
 import type { ApiConfig } from '../src/config.ts'
@@ -63,11 +63,8 @@ async function watch(url: string) {
         buffer = buffer.slice(end + 2)
         const type = /^event: (.+)$/m.exec(block)?.[1]
         const data = /^data: (.+)$/m.exec(block)?.[1]
-        if (!data) continue
-        const json: unknown = JSON.parse(data)
-        if (type === 'balances') events.push({ type, data: z.array(LiveBalance).parse(json) })
-        else if (type === 'journal') events.push({ type, data: LiveJournal.parse(json) })
-        else if (type === 'payment') events.push({ type, data: LivePayment.parse(json) })
+        const live = type && data ? liveEvent(type, JSON.parse(data)) : undefined
+        if (live) events.push(live)
       }
     }
   })().catch(() => undefined)

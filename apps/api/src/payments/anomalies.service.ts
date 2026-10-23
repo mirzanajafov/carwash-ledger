@@ -10,22 +10,15 @@ import { lockPayout, recordPayoutAdjustment } from '../payouts/payouts.repositor
 import { answeredAmount, checkAnswer, expectedFrom, type AttemptKind } from '../psp/answers.ts'
 import { PspClient } from '../psp/psp.client.ts'
 import { pspUnavailable } from '../psp/psp.errors.ts'
-import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyRow } from './anomalies.repository.ts'
+import { findAnomaly, listAnomalies, resolveAnomaly, type AnomalyAttempt, type AnomalyRow } from './anomalies.repository.ts'
 import { loadAttempt, setAttemptAmount } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
 import { correctRefundAmount } from './payments.repository.ts'
 
 const ACCEPTABLE: ReadonlySet<AttemptKind> = new Set(['capture', 'refund', 'payout'])
 
-export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt_id: string } {
-  return (
-    row.kind === 'answer_mismatch' &&
-    row.resolved_at === null &&
-    row.attempt_status === 'pending' &&
-    row.attempt_kind !== null &&
-    ACCEPTABLE.has(row.attempt_kind) &&
-    row.attempt_id !== null
-  )
+export function acceptable(row: AnomalyRow): row is AnomalyRow & { attempt: AnomalyAttempt } {
+  return row.kind === 'answer_mismatch' && row.resolved_at === null && row.attempt?.status === 'pending' && ACCEPTABLE.has(row.attempt.kind)
 }
 
 function refuse(message: string): DomainError {
@@ -59,7 +52,7 @@ export class AnomaliesService {
           : 'only a refused amount on a capture, a refund or a payout that is still pending can be accepted, and anything else can only be disputed',
       )
     }
-    const attempt = await loadAttempt(this.#db.pool, asAttemptId(row.attempt_id))
+    const attempt = await loadAttempt(this.#db.pool, asAttemptId(row.attempt.id))
     const reply = await this.#psp.pull(attempt.id)
     if (reply.kind === 'unknown') throw pspUnavailable(reply.reason)
     if (reply.kind === 'none') throw refuse('the bank has no record of this operation')

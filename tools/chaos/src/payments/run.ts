@@ -6,7 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { createGzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { verifyLog } from '@carwash/audit-pg'
-import { AnomalyList, AnomalyView, errorOf, VerificationRunView } from '@carwash/contracts'
+import { AnomalyList, AnomalyView, errorOf, SettlementView, VerificationRunView } from '@carwash/contracts'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { createPool, firstRow, inSnapshot } from '@carwash/pg'
 import {
@@ -663,39 +663,34 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     for (const anomaly of open.filter((a) => a.acceptable)) {
       const response = await fetch(`${base}/${anomaly.id}/accept`, { method: 'POST', headers })
       const body: unknown = await response.json().catch(() => null)
-      if (response.status !== 200) {
+      const accepted = response.status === 200 ? AnomalyView.safeParse(body) : undefined
+      if (!accepted?.success) {
         result.failed.push(`${anomaly.id}: ${response.status} ${errorOf(body)?.message ?? ''}`)
         continue
       }
       result.accepted++
-      journeys.learnAccepted(AnomalyView.parse(body))
+      journeys.learnAccepted(accepted.data)
     }
     return result
   }
 
-  async function askForVerification(adminKey: string): Promise<VerificationRunView | null> {
-    try {
-      const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/admin/verify`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${adminKey}` },
-        signal: AbortSignal.timeout(5000),
-      })
-      return response.status === 202 ? VerificationRunView.parse(await response.json()) : null
-    } catch {
-      return null
-    }
+  async function verificationRun(path: string, method: string, adminKey: string, expected: number): Promise<VerificationRunView | null> {
+    const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${adminKey}` },
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null)
+    if (response?.status !== expected) return null
+    const body: unknown = await response.json().catch(() => null)
+    return body === null ? null : VerificationRunView.parse(body)
   }
 
-  async function latestVerificationRun(adminKey: string): Promise<VerificationRunView | null> {
-    try {
-      const response = await fetch(`http://127.0.0.1:${API_PORTS[0]}/v1/audit/verification`, {
-        headers: { authorization: `Bearer ${adminKey}` },
-        signal: AbortSignal.timeout(5000),
-      })
-      return response.status === 200 ? VerificationRunView.parse(await response.json()) : null
-    } catch {
-      return null
-    }
+  function askForVerification(adminKey: string): Promise<VerificationRunView | null> {
+    return verificationRun('/v1/admin/verify', 'POST', adminKey, 202)
+  }
+
+  function latestVerificationRun(adminKey: string): Promise<VerificationRunView | null> {
+    return verificationRun('/v1/audit/verification', 'GET', adminKey, 200)
   }
 
   async function finalVerificationRun(adminKey: string): Promise<VerificationRunView | null> {
@@ -715,7 +710,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
     return null
   }
 
-  async function settleDay(day: number, adminKey: string): Promise<{ outcome: string; reconciliation?: { breaks: Record<string, number> } }> {
+  async function settleDay(day: number, adminKey: string): Promise<SettlementView> {
     for (let attempt = 0; ; attempt++) {
       try {
         const closed = await fetch(`http://127.0.0.1:${PSP_PORT}/admin/settlements/${day}/close`, {
@@ -730,7 +725,7 @@ export async function runPayments(lab: Lab, options: PaymentsOptions, seed: numb
           signal: AbortSignal.timeout(30_000),
         })
         if (response.status !== 201) throw new Error(`ingesting day ${day}: status ${response.status} ${await response.text()}`)
-        return (await response.json()) as { outcome: string; reconciliation?: { breaks: Record<string, number> } }
+        return SettlementView.parse(await response.json())
       } catch (error) {
         if (attempt >= 20) throw error
         await sleep(500)

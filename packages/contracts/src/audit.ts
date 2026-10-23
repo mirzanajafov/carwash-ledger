@@ -95,7 +95,7 @@ export const VerificationReport = z.object({
   findings: z.number(),
   examples: z.array(VerificationFinding),
   firstSeq: z.nullable(z.number()),
-  ms: z.object({ read: z.number(), compute: z.number(), yielded: z.number(), total: z.number() }),
+  ms: z.object({ read: z.number(), compute: z.number(), yielded: z.optional(z.number()), total: z.number() }),
   root: z.nullable(z.string()),
 })
 

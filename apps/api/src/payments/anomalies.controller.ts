@@ -10,11 +10,6 @@ function bankAmount(row: AnomalyRow): string | null {
   return Number.isSafeInteger(amount) ? String(amount) : null
 }
 
-function attemptOf(row: AnomalyRow): AnomalyView['attempt'] {
-  const { attempt_id: id, attempt_kind: kind, attempt_status: status, amount, currency } = row
-  return id && kind && status && amount !== null && currency !== null ? { id, kind, status, amount, currency } : null
-}
-
 function view(row: AnomalyRow): AnomalyView {
   return {
     object: 'anomaly',
@@ -22,7 +17,7 @@ function view(row: AnomalyRow): AnomalyView {
     kind: row.kind,
     created_at: row.created_at.toISOString(),
     problems: row.details?.problems ?? [],
-    attempt: attemptOf(row),
+    attempt: row.attempt,
     bank_amount: bankAmount(row),
     payment_id: row.payment_id,
     refund_id: row.refund_id,

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { VerificationRunView as VerificationRun } from '@carwash/contracts'
+import type { VerificationRunView } from '@carwash/contracts'
 import { isOpen, percentDone, startedBeforeTamper } from './verification'
 
-function run(status: VerificationRun['status'], progress: VerificationRun['progress'] = null): VerificationRun {
+function run(status: VerificationRunView['status'], progress: VerificationRunView['progress'] = null): VerificationRunView {
   return {
     object: 'verification_run',
     id: '1',
@@ -17,7 +17,7 @@ function run(status: VerificationRun['status'], progress: VerificationRun['progr
   }
 }
 
-function finished(startedAt: string, findings: number): VerificationRun {
+function finished(startedAt: string, findings: number): VerificationRunView {
   return {
     ...run('done'),
     started_at: startedAt,

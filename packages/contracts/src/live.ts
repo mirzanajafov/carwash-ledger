@@ -32,3 +32,12 @@ export const LivePayment = z.object({
 export type LivePayment = z.infer<typeof LivePayment>
 
 export type LiveEvent = { type: 'balances'; data: LiveBalance[] } | { type: 'journal'; data: LiveJournal } | { type: 'payment'; data: LivePayment }
+
+const LiveBalances = z.array(LiveBalance)
+
+export function liveEvent(type: string, data: unknown): LiveEvent | undefined {
+  if (type === 'balances') return { type, data: LiveBalances.parse(data) }
+  if (type === 'journal') return { type, data: LiveJournal.parse(data) }
+  if (type === 'payment') return { type, data: LivePayment.parse(data) }
+  return undefined
+}

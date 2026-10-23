@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto'
+import { WebhookReceipt } from '@carwash/contracts'
 import type pg from 'pg'
 import type { Random } from '../random.ts'
 import type { Endpoints } from './client.ts'
@@ -92,8 +93,8 @@ export class Forger {
         body,
         signal: AbortSignal.timeout(5000),
       })
-      const answer = (await response.json().catch(() => null)) as { outcome?: string } | null
-      return response.ok ? `${target.kind} ${answer?.outcome ?? 'no outcome'}` : `${target.kind} http ${response.status}`
+      const answer = WebhookReceipt.safeParse(await response.json().catch(() => null))
+      return response.ok ? `${target.kind} ${answer.data?.outcome ?? 'no outcome'}` : `${target.kind} http ${response.status}`
     } catch {
       return `${target.kind} not delivered`
     }

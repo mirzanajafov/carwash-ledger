@@ -23,12 +23,16 @@ function when(day: number, daySeconds: number | null): string {
     : start.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+const UNREACHABLE = 'the ledger API is not answering'
+
 async function load(requested: number | null) {
-  const reply = await callApi('GET', '/v1/reconciliation/days?limit=14', adminKey())
+  const reply = await callApi('GET', '/v1/reconciliation/days?limit=14', adminKey()).catch(() => null)
+  if (!reply) return { error: UNREACHABLE }
   if (reply.status !== 200) return { error: errorOf(reply.body)?.message ?? `the API answered ${reply.status}` }
   const days = SettlementDayList.parse(reply.body)
   const pick = requested ?? days.data[0]?.day ?? null
-  const detail = pick === null ? null : await callApi('GET', `/v1/reconciliation/days/${pick}`, adminKey())
+  const detail = pick === null ? null : await callApi('GET', `/v1/reconciliation/days/${pick}`, adminKey()).catch(() => null)
+  if (pick !== null && !detail) return { error: UNREACHABLE }
   return {
     list: days.data,
     daySeconds: days.day_seconds,
@@ -39,7 +43,7 @@ async function load(requested: number | null) {
 
 export default async function ReconciliationPage({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams
-  const data = await load(day && /^\d{1,12}$/.test(day) ? Number(day) : null).catch(() => ({ error: 'the ledger API is not answering' }))
+  const data = await load(day && /^\d{1,12}$/.test(day) ? Number(day) : null)
   return (
     <div className="space-y-10">
       <div className="max-w-2xl space-y-2">

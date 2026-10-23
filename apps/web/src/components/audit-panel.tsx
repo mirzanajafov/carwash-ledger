@@ -5,7 +5,7 @@ import { useCallback, useEffect, useReducer, useState } from 'react'
 import { AuditState, EMPTY, reduce } from '@/lib/audit'
 import { isOpen } from '@/lib/verification'
 import { checkJournal, JournalEvidence, type Verdict } from '@/lib/verify-journal'
-import { VerificationRunView } from './verification-run'
+import { VerificationRun } from './verification-run'
 
 const CLASSES = [
   { tamperClass: 1, title: 'Change an amount', detail: 'Move a euro between two entries of one journal. It still balances, so every balance check passes.' },
@@ -41,7 +41,8 @@ export function AuditPanel() {
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/audit/state', { cache: 'no-store' })
-    if (response.ok) dispatch({ type: 'loaded', server: AuditState.parse(await response.json()) })
+    const state = response.ok ? AuditState.safeParse(await response.json()) : undefined
+    if (state?.success) dispatch({ type: 'loaded', server: state.data })
   }, [])
 
   const verifying = isOpen(server?.verification ?? null)
@@ -79,7 +80,12 @@ export function AuditPanel() {
         setNote(errorOf(answer)?.message ?? (server?.witnessKey ? `That answered ${response.status}.` : 'The witness key is not available.'))
         return
       }
-      const input = JournalEvidence.parse(answer)
+      const evidence = JournalEvidence.safeParse(answer)
+      if (!evidence.success) {
+        setNote('That answer did not have the shape of a journal with its proof.')
+        return
+      }
+      const input = evidence.data
       setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey: server.witnessKey }) })
     } finally {
       setBusy(null)
@@ -206,7 +212,7 @@ export function AuditPanel() {
         >
           {busy === 'verify' || verifying ? 'Verifying…' : 'Verify everything'}
         </button>
-        {server?.verification ? <VerificationRunView run={server.verification} tamperAt={tamper?.at ?? null} /> : null}
+        {server?.verification ? <VerificationRun run={server.verification} tamperAt={tamper?.at ?? null} /> : null}
       </section>
 
       {note ? <p className="text-sm text-warn">{note}</p> : null}

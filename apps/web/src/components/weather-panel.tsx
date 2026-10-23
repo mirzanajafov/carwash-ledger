@@ -1,15 +1,15 @@
 'use client'
 
-import { errorOf } from '@carwash/contracts'
+import { errorOf, WeatherView } from '@carwash/contracts'
 import { useCallback, useEffect, useState } from 'react'
-import { describePlan, PRESETS, secondsLeft, Weather, type Preset } from '@/lib/weather'
+import { describePlan, PRESETS, secondsLeft, type Preset } from '@/lib/weather'
 
 function clock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 export function WeatherPanel({ admin = false }: { admin?: boolean }) {
-  const [state, setState] = useState<Weather | null>(null)
+  const [state, setState] = useState<WeatherView | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState<Preset['name'] | 'custom' | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -19,7 +19,7 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
   const load = useCallback(async () => {
     try {
       const response = await fetch('/api/weather', { cache: 'no-store' })
-      if (response.ok) setState(Weather.parse(await response.json()))
+      if (response.ok) setState(WeatherView.parse(await response.json()))
     } catch {
       return
     }
@@ -41,7 +41,7 @@ export function WeatherPanel({ admin = false }: { admin?: boolean }) {
     try {
       const response = await fetch('/api/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
       const body: unknown = await response.json().catch(() => null)
-      if (response.ok) setState(Weather.parse(body))
+      if (response.ok) setState(WeatherView.parse(body))
       else setNote(errorOf(body)?.message ?? `The web server answered ${response.status}.`)
     } catch {
       setNote('The web server stopped answering.')

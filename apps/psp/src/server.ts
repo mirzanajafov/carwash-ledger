@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
+import type { WeatherView } from '@carwash/contracts'
 import { parseFaultPlan, parseToken, parseWeather, type Faults, type TokenEffect } from './faults.ts'
 import {
   amountField,
@@ -45,7 +46,7 @@ function tokenEffect(token: string): TokenEffect {
   return effect
 }
 
-function weatherView(faults: Faults) {
+function weatherView(faults: Faults): WeatherView {
   const weather = faults.weather
   return {
     base: faults.base,

@@ -1,6 +1,8 @@
 import * as z from 'zod/mini'
 
-export const BreakClass = z.enum(['missing_line', 'duplicate_line', 'wrong_amount', 'fee_difference', 'unknown_line'])
+export const BREAK_CLASSES = ['missing_line', 'duplicate_line', 'wrong_amount', 'fee_difference', 'unknown_line'] as const
+
+export const BreakClass = z.enum(BREAK_CLASSES)
 
 export type BreakClass = z.infer<typeof BreakClass>
 

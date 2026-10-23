@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import type { FailedPayment } from '@carwash/contracts'
 import { sqlStateOf } from '@carwash/ledger'
 import type { ApiClientIdentity } from '../auth/api-keys.ts'
 import { Database } from '../db/database.ts'
@@ -27,7 +28,7 @@ const MAX_ROUNDS = 5
 function paymentFinal(payment: Payment, expected: readonly PaymentStatus[]): Final {
   if (payment.status === 'failed' && expected.includes('failed')) {
     const code = payment.failureReason ?? 'payment_failed'
-    return { status: 402, body: { error: { code, message: `the payment failed: ${code}` }, payment: paymentView(payment) } }
+    return { status: 402, body: { error: { code, message: `the payment failed: ${code}` }, payment: paymentView(payment) } satisfies FailedPayment }
   }
   if (!expected.includes(payment.status)) {
     throw new DomainError('upstream', 'psp_disagreement', `the PSP's answer left the payment ${payment.status}, and the disagreement is recorded as an anomaly`)

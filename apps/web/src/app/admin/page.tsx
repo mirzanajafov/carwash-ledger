@@ -11,12 +11,8 @@ export const dynamic = 'force-dynamic'
 async function anomalies(state: 'open' | 'resolved'): Promise<AnomalyView[]> {
   const token = await sessionToken()
   if (!token) return []
-  try {
-    const reply = await callApi('GET', `/v1/admin/anomalies?state=${state}&limit=50`, token)
-    return reply.status === 200 ? AnomalyList.parse(reply.body).data : []
-  } catch {
-    return []
-  }
+  const reply = await callApi('GET', `/v1/admin/anomalies?state=${state}&limit=50`, token).catch(() => null)
+  return reply?.status === 200 ? AnomalyList.parse(reply.body).data : []
 }
 
 export default async function AdminPage() {

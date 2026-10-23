@@ -159,17 +159,14 @@ describe('checkpoints and the witness', () => {
     const { rows } = await stack.admin.query<{ size: string }>('SELECT c.size::text FROM audit_checkpoints c ORDER BY c.size')
     expect(rows.map((r) => Number(r.size))).toEqual([first.size, second.size])
 
-    expect(CheckpointList.parse((await stack.call('GET', '/v1/audit/checkpoints')).body).data.map((c: { tree_size: number }) => c.tree_size)).toEqual([
-      second.size,
-      first.size,
-    ])
+    expect(CheckpointList.parse((await stack.call('GET', '/v1/audit/checkpoints')).body).data.map((c) => c.tree_size)).toEqual([second.size, first.size])
     const bigger = 10 ** String(second.size).length
     await stack.admin.query(
       `INSERT INTO audit_checkpoints (size, root, signature, witness_key, signed_at)
        VALUES ($1, decode(repeat('ab', 32), 'hex'), decode(repeat('cd', 64), 'hex'), 'k', now())`,
       [bigger],
     )
-    expect(CheckpointList.parse((await stack.call('GET', '/v1/audit/checkpoints')).body).data.map((c: { tree_size: number }) => c.tree_size)).toEqual([
+    expect(CheckpointList.parse((await stack.call('GET', '/v1/audit/checkpoints')).body).data.map((c) => c.tree_size)).toEqual([
       bigger,
       second.size,
       first.size,

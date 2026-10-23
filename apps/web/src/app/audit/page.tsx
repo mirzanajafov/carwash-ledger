@@ -7,19 +7,15 @@ export const metadata: Metadata = { title: 'Audit log · Car Wash Ledger' }
 export const dynamic = 'force-dynamic'
 
 async function load() {
-  try {
-    const [head, checkpoints, key] = await Promise.all([
-      callApi('GET', '/v1/audit/head', clientKey()),
-      callApi('GET', '/v1/audit/checkpoints', clientKey()),
-      witnessKey(),
-    ])
-    return {
-      size: head.status === 200 ? AuditHeadView.parse(head.body).tree_size : null,
-      checkpoints: checkpoints.status === 200 ? CheckpointList.parse(checkpoints.body).data.slice(0, 6) : [],
-      key,
-    }
-  } catch {
-    return { size: null, checkpoints: [], key: null }
+  const [head, checkpoints, key] = await Promise.all([
+    callApi('GET', '/v1/audit/head', clientKey()).catch(() => null),
+    callApi('GET', '/v1/audit/checkpoints', clientKey()).catch(() => null),
+    witnessKey(),
+  ])
+  return {
+    size: head?.status === 200 ? AuditHeadView.parse(head.body).tree_size : null,
+    checkpoints: checkpoints?.status === 200 ? CheckpointList.parse(checkpoints.body).data.slice(0, 6) : [],
+    key,
   }
 }
 

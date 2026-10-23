@@ -13,11 +13,11 @@ export async function GET(): Promise<Response> {
       witnessKey(),
     ])
     return Response.json({
-      tamper: tamper?.status === 200 ? TamperState.parse(tamper.body).tamper : null,
+      tamper: tamper?.status === 200 ? (TamperState.safeParse(tamper.body).data?.tamper ?? null) : null,
       tamperAvailable: tamper?.status === 200,
-      checkpoint: checkpoint.status === 200 ? CheckpointView.parse(checkpoint.body) : null,
+      checkpoint: checkpoint.status === 200 ? (CheckpointView.safeParse(checkpoint.body).data ?? null) : null,
       witnessKey: key,
-      verification: verification.status === 200 ? VerificationRunView.parse(verification.body) : null,
+      verification: verification.status === 200 ? (VerificationRunView.safeParse(verification.body).data ?? null) : null,
     } satisfies AuditState)
   } catch {
     return unreachable()

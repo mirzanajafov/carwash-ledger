@@ -16,6 +16,7 @@
     "start": "node --conditions=source src/main.ts"
   },
   "dependencies": {
+    "@carwash/contracts": "workspace:*",
     "@carwash/pg": "workspace:*",
     "pg": "catalog:"
   },

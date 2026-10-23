@@ -25,6 +25,9 @@ export async function GET(_request: Request, context: { params: Promise<{ seq: s
       callApi('GET', `/v1/journals/${leaf.journal_id}/proof?tree_size=${checkpoint.tree_size}`, clientKey()),
     ])
     if (proof.status !== 200) return refuse(409, 'no_proof', errorOf(proof.body)?.message ?? 'the API would not prove that leaf')
+    if (journal.status !== 200 && journal.status !== 404) {
+      return refuse(502, 'no_journal', errorOf(journal.body)?.message ?? `the API answered ${journal.status} for journal ${leaf.journal_id}`)
+    }
     return Response.json({
       journal: journal.status === 200 ? JournalView.parse(journal.body) : null,
       proof: InclusionProofView.parse(proof.body),

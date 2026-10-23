@@ -1,6 +1,9 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { Frontier, leafHash, rootFromLeaves, toHex, type FrontierState } from '../src/index.ts'
+import * as z from 'zod/mini'
+import { Frontier, leafHash, rootFromLeaves, toHex } from '../src/index.ts'
+
+const SavedFrontier = z.object({ size: z.number(), edge: z.array(z.string()) })
 
 const leavesOf = (n: number, seed: number) => Array.from({ length: n }, (_, i) => leafHash(Uint8Array.of(seed & 0xff, i & 0xff, (i >> 8) & 0xff)))
 
@@ -23,7 +26,7 @@ describe('the frontier', () => {
         const leaves = leavesOf(first + more, seed)
         const before = new Frontier()
         for (const leaf of leaves.slice(0, first)) before.push(leaf)
-        const resumed = Frontier.from(JSON.parse(JSON.stringify(before.toJSON())) as FrontierState)
+        const resumed = Frontier.from(SavedFrontier.parse(JSON.parse(JSON.stringify(before.toJSON()))))
         for (const leaf of leaves.slice(first)) resumed.push(leaf)
         expect(toHex(resumed.root())).toBe(toHex(rootFromLeaves(leaves)))
       }),

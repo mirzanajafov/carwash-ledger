@@ -23,14 +23,10 @@ export async function sessionToken(): Promise<string | null> {
 export async function adminSession(): Promise<AdminSession | null> {
   const token = await sessionToken()
   if (!token) return null
-  try {
-    const reply = await callApi('GET', '/v1/admin/sessions/current', token, undefined, undefined, 5000)
-    if (reply.status !== 200) return null
-    const session = SessionView.parse(reply.body)
-    return { client: session.client, expiresAt: session.expires_at }
-  } catch {
-    return null
-  }
+  const reply = await callApi('GET', '/v1/admin/sessions/current', token, undefined, undefined, 5000).catch(() => null)
+  if (reply?.status !== 200) return null
+  const session = SessionView.parse(reply.body)
+  return { client: session.client, expiresAt: session.expires_at }
 }
 
 export async function credential(): Promise<string> {

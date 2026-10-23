@@ -1,5 +1,6 @@
 import { failpoint } from '@carwash/failpoints'
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import type { WebhookReceipt } from '@carwash/contracts'
 import { API_CONFIG, type ApiConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError } from '../domain-errors.ts'
@@ -47,7 +48,7 @@ export class WebhooksService {
     this.#config = config
   }
 
-  async handle(event: PspEvent): Promise<{ received: true; outcome: WebhookOutcome; duplicate?: true }> {
+  async handle(event: PspEvent): Promise<WebhookReceipt> {
     const seen = await webhookOutcome(this.#db.pool, event.id)
     if (seen !== undefined) return { received: true, outcome: seen, duplicate: true }
     const outcome = await this.check(event.attemptKey)

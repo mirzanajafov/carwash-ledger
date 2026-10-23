@@ -1,11 +1,11 @@
-import type { VerificationRunView as VerificationRun } from '@carwash/contracts'
+import type { VerificationRunView } from '@carwash/contracts'
 import { describeFinding, percentDone, startedBeforeTamper } from '@/lib/verification'
 
 function time(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
 }
 
-export function VerificationRunView({ run, tamperAt }: { run: VerificationRun; tamperAt: string | null }) {
+export function VerificationRun({ run, tamperAt }: { run: VerificationRunView; tamperAt: string | null }) {
   if (run.status === 'queued') {
     return <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">Queued at {time(run.requested_at)}, waiting for the worker.</p>
   }
