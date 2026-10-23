@@ -1,24 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common'
-import type { BreakClass } from '@carwash/contracts'
+import type { BreakClass, SettlementView } from '@carwash/contracts'
 import { reconcile, window } from '@carwash/recon'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ChartService } from '../ledger/chart.service.ts'
-import { PspClient } from '../psp/psp.client.ts'
+import { PspClient, type CalendarReply } from '../psp/psp.client.ts'
 import { PspUnavailableError } from '../psp/psp.errors.ts'
-import { fileLines, latestFileDay, ledgerItems, replaceBreaks } from './settlements.repository.ts'
+import { latestFileDay, ledgerItems, linesForMatching, recentFiles, replaceBreaks, type FileSummaryRow } from './settlements.repository.ts'
 
-export interface ReconcileSummary {
-  currency: string
-  from: number
-  through: number
-  lines: number
-  items: number
-  matched: number
-  late: number
-  pending: number
-  breaks: Record<BreakClass, number>
-}
+export type ReconcileSummary = NonNullable<SettlementView['reconciliation']>
 
 @Injectable()
 export class ReconciliationService {
@@ -47,7 +37,7 @@ export class ReconciliationService {
       from: span.itemsFrom,
       through: span.itemsThrough,
     })
-    const lines = await fileLines(this.#db.pool, currency, span.linesFrom, span.linesThrough)
+    const lines = await linesForMatching(this.#db.pool, currency, span.linesFrom, span.linesThrough)
     const result = reconcile(lines, items, { contract: this.#config.pspFees, fallback: this.#config.reconFallback, settledThrough: through })
     const kept = result.breaks.filter((b) => b.day >= span.keepFrom && b.day <= span.keepThrough)
     await this.#db.transaction((client) => replaceBreaks(client, currency, span.keepFrom, span.keepThrough, kept))
@@ -64,5 +54,10 @@ export class ReconciliationService {
       pending: result.pending.length,
       breaks,
     }
+  }
+
+  async recentDays(currency: string, limit: number): Promise<{ calendar: CalendarReply; files: FileSummaryRow[] }> {
+    const [calendar, files] = await Promise.all([this.#psp.calendar(), recentFiles(this.#db.pool, currency, limit)])
+    return { calendar, files }
   }
 }

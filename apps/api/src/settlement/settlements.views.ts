@@ -1,6 +1,6 @@
-import type { SettlementDayList, SettlementDayView } from '@carwash/contracts'
+import type { BreakView, SettlementDayList, SettlementDayView } from '@carwash/contracts'
 import type { CalendarReply } from '../psp/psp.client.ts'
-import type { BreakRow, FileRow, FileSummaryRow, LineRow } from './settlements.repository.ts'
+import type { FileRow, FileSummaryRow, LineRow } from './settlements.repository.ts'
 
 export function dayListView(calendar: CalendarReply, files: readonly FileSummaryRow[]): SettlementDayList {
   return {
@@ -11,7 +11,7 @@ export function dayListView(calendar: CalendarReply, files: readonly FileSummary
   }
 }
 
-export function dayView(currency: string, day: number, file: FileRow | undefined, lines: readonly LineRow[], breaks: BreakRow[]): SettlementDayView {
+export function dayView(currency: string, day: number, file: FileRow | undefined, lines: readonly LineRow[], breaks: BreakView[]): SettlementDayView {
   return {
     object: 'settlement_day',
     day,

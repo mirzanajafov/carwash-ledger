@@ -1,4 +1,4 @@
-import type { BreakClass } from '@carwash/contracts'
+import type { BreakClass, BreakView } from '@carwash/contracts'
 import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
 import type { Break, FileLine, Kind, LedgerItem } from '@carwash/recon'
 import type { ParsedFile } from './settlement-file.ts'
@@ -9,16 +9,6 @@ export interface LedgerItemsQuery {
   currency: string
   from: number
   through: number
-}
-
-export interface BreakRow {
-  day: number
-  class: BreakClass
-  file_id: string | null
-  line: number | null
-  journal_ref: string | null
-  attempt_id: string | null
-  detail: string
 }
 
 export interface FileRow {
@@ -58,7 +48,7 @@ const LEDGER_ITEMS = `
   WHERE a.kind IN ('capture', 'refund') AND a.status = 'succeeded' AND a.currency = $3
     AND a.resolved_at >= to_timestamp($4::bigint * $1) AND a.resolved_at < to_timestamp(($5::bigint + 1) * $1)`
 
-const FILE_LINES = `
+const LINES_FOR_MATCHING = `
   SELECT l.file_id AS "fileId", f.day::int AS day, l.line, l.operation, l.reference, l.kind, l.gross::text AS gross, l.fee::text AS fee, l.net::text AS net
   FROM settlement_lines l JOIN settlement_files f ON f.id = l.file_id
   WHERE f.currency = $1 AND f.day BETWEEN $2 AND $3
@@ -100,8 +90,8 @@ export async function latestFileDay(db: Queryable, currency: string): Promise<nu
   return firstRow(await db.query<{ day: number | null }>('SELECT max(day)::int AS day FROM settlement_files WHERE currency = $1', [currency])).day
 }
 
-export async function firstOpenDay(db: Queryable, currency: string, daySeconds: number, currentDay: number): Promise<number> {
-  const { latest, first } = firstRow(
+export async function settledSoFar(db: Queryable, currency: string, daySeconds: number): Promise<{ latest: number | null; first: number | null }> {
+  return firstRow(
     await db.query<{ latest: number | null; first: number | null }>(
       `SELECT (SELECT max(day)::int FROM settlement_files WHERE currency = $1) AS latest,
               (SELECT floor(extract(epoch FROM min(resolved_at)) / $2)::int FROM attempts
@@ -109,8 +99,6 @@ export async function firstOpenDay(db: Queryable, currency: string, daySeconds: 
       [currency, daySeconds],
     ),
   )
-  if (latest !== null) return latest + 1
-  return first ?? currentDay
 }
 
 export async function ledgerItems(db: Queryable, query: LedgerItemsQuery): Promise<LedgerItem[]> {
@@ -124,8 +112,12 @@ export async function ledgerItems(db: Queryable, query: LedgerItemsQuery): Promi
   return rows.map((row) => ({ ...row, gross: BigInt(row.gross) }))
 }
 
-export async function fileLines(db: Queryable, currency: string, from: number, through: number): Promise<FileLine[]> {
-  const { rows } = await db.query<Omit<FileLine, 'gross' | 'fee' | 'net'> & { gross: string; fee: string; net: string }>(FILE_LINES, [currency, from, through])
+export async function linesForMatching(db: Queryable, currency: string, from: number, through: number): Promise<FileLine[]> {
+  const { rows } = await db.query<Omit<FileLine, 'gross' | 'fee' | 'net'> & { gross: string; fee: string; net: string }>(LINES_FOR_MATCHING, [
+    currency,
+    from,
+    through,
+  ])
   return rows.map((row) => ({ ...row, gross: BigInt(row.gross), fee: BigInt(row.fee), net: BigInt(row.net) }))
 }
 
@@ -148,8 +140,8 @@ export async function replaceBreaks(client: Transaction, currency: string, from:
   )
 }
 
-export async function breaksIn(db: Queryable, currency: string, from: number, through: number): Promise<BreakRow[]> {
-  const { rows } = await db.query<BreakRow>(
+export async function breaksIn(db: Queryable, currency: string, from: number, through: number): Promise<BreakView[]> {
+  const { rows } = await db.query<BreakView>(
     `SELECT day::int AS day, class, file_id, line, journal_ref, attempt_id, detail
      FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3 ORDER BY day, class, id`,
     [currency, from, through],
@@ -167,7 +159,7 @@ export async function recentFiles(db: Queryable, currency: string, limit: number
   return rows
 }
 
-export async function fileOfDay(db: Queryable, currency: string, day: number): Promise<FileRow | undefined> {
+export async function findFileOfDay(db: Queryable, currency: string, day: number): Promise<FileRow | undefined> {
   const { rows } = await db.query<FileRow>(
     'SELECT id, lines, gross::text, fee::text, net::text, journal_id::text, received_at FROM settlement_files WHERE currency = $1 AND day = $2',
     [currency, day],

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import type { SettlementView } from '@carwash/contracts'
 import { postInTransaction, type EntryInput } from '@carwash/ledger'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
@@ -8,9 +9,9 @@ import { PspClient } from '../psp/psp.client.ts'
 import { PspUnavailableError } from '../psp/psp.errors.ts'
 import { ReconciliationService } from './reconciliation.service.ts'
 import { parseSettlementFile } from './settlement-file.ts'
-import { fileExists, firstOpenDay, insertFile } from './settlements.repository.ts'
+import { fileExists, insertFile, settledSoFar } from './settlements.repository.ts'
 
-export type IngestOutcome = 'ingested' | 'already' | 'not_ready'
+export type IngestOutcome = SettlementView['outcome']
 
 @Injectable()
 export class SettlementIngestService {
@@ -58,7 +59,8 @@ export class SettlementIngestService {
     if (calendar.kind === 'unknown') return 0
     let ingested = 0
     for (const currency of this.#config.currencies) {
-      let day = await firstOpenDay(this.#db.pool, currency, calendar.daySeconds, calendar.currentDay)
+      const { latest, first } = await settledSoFar(this.#db.pool, currency, calendar.daySeconds)
+      let day = latest === null ? (first ?? calendar.currentDay) : latest + 1
       let fresh = false
       while (day < calendar.currentDay) {
         const outcome = await this.ingest(day, currency)

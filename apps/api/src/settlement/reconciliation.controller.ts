@@ -3,31 +3,32 @@ import type { BreakList, SettlementDayList, SettlementDayView } from '@carwash/c
 import { AdminOnly } from '../auth/access.guard.ts'
 import { Database } from '../db/database.ts'
 import { BreaksQuery, CurrencyQuery, DayParams, DaysQuery } from '../http/dto.ts'
-import { PspClient } from '../psp/psp.client.ts'
-import { dayListView, dayView } from './settlement.views.ts'
-import { breaksIn, fileOfDay, linesOfFile, recentFiles } from './settlements.repository.ts'
+import { ReconciliationService } from './reconciliation.service.ts'
+import { breaksIn, findFileOfDay, linesOfFile } from './settlements.repository.ts'
+import { dayListView, dayView } from './settlements.views.ts'
 
 @AdminOnly()
 @Controller('v1/reconciliation')
 export class ReconciliationController {
   readonly #db: Database
-  readonly #psp: PspClient
+  readonly #reconciliation: ReconciliationService
 
-  constructor(db: Database, psp: PspClient) {
+  constructor(db: Database, reconciliation: ReconciliationService) {
     this.#db = db
-    this.#psp = psp
+    this.#reconciliation = reconciliation
   }
 
   @Get('days')
   async days(@Query() { currency, limit }: DaysQuery): Promise<SettlementDayList> {
-    return dayListView(await this.#psp.calendar(), await recentFiles(this.#db.pool, currency, limit))
+    const { calendar, files } = await this.#reconciliation.recentDays(currency, limit)
+    return dayListView(calendar, files)
   }
 
   @Get('days/:day')
   async day(@Param() { day }: DayParams, @Query() { currency }: CurrencyQuery): Promise<SettlementDayView> {
-    const file = await fileOfDay(this.#db.pool, currency, day)
+    const [file, breaks] = await Promise.all([findFileOfDay(this.#db.pool, currency, day), breaksIn(this.#db.pool, currency, day, day)])
     const lines = file ? await linesOfFile(this.#db.pool, file.id, 200) : []
-    return dayView(currency, day, file, lines, await breaksIn(this.#db.pool, currency, day, day))
+    return dayView(currency, day, file, lines, breaks)
   }
 
   @Get('breaks')

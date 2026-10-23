@@ -2,7 +2,7 @@ import { Controller, Param, Post, Query } from '@nestjs/common'
 import type { SettlementView } from '@carwash/contracts'
 import { AdminOnly } from '../auth/access.guard.ts'
 import { CurrencyQuery, DayParams } from '../http/dto.ts'
-import { SettlementIngestService } from './ingest.service.ts'
+import { SettlementIngestService } from './settlement-ingest.service.ts'
 import { ReconciliationService } from './reconciliation.service.ts'
 
 @AdminOnly()

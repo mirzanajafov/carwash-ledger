@@ -2,7 +2,11 @@ import { BreakList, PaymentView, SettlementDayView, SettlementView } from '@carw
 import { checkLedger, checkSettlement, violations } from '@carwash/invariants'
 import { firstRow } from '@carwash/pg'
 import { NO_FAULTS, SETTLEMENT_FAULTS, type SettlementFault } from '@carwash/psp'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { NestFactory } from '@nestjs/core'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { PspClient } from '../src/psp/psp.client.ts'
+import { SettlementIngestService } from '../src/settlement/settlement-ingest.service.ts'
+import { WorkerModule } from '../src/worker/worker.module.ts'
 import { invalid, startStack, type Stack } from './support.ts'
 
 let stack: Stack
@@ -121,5 +125,22 @@ describe('settlement', () => {
     expect(await get(`/v1/reconciliation/breaks?from=${today}&through=-1`)).toEqual(invalid('through must be a day number'))
     expect(await get('/v1/reconciliation/days?sort=day')).toEqual(invalid('property sort should not exist'))
     expect((await get('/v1/reconciliation/days')).status).toBe(200)
+  })
+
+  it('catches up on every closed day it has not ingested yet, and reconciles after', async () => {
+    const latest = firstRow(await stack.admin.query<{ day: number }>('SELECT max(day)::int AS day FROM settlement_files')).day
+    const days = [latest + 1, latest + 2]
+    for (const day of days) await stack.psp.settlements.close(day)
+    const calendar = vi.spyOn(PspClient.prototype, 'calendar').mockResolvedValue({ kind: 'answer', daySeconds: 86_400, currentDay: latest + 3 })
+    const worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
+    try {
+      expect(await worker.get(SettlementIngestService).catchUp()).toBe(2)
+      const { rows } = await stack.admin.query<{ day: number }>('SELECT day::int AS day FROM settlement_files WHERE day = ANY($1) ORDER BY day', [days])
+      expect(rows.map((row) => row.day)).toEqual(days)
+      expect(await worker.get(SettlementIngestService).catchUp()).toBe(0)
+    } finally {
+      calendar.mockRestore()
+      await worker.close()
+    }
   })
 })

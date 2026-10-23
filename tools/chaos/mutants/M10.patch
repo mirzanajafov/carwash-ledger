@@ -1,5 +1,5 @@
---- a/apps/api/src/settlement/ingest.service.ts
-+++ b/apps/api/src/settlement/ingest.service.ts
+--- a/apps/api/src/settlement/settlement-ingest.service.ts
++++ b/apps/api/src/settlement/settlement-ingest.service.ts
 @@ -39,8 +39,7 @@
      return this.#db.transaction(async (client) => {
        if (await fileExists(client, file.id)) return 'already'
