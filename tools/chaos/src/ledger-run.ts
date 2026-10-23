@@ -1,21 +1,22 @@
-import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { FAILPOINTS } from '@carwash/failpoints'
 import { checkLedger } from '@carwash/invariants'
-import { median, mulberry32 } from '@carwash/lab'
+import { mulberry32 } from '@carwash/lab'
 import { createAccount, type Account, type BalanceMode } from '@carwash/ledger'
 import { createTestDatabase } from '@carwash/testkit'
+import type pg from 'pg'
 import { fetchJournals } from './checks.ts'
 import { ClientLedger, type Op } from './client.ts'
 import { compareWithClient, unsettled } from './compare.ts'
 import type { EntrySpec, FromWorker, Outcome } from './messages.ts'
-import { crashPostgres, holdToxic } from './outages.ts'
-import { fee, planRun, type Fault, type Journey, type ToxicKind } from './plan.ts'
-import type { LocalPostgres } from './postgres.ts'
-import type { Toxiproxy } from './toxiproxy.ts'
-import { addCounts, byInvariant, Violations, type Violation } from './violations.ts'
+import { drive, startClock } from './drive.ts'
+import { withPort, type Lab } from './lab.ts'
+import { Outages } from './outages.ts'
+import { fee, planRun, type Fault, type Journey } from './plan.ts'
+import { Supervisor } from './supervisor.ts'
+import { newLedgerReport, type LedgerReport } from './ledger-report.ts'
+import { Violations } from './violations.ts'
 import { Worker, type WorkerEvents } from './workers.ts'
-import type { LocalKafka } from './kafka.ts'
 
 export interface LedgerOptions {
   durationMs: number
@@ -37,44 +38,8 @@ export interface LedgerOptions {
   shards: number
 }
 
-export interface Lab {
-  dir: string
-  postgres: LocalPostgres
-  kafka: LocalKafka
-  toxiproxy: Toxiproxy
-  log(line: string): void
-}
-
-export interface LedgerReport {
-  seed: number
-  startedAt: string
-  faultPhaseMs: number
-  settleMs: number
-  settled: boolean
-  journeys: number
-  captures: number
-  reversals: number
-  attempts: number
-  outcomes: ClientLedger['stats']
-  kills: { random: number; failpoints: Record<string, number> }
-  workerStarts: number
-  crashes: number
-  postgres: { kills: number; recoveryMs: number[] }
-  toxics: Record<ToxicKind, number>
-  snapshots: { taken: number; errors: number }
-  checks: { periodic: number; skipped: number }
-  harnessErrors: string[]
-  violations: Violation[]
-}
-
 const POSTGRES_PORT = 5432
 const PROXY_PORTS = { posters: 6432, snapshots: 6433 } as const
-
-function withPort(url: string, port: number): string {
-  const parsed = new URL(url)
-  parsed.port = String(port)
-  return parsed.toString()
-}
 
 function captureEntries(journey: Journey, receivable: Account, fees: Account, merchants: Account[]): EntrySpec[] {
   const merchant = merchants[journey.merchant]
@@ -87,6 +52,28 @@ function captureEntries(journey: Journey, receivable: Account, fees: Account, me
   ]
 }
 
+async function createAccounts(app: pg.Pool, options: LedgerOptions): Promise<{ receivable: Account; fees: Account; merchants: Account[] }> {
+  const receivable = await createAccount(app, {
+    code: 'psp_receivable',
+    type: 'asset',
+    currency: 'EUR',
+    balanceMode: options.receivable,
+    shards: options.shards,
+  })
+  const fees = await createAccount(app, {
+    code: 'platform_fees',
+    type: 'revenue',
+    currency: 'EUR',
+    balanceMode: options.fees,
+    shards: options.shards,
+  })
+  const merchants: Account[] = []
+  for (let i = 0; i < options.merchants; i++) {
+    merchants.push(await createAccount(app, { code: `merchant_${i}`, type: 'liability', currency: 'EUR', balanceMode: 'locked' }))
+  }
+  return { receivable, fees, merchants }
+}
+
 export async function runLedger(lab: Lab, options: LedgerOptions, seed: number): Promise<LedgerReport> {
   const { postgres, toxiproxy } = lab
   const log = (line: string) => lab.log(`seed ${seed} ${line}`)
@@ -97,52 +84,15 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
   const plan = planRun({ ...options, seed })
   const random = mulberry32(seed ^ 0x72756e)
   const found = new Violations()
-  const report: LedgerReport = {
-    seed,
-    startedAt: new Date().toISOString(),
-    faultPhaseMs: options.durationMs,
-    settleMs: 0,
-    settled: true,
-    journeys: plan.journeys.length,
-    captures: 0,
-    reversals: 0,
-    attempts: 0,
-    outcomes: { posted: 0, conflictRetries: 0, duplicates: 0, retryable: 0, rejected: 0 },
-    kills: { random: 0, failpoints: {} },
-    workerStarts: 0,
-    crashes: 0,
-    postgres: { kills: 0, recoveryMs: [] },
-    toxics: { latency: 0, timeout: 0, reset_peer: 0, limit_data: 0, down: 0 },
-    snapshots: { taken: 0, errors: 0 },
-    checks: { periodic: 0, skipped: 0 },
-    harnessErrors: [],
-    violations: found.list,
-  }
+  const report = newLedgerReport(seed, options.durationMs, plan.journeys.length, found.list)
 
   const db = await createTestDatabase()
   const workers: Worker[] = []
-  let stopping = false
+  const supervisor = new Supervisor()
   try {
     const app = db.pool('ledger_app', 2)
     const audit = db.pool('ledger_audit', 1)
-    const receivable = await createAccount(app, {
-      code: 'psp_receivable',
-      type: 'asset',
-      currency: 'EUR',
-      balanceMode: options.receivable,
-      shards: options.shards,
-    })
-    const fees = await createAccount(app, {
-      code: 'platform_fees',
-      type: 'revenue',
-      currency: 'EUR',
-      balanceMode: options.fees,
-      shards: options.shards,
-    })
-    const merchants: Account[] = []
-    for (let i = 0; i < options.merchants; i++) {
-      merchants.push(await createAccount(app, { code: `merchant_${i}`, type: 'liability', currency: 'EUR', balanceMode: 'locked' }))
-    }
+    const { receivable, fees, merchants } = await createAccounts(app, options)
 
     await toxiproxy.reset()
     await toxiproxy.replaceProxy('posters', PROXY_PORTS.posters, POSTGRES_PORT)
@@ -150,8 +100,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
 
     const client = new ClientLedger(random)
     const journeys = new Map(plan.journeys.map((j) => [j.ref, j]))
-    const started = performance.now()
-    const now = () => performance.now() - started
+    const now = startClock()
 
     const events: WorkerEvents = {
       outcome: (ref: string, outcome: Outcome) => {
@@ -178,11 +127,9 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       },
       log,
       exit: (worker: Worker, code: number | null, signal: NodeJS.Signals | null) => {
-        if (stopping) return
+        if (supervisor.stopping) return
         if (signal === null && code !== 0) report.crashes++
-        setTimeout(() => {
-          if (!stopping) worker.start()
-        }, 500)
+        supervisor.restart(worker)
       },
     }
     const script = (name: string) => fileURLToPath(new URL(`./${name}.ts`, import.meta.url))
@@ -228,8 +175,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
       }
     }
 
-    const busy = { postgres: false }
-    let toxicCount = 0
+    const outages = new Outages(lab, seed, log)
     const applyFault = async (fault: Fault, index: number): Promise<void> => {
       try {
         if (fault.kind === 'kill') {
@@ -239,51 +185,41 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
           worker.kill()
           report.kills.random++
         } else if (fault.kind === 'postgres') {
-          if (busy.postgres) return
-          busy.postgres = true
-          try {
-            report.postgres.kills++
-            report.postgres.recoveryMs.push(await crashPostgres(postgres, fault.downMs))
-          } finally {
-            busy.postgres = false
-          }
+          await outages.crashPostgres(fault.downMs, report.postgres)
         } else {
           report.toxics[fault.toxic]++
-          await holdToxic(toxiproxy, fault.proxy, fault.toxic, fault.lastsMs, `${fault.toxic}-${toxicCount++}`, mulberry32(seed * 7919 + index))
+          await outages.holdToxic(fault.proxy, fault.toxic, fault.lastsMs, index)
         }
       } catch (error) {
         report.harnessErrors.push(`${fault.kind} at ${fault.at} ms: ${String(error)}`)
       }
     }
 
-    let checking = false
     const periodicCheck = async () => {
       try {
         found.addResults(await checkLedger(audit), 'during')
         report.checks.periodic++
       } catch {
         report.checks.skipped++
-      } finally {
-        checking = false
       }
     }
 
     const faultTasks: Promise<void>[] = []
     let nextJourney = 0
     let nextFault = 0
-    let lastCheck = 0
-    let lastSettleCheck = 0
-    let settleStarted: number | undefined
-    for (;;) {
-      const t = now()
-      if (settleStarted === undefined) {
-        for (let journey = plan.journeys[nextJourney]; journey !== undefined && journey.at <= t; journey = plan.journeys[++nextJourney]) {
-          client.add({ ref: journey.ref, kind: 'capture', entries: captureEntries(journey, receivable, fees, merchants), retryAt: t })
-          report.captures++
-        }
-        for (let fault = plan.faults[nextFault]; fault !== undefined && fault.at <= t; fault = plan.faults[++nextFault])
-          faultTasks.push(applyFault(fault, nextFault))
-        if (t >= options.durationMs) {
+    const driven = await drive(
+      now,
+      { durationMs: options.durationMs, settleMs: options.settleMs, checkEveryMs: options.checkEveryMs, settledEveryMs: 50 },
+      {
+        startDue: (t) => {
+          for (let journey = plan.journeys[nextJourney]; journey !== undefined && journey.at <= t; journey = plan.journeys[++nextJourney]) {
+            client.add({ ref: journey.ref, kind: 'capture', entries: captureEntries(journey, receivable, fees, merchants), retryAt: t })
+            report.captures++
+          }
+          for (let fault = plan.faults[nextFault]; fault !== undefined && fault.at <= t; fault = plan.faults[++nextFault])
+            faultTasks.push(applyFault(fault, nextFault))
+        },
+        endFaults: async () => {
           await Promise.all(faultTasks)
           await toxiproxy.reset()
           if (!postgres.running) {
@@ -294,32 +230,23 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
             worker.disarm()
             worker.start()
           }
-          settleStarted = now()
-        }
-      }
-      for (const op of client.due(t)) dispatch(op)
-      if (!checking && postgres.running && !busy.postgres && t - lastCheck >= options.checkEveryMs) {
-        lastCheck = t
-        checking = true
-        void periodicCheck()
-      }
-      if (settleStarted !== undefined && t - lastSettleCheck >= 50) {
-        lastSettleCheck = t
-        if (client.inFlight() === 0 && client.unresolved().length === 0) break
-        if (t - settleStarted > options.settleMs) {
-          report.settled = false
-          break
-        }
-      }
-      await sleep(5)
-    }
-    report.settleMs = Math.round(now() - settleStarted)
+        },
+        tick: (t) => {
+          for (const op of client.due(t)) dispatch(op)
+        },
+        canCheck: () => postgres.running && !outages.postgresBusy,
+        check: periodicCheck,
+        settled: () => Promise.resolve(client.inFlight() === 0 && client.unresolved().length === 0),
+      },
+    )
+    report.settleMs = driven.settleMs
+    report.settled = driven.settled
     report.outcomes = { ...client.stats }
 
-    stopping = true
+    supervisor.stop()
     await Promise.all(workers.map((w) => w.stop()))
     report.workerStarts = workers.reduce((sum, w) => sum + w.starts, 0)
-    while (checking) await sleep(10)
+    await driven.lastCheck
 
     found.addResults(await checkLedger(audit), 'final')
     const ledger = compareWithClient(client.ops.values(), await fetchJournals(audit))
@@ -328,48 +255,8 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     found.add('L1', 'final', 'every journal is resolved once the faults stop', open.count, open.examples)
     return report
   } finally {
-    stopping = true
+    supervisor.stop()
     await Promise.all(workers.map((w) => w.stop())).catch(() => undefined)
     await db.drop().catch((error: unknown) => log(`drop failed: ${String(error)}`))
   }
-}
-
-export function summarizeLedger(reports: readonly LedgerReport[]) {
-  const sum = (f: (r: LedgerReport) => number) => reports.reduce((total, r) => total + f(r), 0)
-  const failpoints: Record<string, number> = {}
-  const toxics: Record<string, number> = {}
-  for (const r of reports) {
-    addCounts(failpoints, r.kills.failpoints)
-    addCounts(toxics, r.toxics)
-  }
-  const firstViolation = reports.findIndex((r) => r.violations.length > 0)
-  return {
-    runs: reports.length,
-    journeys: sum((r) => r.captures + r.reversals),
-    attempts: sum((r) => r.attempts),
-    conflictRetries: sum((r) => r.outcomes.conflictRetries),
-    randomKills: sum((r) => r.kills.random),
-    crashes: sum((r) => r.crashes),
-    failpointKills: failpoints,
-    postgresKills: sum((r) => r.postgres.kills),
-    postgresRecoveryMsMedian: median(reports.flatMap((r) => r.postgres.recoveryMs)),
-    toxics,
-    settleMsMedian: median(reports.map((r) => r.settleMs)),
-    settleMsMax: Math.max(...reports.map((r) => r.settleMs)),
-    runsWithViolations: reports.filter((r) => r.violations.length > 0).length,
-    violationsByInvariant: byInvariant(reports),
-    firstViolatingRun: firstViolation === -1 ? null : firstViolation + 1,
-    harnessErrors: sum((r) => r.harnessErrors.length),
-  }
-}
-
-export function describeLedgerRun(index: number, r: LedgerReport): string {
-  const failpointKills = Object.values(r.kills.failpoints).reduce((a, b) => a + b, 0)
-  const toxics = Object.values(r.toxics).reduce((a, b) => a + b, 0)
-  const found = r.violations.length === 0 ? 'no violations' : r.violations.map((v) => `${v.id}/${v.phase} ${v.count}`).join(', ')
-  return (
-    `run ${index} seed ${r.seed}: ${r.captures + r.reversals} journeys, ${r.attempts} attempts, ` +
-    `kills ${r.kills.random} random + ${failpointKills} at failpoints, crashes ${r.crashes}, postgres ${r.postgres.kills}, toxics ${toxics}, ` +
-    `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}`
-  )
 }
