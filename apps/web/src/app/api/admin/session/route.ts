@@ -22,13 +22,18 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+function notRevoked(): Response {
+  return refuse(502, 'not_revoked', 'you are logged out in this browser, but the API could not end the session, so it ends on its own when it expires')
+}
+
 export async function DELETE(): Promise<Response> {
   const token = await sessionToken()
-  if (token) {
-    const reply = await callApi('DELETE', '/v1/admin/sessions/current', token).catch(() => null)
-    if (reply === null) return unreachable()
-    if (reply.status !== 200 && reply.status !== 401) return relay(reply)
-  }
   await forgetSession()
-  return Response.json({ admin: false })
+  if (token === null) return Response.json({ admin: false })
+  try {
+    const reply = await callApi('DELETE', '/v1/admin/sessions/current', token)
+    return reply.status === 200 || reply.status === 401 ? Response.json({ admin: false }) : notRevoked()
+  } catch {
+    return notRevoked()
+  }
 }

@@ -37,5 +37,10 @@ export async function adminSession(): Promise<AdminSession | null> {
 }
 
 export async function credential(): Promise<string> {
-  return (await sessionToken()) ?? adminKey()
+  const token = await sessionToken()
+  if (token === null) return adminKey()
+  const reply = await callApi('GET', '/v1/admin/sessions/current', token, { timeoutMs: 5000 }).catch(() => null)
+  if (reply?.status !== 401) return token
+  await forgetSession()
+  return adminKey()
 }
