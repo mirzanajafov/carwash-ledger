@@ -6,7 +6,7 @@ import { Database } from '../db/database.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import { merchantAccountCode } from '../ledger/account-codes.ts'
-import { Chart } from '../ledger/chart.service.ts'
+import { ChartService } from '../ledger/chart.service.ts'
 import type { Merchant } from './merchant.ts'
 import { findMerchant, insertMerchant } from './merchants.repository.ts'
 
@@ -19,10 +19,10 @@ export interface MerchantInput {
 @Injectable()
 export class MerchantsService {
   readonly #db: Database
-  readonly #chart: Chart
+  readonly #chart: ChartService
   readonly #idempotency: IdempotencyService
 
-  constructor(db: Database, chart: Chart, idempotency: IdempotencyService) {
+  constructor(db: Database, chart: ChartService, idempotency: IdempotencyService) {
     this.#db = db
     this.#chart = chart
     this.#idempotency = idempotency

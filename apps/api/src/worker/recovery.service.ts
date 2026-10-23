@@ -11,7 +11,7 @@ import { PspAnswerRejectedError, PspUnavailableError } from '../psp/psp.errors.t
 export type RecoveryOutcome = 'applied' | 'already' | 'anomaly' | 'unknown' | 'error'
 
 @Injectable()
-export class Recovery {
+export class RecoveryService {
   readonly #db: Database
   readonly #attempts: AttemptsService
   readonly #psp: PspClient

@@ -9,7 +9,7 @@ import { statements } from './statements.ts'
 export const CONSUMERS = [receipts, statements]
 
 @Injectable()
-export class EventConsumers implements OnApplicationBootstrap, OnModuleDestroy {
+export class EventConsumersService implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
   readonly #config: WorkerConfig
   readonly #logger = new Logger('consumers')

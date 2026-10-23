@@ -4,7 +4,6 @@ import { sqlStateOf } from '@carwash/pg'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError } from '../domain-errors.ts'
-import type { FeeSchedule } from '../payments/fees.ts'
 
 export interface CurrencyAccounts {
   receivable: Account
@@ -29,9 +28,8 @@ const CHART: Record<keyof CurrencyAccounts, Spec> = {
 }
 
 @Injectable()
-export class Chart implements OnModuleInit {
+export class ChartService implements OnModuleInit {
   readonly registry: AccountRegistry
-  readonly feeSchedule: FeeSchedule
   readonly #db: Database
   readonly #config: CoreConfig
   readonly #byCurrency = new Map<string, CurrencyAccounts>()
@@ -41,7 +39,6 @@ export class Chart implements OnModuleInit {
     this.#db = db
     this.#config = config
     this.registry = new AccountRegistry(pgAccountLoader(db.pool))
-    this.feeSchedule = config.fees
   }
 
   async onModuleInit(): Promise<void> {

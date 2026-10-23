@@ -5,7 +5,7 @@ import { journalEvents } from '../events/events.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import type { PayoutId } from '../ids.ts'
-import { Chart } from '../ledger/chart.service.ts'
+import { ChartService } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
 import { insertAttempt, pendingPayoutAttempt } from '../payments/attempts.repository.ts'
 import { AttemptsService } from '../payments/attempts.service.ts'
@@ -23,11 +23,11 @@ const MAX_ROUNDS = 5
 @Injectable()
 export class PayoutsService {
   readonly #db: Database
-  readonly #chart: Chart
+  readonly #chart: ChartService
   readonly #attempts: AttemptsService
   readonly #idempotency: IdempotencyService
 
-  constructor(db: Database, chart: Chart, attempts: AttemptsService, idempotency: IdempotencyService) {
+  constructor(db: Database, chart: ChartService, attempts: AttemptsService, idempotency: IdempotencyService) {
     this.#db = db
     this.#chart = chart
     this.#attempts = attempts

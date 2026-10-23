@@ -6,8 +6,8 @@ import { Envelope, kafkaClient } from '@carwash/outbox'
 import type { INestApplicationContext } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest'
-import { EventConsumers } from '../src/consumers/event-consumers.service.ts'
-import { OutboxRelay } from '../src/worker/outbox-relay.service.ts'
+import { EventConsumersService } from '../src/consumers/event-consumers.service.ts'
+import { OutboxRelayService } from '../src/worker/outbox-relay.service.ts'
 import { WorkerModule } from '../src/worker/worker.module.ts'
 import { count, startStack, testConfig, type Stack } from './support.ts'
 
@@ -48,7 +48,7 @@ describe('the worker relay', () => {
     while ((await count(stack.admin, 'SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL')) > 0 && Date.now() < deadline) {
       await sleep(100)
     }
-    expect(worker.get(OutboxRelay).running).toBe(true)
+    expect(worker.get(OutboxRelayService).running).toBe(true)
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM outbox WHERE published_at IS NULL')).toBe(0)
 
     const consumer = kafkaClient({ brokers: BROKERS, clientId: 'api-test' }).consumer({ kafkaJS: { groupId: `api-test-${randomUUID()}`, fromBeginning: true } })
@@ -91,7 +91,7 @@ describe('the worker relay', () => {
       found = violations(await checkEvents(stack.admin))
     }
     assert(worker)
-    expect(worker.get(EventConsumers).running).toBe(true)
+    expect(worker.get(EventConsumersService).running).toBe(true)
     expect(found).toEqual([])
     expect(await count(stack.admin, 'SELECT count(*)::int AS n FROM receipts')).toBe(2)
   })

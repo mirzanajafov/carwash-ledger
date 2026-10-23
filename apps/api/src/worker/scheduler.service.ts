@@ -5,17 +5,17 @@ import { pruneInbox, pruneOutbox } from '@carwash/outbox'
 import { CORE_CONFIG, WORKER_CONFIG, type CoreConfig, type HotAccountMode, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { IdempotencyService } from '../idempotency/idempotency.service.ts'
-import { Settlements } from '../settlement/settlements.service.ts'
+import { SettlementIngestService } from '../settlement/ingest.service.ts'
 import { WebhooksService } from '../webhooks/webhooks.service.ts'
-import { Recovery } from './recovery.service.ts'
+import { RecoveryService } from './recovery.service.ts'
 
 @Injectable()
-export class Scheduler implements OnApplicationBootstrap, OnModuleDestroy {
+export class SchedulerService implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
-  readonly #recovery: Recovery
+  readonly #recovery: RecoveryService
   readonly #webhooks: WebhooksService
   readonly #idempotency: IdempotencyService
-  readonly #settlements: Settlements
+  readonly #settlements: SettlementIngestService
   readonly #config: WorkerConfig
   readonly #hotAccountMode: HotAccountMode
   readonly #logger = new Logger('scheduler')
@@ -24,10 +24,10 @@ export class Scheduler implements OnApplicationBootstrap, OnModuleDestroy {
 
   constructor(
     db: Database,
-    recovery: Recovery,
+    recovery: RecoveryService,
     webhooks: WebhooksService,
     idempotency: IdempotencyService,
-    settlements: Settlements,
+    settlements: SettlementIngestService,
     @Inject(WORKER_CONFIG) config: WorkerConfig,
     @Inject(CORE_CONFIG) core: CoreConfig,
   ) {

@@ -5,7 +5,7 @@ import { CORE_CONFIG, WORKER_CONFIG, type CoreConfig, type WorkerConfig } from '
 import { Database } from '../db/database.ts'
 
 @Injectable()
-export class Sequencer implements OnApplicationBootstrap, OnModuleDestroy {
+export class SequencerService implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
   readonly #config: WorkerConfig
   readonly #logger = new Logger('sequencer')

@@ -1,16 +1,17 @@
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import type { FailedPayment } from '@carwash/contracts'
 import { sqlStateOf } from '@carwash/pg'
 import type { ApiClientIdentity } from '../auth/api-keys.ts'
+import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { DomainError, notFound } from '../domain-errors.ts'
 import { IdempotencyService, type Final, type OwnedKey } from '../idempotency/idempotency.service.ts'
 import type { PaymentId, RefundId } from '../ids.ts'
-import { Chart } from '../ledger/chart.service.ts'
+import { ChartService } from '../ledger/chart.service.ts'
 import { findMerchant } from '../merchants/merchants.repository.ts'
 import { insertAttempt, pendingCardAttempt, pendingRefundAttempt } from './attempts.repository.ts'
 import { AttemptsService } from './attempts.service.ts'
-import { platformFee } from './fees.ts'
+import { platformFee, type FeeSchedule } from './fees.ts'
 import type { CaptureMode, Payment, PaymentStatus } from './payment.ts'
 import { findPayment, findPaymentForUpdate, insertPayment, insertRefund, loadPayment, loadRefund, pendingRefundTotal } from './payments.repository.ts'
 import { paymentView, refundView } from './payments.views.ts'
@@ -43,15 +44,17 @@ function notCapturable(payment: Payment): DomainError {
 @Injectable()
 export class PaymentsService {
   readonly #db: Database
-  readonly #chart: Chart
+  readonly #chart: ChartService
   readonly #attempts: AttemptsService
   readonly #idempotency: IdempotencyService
+  readonly #fees: FeeSchedule
 
-  constructor(db: Database, chart: Chart, attempts: AttemptsService, idempotency: IdempotencyService) {
+  constructor(db: Database, chart: ChartService, attempts: AttemptsService, idempotency: IdempotencyService, @Inject(CORE_CONFIG) config: CoreConfig) {
     this.#db = db
     this.#chart = chart
     this.#attempts = attempts
     this.#idempotency = idempotency
+    this.#fees = config.fees
   }
 
   async create(owned: OwnedKey, input: CreatePaymentInput): Promise<Final> {
@@ -173,7 +176,7 @@ export class PaymentsService {
   }
 
   #checkAmount(amount: bigint): void {
-    if (platformFee(amount, this.#chart.feeSchedule) >= amount) {
+    if (platformFee(amount, this.#fees) >= amount) {
       throw new DomainError('invalid', 'amount_too_small', 'the amount does not cover the platform fee')
     }
   }

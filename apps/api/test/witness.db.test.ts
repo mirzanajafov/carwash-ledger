@@ -15,13 +15,13 @@ import { createWitnessServer, Witness } from '@carwash/witness'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import * as z from 'zod/mini'
 import { sequenceBatch } from '@carwash/audit-pg'
-import { Sequencer } from '../src/audit/sequencer.service.ts'
+import { SequencerService } from '../src/audit/sequencer.service.ts'
 import { Database } from '../src/db/database.ts'
 import { startStack, testConfig, type Stack } from './support.ts'
 
 let stack: Stack
 let witnessUrl: string
-let sequencer: Sequencer
+let sequencer: SequencerService
 let stateFile: string
 
 const VERIFY = fileURLToPath(new URL('../src/cli/verify.ts', import.meta.url))
@@ -103,7 +103,7 @@ beforeAll(async () => {
   })
   stateFile = join(dir, 'verifier.json')
   const config = testConfig({ ...stack.env, WITNESS_URL: witnessUrl, WITNESS_TOKEN: 'witness-token' })
-  sequencer = new Sequencer(stack.app.get(Database), config.worker, config.core)
+  sequencer = new SequencerService(stack.app.get(Database), config.worker, config.core)
 })
 
 afterAll(() => cleanup.disposeAsync())

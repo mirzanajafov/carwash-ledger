@@ -5,7 +5,7 @@ import { WORKER_CONFIG, type WorkerConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 
 @Injectable()
-export class OutboxRelay implements OnApplicationBootstrap, OnModuleDestroy {
+export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestroy {
   readonly #db: Database
   readonly #config: WorkerConfig
   readonly #logger = new Logger('relay')
