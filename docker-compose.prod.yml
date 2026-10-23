@@ -9,6 +9,12 @@ x-server: &server
       max-size: 10m
       max-file: "3"
 
+x-build: &build
+  context: .
+  dockerfile: deploy/server.Dockerfile
+  labels:
+    app: carwash
+
 x-ledger: &ledger
   DATABASE_URL: postgresql://ledger_app:${LEDGER_APP_PASSWORD}@postgres:5432/ledger
   PSP_URL: http://psp:3142
@@ -74,14 +80,17 @@ services:
   migrate:
     <<: *server
     image: carwash-migrate:latest
+    build:
+      <<: *build
+      target: migrate
     container_name: carwash-migrate
     restart: "no"
-    working_dir: /app/db
+    working_dir: /db
     command:
       [
         "sh",
         "-c",
-        "node node_modules/prisma/build/index.js migrate deploy && cd /app/api && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin",
+        "node node_modules/prisma/build/index.js migrate deploy && cd /app && CLIENT_KEY=$$TRAFFIC_KEY node dist/cli/register-client.js traffic client && CLIENT_KEY=$$DASHBOARD_CLIENT_KEY node dist/cli/register-client.js dashboard client && CLIENT_KEY=$$DASHBOARD_ADMIN_KEY node dist/cli/register-client.js dashboard-admin admin",
       ]
     environment:
       DATABASE_URL: postgresql://ledger_owner:${LEDGER_OWNER_PASSWORD}@postgres:5432/ledger
@@ -98,8 +107,10 @@ services:
   psp:
     <<: *server
     image: carwash-psp:latest
+    build:
+      <<: *build
+      target: psp
     container_name: carwash-psp
-    command: ["node", "dist/main.js"]
     environment:
       PSP_DATABASE_URL: postgresql://psp:${PSP_DB_PASSWORD}@postgres:5432/psp
       PSP_API_KEY: ${PSP_API_KEY}
@@ -122,8 +133,10 @@ services:
   witness:
     <<: *server
     image: carwash-witness:latest
+    build:
+      <<: *build
+      target: witness
     container_name: carwash-witness
-    command: ["node", "dist/main.js"]
     environment:
       WITNESS_TOKEN: ${WITNESS_TOKEN:?set WITNESS_TOKEN}
       WITNESS_DIR: /var/lib/witness
@@ -142,8 +155,10 @@ services:
   api:
     <<: *server
     image: carwash-api:latest
+    build:
+      <<: *build
+      target: api
     container_name: carwash-api
-    command: ["node", "dist/main.js"]
     environment:
       <<: *ledger
       AUDIT_DATABASE_URL: postgresql://ledger_audit:${LEDGER_AUDIT_PASSWORD}@postgres:5432/ledger
@@ -163,6 +178,9 @@ services:
   worker:
     <<: *server
     image: carwash-api:latest
+    build:
+      <<: *build
+      target: api
     container_name: carwash-worker
     command: ["node", "dist/worker.js"]
     environment:
@@ -189,8 +207,10 @@ services:
   tamper:
     <<: *server
     image: carwash-tamper:latest
+    build:
+      <<: *build
+      target: tamper
     container_name: carwash-tamper
-    command: ["node", "dist/main.js"]
     environment:
       TAMPER_DATABASE_URL: postgresql://carwash:${POSTGRES_PASSWORD}@postgres:5432/ledger
       TAMPER_TOKEN: ${TAMPER_TOKEN:?set TAMPER_TOKEN}
@@ -205,8 +225,10 @@ services:
   traffic:
     <<: *server
     image: carwash-traffic:latest
+    build:
+      <<: *build
+      target: traffic
     container_name: carwash-traffic
-    command: ["node", "dist/main.js"]
     environment:
       API_URL: http://api:3140
       CLIENT_KEY: ${TRAFFIC_KEY}
@@ -222,6 +244,11 @@ services:
 
   web:
     image: carwash-web:latest
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      labels:
+        app: carwash
     container_name: carwash-web
     init: true
     restart: unless-stopped

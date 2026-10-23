@@ -163,7 +163,7 @@ sh tools/bench/run.sh src/floor.ts               # is the machine quiet enough t
 sh tools/bench/run.sh src/e6.ts --mode trials    # any experiment, see tools/bench/src
 ```
 
-For the dashboard, start the provider, the API, the worker, the witness, the tamper service, the traffic and `pnpm --filter @carwash/web dev`, or run the whole production stack: `docker compose -f docker-compose.prod.yml up -d` after building the images (`deploy/server.Dockerfile` has a target for each service and one for the migrations, the web has `apps/web/Dockerfile`), with the secrets in `.env`. On the server, `deploy/deploy.sh` backs up, fast-forwards, rebuilds, checks health and rolls back. `deploy/restore-check.sh` restores the latest backup into a throwaway Postgres and runs the invariants and the verifier against the archived witness.
+For the dashboard, start the provider, the API, the worker, the witness, the tamper service, the traffic and `pnpm --filter @carwash/web dev`, or run the whole production stack with `docker compose -f docker-compose.prod.yml up -d --build` and the secrets in `.env`. On the server, `deploy/deploy.sh` backs up, fast-forwards, rebuilds, checks health and rolls back. `deploy/restore-check.sh` restores the latest backup into a throwaway Postgres and runs the invariants and the verifier against the archived witness.
 
 ## API at a glance
 

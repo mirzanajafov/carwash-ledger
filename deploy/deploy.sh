@@ -25,12 +25,7 @@ healthy() {
 
 release() {
   say "Building the images and starting the stack"
-  for app in api psp witness tamper traffic migrate; do
-    docker build -q --label app=carwash -f deploy/server.Dockerfile --target "$app" -t "carwash-$app:latest" . > /dev/null || return 1
-  done
-  docker build -q --label app=carwash -f apps/web/Dockerfile -t carwash-web:latest . > /dev/null &&
-    "${compose[@]}" build -q backup &&
-    "${compose[@]}" up -d --remove-orphans
+  "${compose[@]}" build -q && "${compose[@]}" up -d --remove-orphans
 }
 
 previous=$(git rev-parse HEAD)

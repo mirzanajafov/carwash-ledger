@@ -40,8 +40,10 @@ RUN pnpm --filter @carwash/db generate \
   && pnpm --config.inject-workspace-packages=true --filter @carwash/db deploy /out/db
 
 FROM base AS runtime
+RUN install -d -o node -g node /var/lib/witness
 ENV NODE_ENV=production
 USER node
+CMD ["node", "dist/main.js"]
 
 FROM runtime AS api
 COPY --from=build --chown=node:node /out/api /app
@@ -50,9 +52,6 @@ FROM runtime AS psp
 COPY --from=build --chown=node:node /out/psp /app
 
 FROM runtime AS witness
-USER root
-RUN mkdir -p /var/lib/witness && chown node:node /var/lib/witness
-USER node
 COPY --from=build --chown=node:node /out/witness /app
 
 FROM runtime AS tamper
@@ -61,6 +60,5 @@ COPY --from=build --chown=node:node /out/tamper /app
 FROM runtime AS traffic
 COPY --from=build --chown=node:node /out/traffic /app
 
-FROM runtime AS migrate
-COPY --from=build --chown=node:node /out/db /app/db
-COPY --from=build --chown=node:node /out/api /app/api
+FROM api AS migrate
+COPY --from=build --chown=node:node /out/db /db

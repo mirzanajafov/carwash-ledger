@@ -13,7 +13,7 @@ failing() { [ "$FAIL_AT" = any ] || [ "$(git rev-parse HEAD)" = "$FAIL_AT" ]; }
 case "$*" in
   "inspect carwash-postgres") exit 1 ;;
   inspect*) if [ "$FAIL" = health ] && failing; then echo starting; else echo healthy; fi ;;
-  *"--target api "*) ! { [ "$FAIL" = build ] && failing; } ;;
+  *" build -q"*) ! { [ "$FAIL" = build ] && failing; } ;;
   *"up -d"*) ! { [ "$FAIL" = up ] && failing; } ;;
 esac
 `
