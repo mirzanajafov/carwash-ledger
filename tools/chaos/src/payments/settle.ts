@@ -2,6 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { AnomalyList, AnomalyView, errorOf, SettlementView } from '@carwash/contracts'
 import { checkEvents, checkSequenced, checkSettled, readWitness } from '@carwash/invariants'
 import type pg from 'pg'
+import { describeError } from '../messages.ts'
 import type { Journeys } from './journeys.ts'
 import type { PaymentsReport } from './report.ts'
 import { ADMIN_KEY, API_PORTS, PSP_ADMIN_KEY, PSP_PORT, SETTLEMENT_DAY_SECONDS, WITNESS_URL } from './stack.ts'
@@ -26,7 +27,7 @@ export async function acceptOpenAnomalies(report: PaymentsReport, journeys: Jour
       `anomalies: ${report.anomalies.open} open, ${report.anomalies.accepted} accepted${report.anomalies.failed.length ? `, refused ${report.anomalies.failed.join('; ')}` : ''}`,
     )
   } catch (error) {
-    report.harnessErrors.push(`accepting anomalies: ${String(error)}`)
+    report.harnessErrors.push(`accepting anomalies: ${describeError(error)}`)
   }
 }
 
@@ -42,7 +43,8 @@ export async function settleDays(report: PaymentsReport, log: (line: string) => 
         report.settlement.breaks[name] = (report.settlement.breaks[name] ?? 0) + n
       }
     } catch (error) {
-      report.harnessErrors.push(`settling day ${day}: ${String(error)}`)
+      report.harnessErrors.push(`settling day ${day}: ${describeError(error)}`)
+      break
     }
   }
   log(`settled days ${report.settlement.days.join(', ')}: ${report.settlement.outcomes.join(', ')}, breaks ${JSON.stringify(report.settlement.breaks)}`)

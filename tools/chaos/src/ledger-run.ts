@@ -8,7 +8,7 @@ import type pg from 'pg'
 import { fetchJournals } from './checks.ts'
 import { ClientLedger, type Op } from './client.ts'
 import { compareWithClient, unsettled } from './compare.ts'
-import type { EntrySpec, FromWorker, Outcome } from './messages.ts'
+import { describeError, type EntrySpec, type FromWorker, type Outcome } from './messages.ts'
 import { drive, startClock } from './drive.ts'
 import { withPort, type Lab } from './lab.ts'
 import { Outages } from './outages.ts'
@@ -182,7 +182,9 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
           await outages.holdToxic(fault.proxy, fault.toxic, fault.lastsMs, index)
         }
       } catch (error) {
-        report.harnessErrors.push(`${fault.kind} at ${fault.at} ms: ${String(error)}`)
+        const failed = `${fault.kind} at ${fault.at} ms: ${describeError(error)}`
+        report.harnessErrors.push(failed)
+        log(`fault failed: ${failed}`)
       }
     }
 
@@ -232,7 +234,7 @@ export async function runLedger(lab: Lab, options: LedgerOptions, seed: number):
     await Promise.all(workers.map((w) => w.stop()))
     report.workerStarts = workers.reduce((sum, w) => sum + w.starts, 0)
     await driven.lastCheck
-    report.harnessErrors.push(...driven.checkErrors.map((error) => `check: ${String(error)}`))
+    report.harnessErrors.push(...driven.checkErrors.map((error) => `check: ${describeError(error)}`))
 
     found.addResults(await checkLedger(audit), 'final')
     const ledger = compareWithClient(client.ops.values(), await fetchJournals(audit))

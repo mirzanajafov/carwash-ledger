@@ -85,6 +85,7 @@ export function describeLedgerRun(index: number, r: LedgerReport): string {
   return (
     `run ${index} seed ${r.seed}: ${r.captures + r.reversals} journeys, ${r.attempts} attempts, ` +
     `kills ${r.kills.random} random + ${failpointKills} at failpoints, crashes ${r.crashes}, postgres ${r.postgres.kills}, toxics ${toxics}, ` +
-    `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}`
+    `settled ${r.settled ? `in ${(r.settleMs / 1000).toFixed(1)} s` : 'NOT'}, ${found}` +
+    (r.harnessErrors.length > 0 ? `, ${r.harnessErrors.length} harness errors` : '')
   )
 }
