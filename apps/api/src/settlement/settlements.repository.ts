@@ -1,6 +1,6 @@
 import type { BreakClass, BreakView } from '@carwash/contracts'
-import { firstRow, type Queryable, type Transaction } from '@carwash/pg'
-import type { Break, FileLine, Kind, LedgerItem } from '@carwash/recon'
+import { firstRow, takeAdvisoryLock, type Queryable, type Transaction } from '@carwash/pg'
+import type { Break, FileLine, Kind, LedgerItem, Window } from '@carwash/recon'
 import type { ParsedFile } from './settlement-file.ts'
 
 export interface LedgerItemsQuery {
@@ -90,29 +90,20 @@ export async function insertFile(client: Transaction, file: ParsedFile, journalI
   )
 }
 
-export async function filesSoFar(db: Queryable, currency: string): Promise<{ count: number; latest: number | null }> {
+export interface FilesSoFar {
+  count: number
+  latest: number | null
+  reconciled: number
+}
+
+export async function filesSoFar(db: Queryable, currency: string): Promise<FilesSoFar> {
   return firstRow(
-    await db.query<{ count: number; latest: number | null }>(
-      'SELECT count(*)::int AS count, max(day)::int AS latest FROM settlement_files WHERE currency = $1',
+    await db.query<FilesSoFar>(
+      `SELECT count(*)::int AS count, max(day)::int AS latest, coalesce((SELECT files FROM recon_cursors WHERE currency = $1), 0) AS reconciled
+       FROM settlement_files WHERE currency = $1`,
       [currency],
     ),
   )
-}
-
-export async function recordReconciliation(client: Transaction, currency: string, files: number): Promise<void> {
-  await client.query('INSERT INTO recon_cursors (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
-    currency,
-    files,
-  ])
-}
-
-export async function reconciliationDue(db: Queryable, currency: string): Promise<boolean> {
-  return firstRow(
-    await db.query<{ due: boolean }>(
-      `SELECT (SELECT count(*) FROM settlement_files WHERE currency = $1) > coalesce((SELECT files FROM recon_cursors WHERE currency = $1), 0) AS due`,
-      [currency],
-    ),
-  ).due
 }
 
 export async function settledSoFar(db: Queryable, currency: string, daySeconds: number): Promise<{ latest: number | null; first: number | null }> {
@@ -149,8 +140,13 @@ export async function linesForMatching(db: Queryable, currency: string, from: nu
   return rows.map((row) => ({ ...row, gross: BigInt(row.gross), fee: BigInt(row.fee), net: BigInt(row.net) }))
 }
 
-export async function replaceBreaks(client: Transaction, currency: string, from: number, through: number, breaks: readonly Break[]): Promise<void> {
-  await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, from, through])
+export async function saveReconciliation(client: Transaction, currency: string, span: Window, breaks: readonly Break[], files: number): Promise<void> {
+  await takeAdvisoryLock(client, settlementsKey(currency))
+  await client.query('DELETE FROM recon_breaks WHERE currency = $1 AND day BETWEEN $2 AND $3', [currency, span.keepFrom, span.keepThrough])
+  await client.query('INSERT INTO recon_cursors (currency, files) VALUES ($1, $2) ON CONFLICT (currency) DO UPDATE SET files = excluded.files', [
+    currency,
+    files,
+  ])
   if (breaks.length === 0) return
   await client.query(
     `INSERT INTO recon_breaks (currency, day, class, file_id, line, journal_ref, attempt_id, detail)

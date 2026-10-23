@@ -35,9 +35,9 @@ async function latestDay(): Promise<number> {
   return firstRow(await stack.admin.query<{ day: number }>('SELECT max(day)::int AS day FROM settlement_files')).day
 }
 
-async function withWorker(currentDay: number, work: (worker: INestApplicationContext) => Promise<void>): Promise<void> {
+async function withWorker(currentDay: number, work: (worker: INestApplicationContext) => Promise<void>, config = stack.config): Promise<void> {
   const calendar = vi.spyOn(PspClient.prototype, 'calendar').mockResolvedValue({ kind: 'answer', daySeconds: 86_400, currentDay })
-  const worker = await NestFactory.createApplicationContext(WorkerModule.register(stack.config), { logger: false })
+  const worker = await NestFactory.createApplicationContext(WorkerModule.register(config), { logger: false })
   try {
     await work(worker)
   } finally {
@@ -47,10 +47,20 @@ async function withWorker(currentDay: number, work: (worker: INestApplicationCon
 }
 
 async function waitingForTheLock(): Promise<number> {
-  const waiting = await stack.admin.query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+  return count(
+    stack.admin,
+    `SELECT count(*)::int AS n FROM pg_locks
+     WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = hashtextextended($1, 0)
+       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+    [settlementsKey('EUR')],
   )
-  return firstRow(waiting).n
+}
+
+async function cursor(currency: string): Promise<{ files: number; version: string } | undefined> {
+  const { rows } = await stack.admin.query<{ files: number; version: string }>('SELECT files, xmin::text AS version FROM recon_cursors WHERE currency = $1', [
+    currency,
+  ])
+  return rows[0]
 }
 
 function only(fault: SettlementFault) {
@@ -201,21 +211,48 @@ describe('settlement', () => {
     })
   })
 
-  it('reconciles on the next catch-up when the reconcile after an ingest failed', async () => {
+  it('reconciles on the next catch-up when the reconcile after an ingest failed, and not again after that', async () => {
     const latest = await latestDay()
     await stack.psp.settlements.close(latest + 1)
-    const reconcile = vi.spyOn(ReconciliationService.prototype, 'reconcile').mockRejectedValueOnce(new Error('the database went away'))
+    const reconcile = vi.spyOn(ReconciliationService.prototype, 'reconcileIfDue').mockRejectedValueOnce(new Error('the database went away'))
     try {
       await withWorker(latest + 2, async (worker) => {
         const ingest = worker.get(SettlementIngestService)
         await expect(ingest.catchUp()).rejects.toThrow('EUR: the database went away')
         expect(await ingest.catchUp()).toBe(0)
-        expect(reconcile).toHaveBeenCalledTimes(2)
+        const files = await count(stack.admin, "SELECT count(*)::int AS n FROM settlement_files WHERE currency = 'EUR'")
+        const reconciled = await cursor('EUR')
+        expect(reconciled?.files).toBe(files)
         expect(await ingest.catchUp()).toBe(0)
-        expect(reconcile).toHaveBeenCalledTimes(2)
+        expect(await cursor('EUR')).toEqual(reconciled)
       })
     } finally {
       reconcile.mockRestore()
     }
+  })
+
+  it('keeps catching up the other currencies when one of them fails', async () => {
+    const latest = await latestDay()
+    await stack.admin.query("INSERT INTO settlement_files (id, day, currency, lines, gross, fee, net) VALUES ($1, $2, 'USD', 0, 0, 0, 0)", [
+      `stl_USD_${latest}`,
+      latest,
+    ])
+    await stack.psp.settlements.close(latest + 1)
+    const config = { ...stack.config, core: { ...stack.config.core, currencies: ['USD', 'EUR'] } }
+    await withWorker(
+      latest + 2,
+      async (worker) => {
+        const psp = worker.get(PspClient)
+        const fetchFile = psp.settlementFile.bind(psp)
+        vi.spyOn(psp, 'settlementFile').mockImplementation((day, currency) =>
+          currency === 'USD' ? Promise.reject(new Error('the bank is down for USD')) : fetchFile(day, currency),
+        )
+        await expect(worker.get(SettlementIngestService).catchUp()).rejects.toThrow('USD: the bank is down for USD')
+        expect(await latestDay()).toBe(latest + 1)
+        expect((await cursor('EUR'))?.files).toBe(await count(stack.admin, "SELECT count(*)::int AS n FROM settlement_files WHERE currency = 'EUR'"))
+        expect((await cursor('USD'))?.files).toBe(1)
+      },
+      config,
+    )
   })
 })

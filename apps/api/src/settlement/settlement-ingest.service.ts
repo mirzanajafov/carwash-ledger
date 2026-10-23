@@ -10,9 +10,13 @@ import { PspClient, type CalendarReply } from '../psp/psp.client.ts'
 import { PspUnavailableError } from '../psp/psp.errors.ts'
 import { ReconciliationService } from './reconciliation.service.ts'
 import { parseSettlementFile } from './settlement-file.ts'
-import { fileExists, insertFile, reconciliationDue, settledSoFar, settlementsKey } from './settlements.repository.ts'
+import { fileExists, insertFile, settledSoFar, settlementsKey } from './settlements.repository.ts'
 
 export type IngestOutcome = SettlementView['outcome']
+
+function failureIn(currency: string, error: unknown): Error {
+  return new Error(`${currency}: ${errorText(error)}`, { cause: error })
+}
 
 @Injectable()
 export class SettlementIngestService {
@@ -67,30 +71,35 @@ export class SettlementIngestService {
   async catchUp(): Promise<number> {
     const calendar = await this.#psp.calendar()
     if (calendar.kind === 'unknown') return 0
-    let ingested = 0
     const failures: Error[] = []
-    const each = async (work: (currency: string) => Promise<void>) => {
-      for (const currency of this.#config.currencies) {
-        await work(currency).catch((error: unknown) => failures.push(new Error(`${currency}: ${errorText(error)}`, { cause: error })))
+    let ingested = 0
+    for (const currency of this.#config.currencies) {
+      try {
+        ingested += await this.#ingestClosedDays(currency, calendar)
+      } catch (error) {
+        failures.push(failureIn(currency, error))
       }
     }
-    await each(async (currency) => {
-      for (let day = await this.#firstOpenDay(currency, calendar); day < calendar.currentDay; day++) {
-        const outcome = await this.ingest(day, currency)
-        if (outcome === 'not_ready') return
-        if (outcome === 'ingested') ingested++
+    for (const currency of this.#config.currencies) {
+      try {
+        await this.#reconciliation.reconcileIfDue(currency, calendar.daySeconds)
+      } catch (error) {
+        failures.push(failureIn(currency, error))
       }
-    })
-    await each(async (currency) => {
-      if (await reconciliationDue(this.#db.pool, currency)) await this.#reconciliation.reconcile(currency, calendar.daySeconds)
-    })
+    }
     if (ingested > 0) this.#logger.log(`ingested ${ingested} settlement files`)
     if (failures.length > 0) throw new AggregateError(failures, `the settlement catch-up failed for ${failures.map((failure) => failure.message).join(', ')}`)
     return ingested
   }
 
-  async #firstOpenDay(currency: string, calendar: Extract<CalendarReply, { kind: 'answer' }>): Promise<number> {
+  async #ingestClosedDays(currency: string, calendar: Extract<CalendarReply, { kind: 'answer' }>): Promise<number> {
     const { latest, first } = await settledSoFar(this.#db.pool, currency, calendar.daySeconds)
-    return latest === null ? (first ?? calendar.currentDay) : latest + 1
+    let ingested = 0
+    for (let day = latest === null ? (first ?? calendar.currentDay) : latest + 1; day < calendar.currentDay; day++) {
+      const outcome = await this.ingest(day, currency)
+      if (outcome === 'not_ready') break
+      if (outcome === 'ingested') ingested++
+    }
+    return ingested
   }
 }

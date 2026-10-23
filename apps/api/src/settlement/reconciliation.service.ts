@@ -1,21 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common'
 import type { BreakClass, SettlementView } from '@carwash/contracts'
 import { reconcile, window, type Break, type Window } from '@carwash/recon'
-import { takeAdvisoryLock } from '@carwash/pg'
 import { CORE_CONFIG, type CoreConfig } from '../config.ts'
 import { Database } from '../db/database.ts'
 import { ChartService } from '../ledger/chart.service.ts'
 import { PspClient, type CalendarReply } from '../psp/psp.client.ts'
-import {
-  filesSoFar,
-  ledgerItems,
-  linesForMatching,
-  recentFiles,
-  recordReconciliation,
-  replaceBreaks,
-  settlementsKey,
-  type FileSummaryRow,
-} from './settlements.repository.ts'
+import { filesSoFar, ledgerItems, linesForMatching, recentFiles, saveReconciliation, type FileSummaryRow, type FilesSoFar } from './settlements.repository.ts'
 
 export type ReconcileSummary = NonNullable<SettlementView['reconciliation']>
 
@@ -34,14 +24,18 @@ export class ReconciliationService {
   }
 
   async reconcile(currency: string, daySeconds: number): Promise<ReconcileSummary | undefined> {
+    return this.#reconcile(currency, daySeconds, await filesSoFar(this.#db.pool, currency))
+  }
+
+  async reconcileIfDue(currency: string, daySeconds: number): Promise<void> {
     const files = await filesSoFar(this.#db.pool, currency)
+    if (files.count > files.reconciled) await this.#reconcile(currency, daySeconds, files)
+  }
+
+  async #reconcile(currency: string, daySeconds: number, files: FilesSoFar): Promise<ReconcileSummary | undefined> {
     if (files.latest === null) return undefined
     const { span, summary, kept } = await this.#match(currency, daySeconds, files.latest)
-    await this.#db.transaction(async (client) => {
-      await takeAdvisoryLock(client, settlementsKey(currency))
-      await replaceBreaks(client, currency, span.keepFrom, span.keepThrough, kept)
-      await recordReconciliation(client, currency, files.count)
-    })
+    await this.#db.transaction((client) => saveReconciliation(client, currency, span, kept, files.count))
     return summary
   }
 
