@@ -29,10 +29,7 @@ export async function createTestDatabase(options: { template?: string; through?:
     url: (role) => databaseUrl(role, name),
     pool: (role, max = 10) => pools.open(databaseUrl(role, name), max),
     close: () => pools.end(),
-    drop: async () => {
-      await pools.end()
-      await dropDatabase(name)
-    },
+    drop: () => dropAfter(pools, name),
   }
 }
 
@@ -55,8 +52,12 @@ function trackedPools() {
   }
 }
 
-async function dropDatabase(name: string): Promise<void> {
-  await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
+async function dropAfter(pools: ReturnType<typeof trackedPools>, name: string): Promise<void> {
+  try {
+    await pools.end()
+  } finally {
+    await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
+  }
 }
 
 function triggersOff<T>(work: (client: Transaction) => Promise<T>): (client: Transaction) => Promise<T> {
@@ -90,9 +91,6 @@ export async function createScratchDatabase(prefix: string): Promise<ScratchData
     name,
     url,
     pool: (max = 10) => pools.open(url, max),
-    drop: async () => {
-      await pools.end()
-      await dropDatabase(name)
-    },
+    drop: () => dropAfter(pools, name),
   }
 }
