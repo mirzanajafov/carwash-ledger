@@ -10,7 +10,7 @@ import { NO_FAULTS, startPsp, type RunningPsp } from '@carwash/psp'
 import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
 import { NestFactory } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import pg from 'pg'
+import type pg from 'pg'
 import { AppModule, configureApp } from '../src/app.module.ts'
 import { hashApiKey } from '../src/auth/api-keys.ts'
 import { loadApiConfig, loadCoreConfig, loadWorkerConfig, type ApiConfig, type CoreConfig, type WorkerConfig } from '../src/config.ts'
@@ -125,7 +125,7 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
   const pspDb = await createScratchDatabase('psp')
   const owner = ledgerDb.pool('ledger_owner', 2)
   const admin = ledgerDb.pool('admin', 2)
-  const pspSql = new pg.Pool({ connectionString: pspDb.url, max: 2 })
+  const pspSql = pspDb.pool(2)
   const clientIds = {} as Record<keyof typeof KEYS, string>
   for (const [name, key] of Object.entries(KEYS) as [keyof typeof KEYS, string][]) {
     const { id } = firstRow(
@@ -179,7 +179,6 @@ export async function startStack(options: { webhooks?: boolean } = {}): Promise<
     close: async () => {
       await app.close()
       await psp.close()
-      await pspSql.end()
       await pspDb.drop()
       await ledgerDb.drop()
     },

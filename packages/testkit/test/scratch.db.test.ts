@@ -1,0 +1,40 @@
+import { firstRow } from '@carwash/pg'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import { createScratchDatabase } from '../src/index.ts'
+import { withAdmin } from '../src/template.ts'
+
+describe('a scratch database', () => {
+  it("keeps a pool working when an idle client's backend is terminated, the way a forced drop does", async () => {
+    const db = await createScratchDatabase('kit')
+    onTestFinished(() => db.drop())
+    const pool = db.pool(1)
+    const { pid } = firstRow(await pool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid'))
+
+    await withAdmin((admin) => admin.query('SELECT pg_terminate_backend($1)', [pid]))
+
+    await expect.poll(() => pool.totalCount, { timeout: 5000 }).toBe(0)
+    expect(firstRow(await pool.query<{ ok: number }>('SELECT 1 AS ok')).ok).toBe(1)
+  })
+
+  it('ends the pools it handed out when it drops the database, one already ended included', async () => {
+    const db = await createScratchDatabase('kit')
+    const pool = db.pool()
+    const ended = db.pool()
+    await pool.query('SELECT 1')
+    await ended.end()
+
+    await expect(db.drop()).resolves.toBeUndefined()
+
+    expect(pool.ended).toBe(true)
+  })
+
+  it('drops the database even when ending one of its pools fails', async () => {
+    const db = await createScratchDatabase('kit')
+    vi.spyOn(db.pool(), 'end').mockRejectedValue(new Error('the pool would not end'))
+
+    await expect(db.drop()).rejects.toThrow('the pool would not end')
+
+    const { rows } = await withAdmin((admin) => admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [db.name]))
+    expect(rows).toEqual([])
+  })
+})

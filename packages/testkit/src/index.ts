@@ -23,23 +23,39 @@ export async function createTestDatabase(options: { template?: string; through?:
     if (!names.includes(options.through)) throw new Error(`there is no migration ${options.through}`)
     for (const migration of names.slice(0, names.indexOf(options.through) + 1)) await applyMigration(databaseUrl('ledger_owner', name), migration)
   }
-  const pools: pg.Pool[] = []
+  const pools = trackedPools(name)
   return {
     name,
     url: (role) => databaseUrl(role, name),
-    pool: (role, max = 10) => {
-      const pool = createPool({ connectionString: databaseUrl(role, name), max })
-      pools.push(pool)
-      return pool
-    },
-    close: async () => {
-      await Promise.all(pools.splice(0).map((pool) => pool.end()))
-    },
-    drop: async () => {
-      await Promise.all(pools.splice(0).map((pool) => pool.end()))
-      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
-    },
+    pool: (role, max = 10) => pools.open(databaseUrl(role, name), max),
+    close: pools.end,
+    drop: pools.drop,
   }
+}
+
+function trackedPools(database: string) {
+  const pools: pg.Pool[] = []
+  const open = (url: string, max: number): pg.Pool => {
+    const pool = createPool({ connectionString: url, max })
+    pools.push(pool)
+    return pool
+  }
+  const end = async (): Promise<void> => {
+    await Promise.all(
+      pools
+        .splice(0)
+        .filter((pool) => !pool.ending)
+        .map((pool) => pool.end()),
+    )
+  }
+  const drop = async (): Promise<void> => {
+    try {
+      await end()
+    } finally {
+      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(database)} WITH (FORCE)`))
+    }
+  }
+  return { open, end, drop }
 }
 
 function triggersOff<T>(work: (client: Transaction) => Promise<T>): (client: Transaction) => Promise<T> {
@@ -60,17 +76,19 @@ export function inRollbackWithTriggersOff<T>(pool: pg.Pool, work: (client: Trans
 export interface ScratchDatabase {
   readonly name: string
   readonly url: string
+  pool(max?: number): pg.Pool
   drop(): Promise<void>
 }
 
 export async function createScratchDatabase(prefix: string): Promise<ScratchDatabase> {
   const name = `test_${prefix}_${process.pid}_${randomBytes(4).toString('hex')}`
   await withAdmin((admin) => admin.query(`CREATE DATABASE ${quoteIdent(name)}`))
+  const url = databaseUrl('admin', name)
+  const pools = trackedPools(name)
   return {
     name,
-    url: databaseUrl('admin', name),
-    drop: async () => {
-      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
-    },
+    url,
+    pool: (max = 10) => pools.open(url, max),
+    drop: pools.drop,
   }
 }
