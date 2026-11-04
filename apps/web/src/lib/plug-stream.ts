@@ -14,7 +14,7 @@ export async function followPlug(body: ReadableStream<Uint8Array<ArrayBuffer>>, 
       if (!line.trim()) continue
       const step = JSON.parse(line) as Step
       show(step)
-      if (step.kind === 'lost') reportStep('pulled-plug')
+      if (step.kind === 'back') reportStep('pulled-plug')
     }
   }
 }

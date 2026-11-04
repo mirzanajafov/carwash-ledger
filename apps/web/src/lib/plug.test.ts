@@ -124,9 +124,14 @@ describe('following the plug in the browser', () => {
     return { shown: shown.map((step) => step.kind), sent }
   }
 
-  it('hands the plug to the visit script once the API process has died at the crash point', async () => {
+  it('hands the plug to the visit script once a new API process answers after the crash', async () => {
     const { deps } = fakeApi({ pay: [new Error('socket hang up'), { status: 200, body: payment('pay_1', 'captured'), retryAfter: null }], health: ['second'] })
     expect(await follow(await run(deps))).toEqual({ shown: ['armed', 'sent', 'lost', 'back', 'answered', 'checks'], sent: ['pulled-plug'] })
+  })
+
+  it('sends no step when the payment was lost but no new process ever answered', async () => {
+    const { deps } = fakeApi({ pay: [new Error('The operation was aborted due to timeout')], health: [] })
+    expect(await follow(await run(deps))).toEqual({ shown: ['armed', 'sent', 'lost', 'failed'], sent: [] })
   })
 
   it('sends no step when the API was armed but the payment came back without the process dying', async () => {
