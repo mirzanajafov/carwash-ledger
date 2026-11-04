@@ -5,7 +5,7 @@ import { text } from 'node:stream/consumers'
 import type { AddressInfo } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createScratchDatabase } from '@carwash/testkit'
-import pg from 'pg'
+import type pg from 'pg'
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import * as z from 'zod/mini'
 import { startPsp, type RunningPsp } from '../src/app.ts'
@@ -79,8 +79,7 @@ const cleanup = new AsyncDisposableStack()
 beforeAll(async () => {
   const db = await createScratchDatabase('psp')
   cleanup.defer(() => db.drop())
-  sql = new pg.Pool({ connectionString: db.url, max: 2 })
-  cleanup.defer(() => sql.end())
+  sql = db.pool(2)
   received = []
   const receiver = createServer((request, response) => {
     void text(request)
