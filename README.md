@@ -4,7 +4,7 @@ In Breaking Bad, Saul and Skyler push money through a car wash, and the hard par
 
 A payment that is retried, cut off by a crash or reported twice by the bank still moves each cent exactly once. The books always balance, and the database refuses anything that doesn't. Anyone who edits history behind the ledger's back gets caught, by a witness that lives outside the database and by your own browser. Most of my working life has been payment pipelines, Stripe and Kafka, and none of that is public. This takes the hardest part of that work and proves it with numbers instead of claims.
 
-It runs at **[carwash.najafov.dev](https://carwash.najafov.dev)**: money moving through T-accounts as customers pay at the bays, a button that kills the API in the middle of a payment, a bank you can make flaky for five minutes, three ways to tamper with the books, and the measurements behind all of it.
+It runs at **[carwash.najafov.dev](https://carwash.najafov.dev)**: money moving through T-accounts as customers pay at the bays, a button that kills the API in the middle of a payment, a bank you can make flaky for five minutes, three ways to tamper with the books, and the measurements behind all of it. The live demo loads a small script from najafov.dev that records visits the way my site does, with less detail, and whether someone pulled the plug or checked a journal in the browser. What it records and why is at [najafov.dev/privacy#demos](https://najafov.dev/privacy#demos).
 
 ![The live page: payments at the wash bays and the T-accounts they move](docs/screenshots/live.png)
 

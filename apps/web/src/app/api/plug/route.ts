@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { HealthView } from '@carwash/contracts'
 import * as z from 'zod/mini'
-import { CRASH_POINTS, pullThePlug, type CrashPoint } from '@/lib/plug'
+import { CRASH_POINTS, pullThePlug, stepLine, type CrashPoint } from '@/lib/plug'
 import { callApi, clientKey, demoMerchant, readBody, refuse } from '@/lib/server'
 import { credential } from '@/lib/session'
 
@@ -39,9 +39,9 @@ export async function POST(request: Request): Promise<Response> {
       try {
         const { value, done } = await steps.next()
         if (done) controller.close()
-        else controller.enqueue(encoder.encode(`${JSON.stringify({ ...value, at: Math.round(value.at) })}\n`))
+        else controller.enqueue(encoder.encode(stepLine(value)))
       } catch (error) {
-        controller.enqueue(encoder.encode(`${JSON.stringify({ kind: 'failed', at: 0, message: error instanceof Error ? error.message : String(error) })}\n`))
+        controller.enqueue(encoder.encode(stepLine({ kind: 'failed', at: 0, message: error instanceof Error ? error.message : String(error) })))
         controller.close()
       }
     },

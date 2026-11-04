@@ -5,6 +5,7 @@ import { AuditState, EMPTY, reduce } from '@/lib/audit'
 import { requestJson, refusal, useAction } from '@/lib/use-action'
 import { isOpen } from '@/lib/verification'
 import { checkJournal, JournalEvidence, type Verdict } from '@/lib/verify-journal'
+import { reportStep } from '@/lib/visit'
 import { Mark } from './mark'
 import { VerificationRun } from './verification-run'
 
@@ -61,6 +62,7 @@ export function AuditPanel() {
       if (!evidence.success) return 'That answer did not have the shape of a journal with its proof.'
       const input = evidence.data
       setVerdicts({ seq: input.proof.seq, journalId: input.proof.journal_id, verdicts: await checkJournal({ ...input, witnessKey }) })
+      reportStep('checked-journal')
       return undefined
     })
   }

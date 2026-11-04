@@ -115,3 +115,7 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
     await deps.sleep((checked.retryAfter ?? 1) * 1000)
   }
 }
+
+export function stepLine(step: Step): string {
+  return `${JSON.stringify({ ...step, at: Math.round(step.at) })}\n`
+}

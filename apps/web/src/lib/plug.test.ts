@@ -1,6 +1,7 @@
 import type { InvariantChecksView, PaymentView } from '@carwash/contracts'
-import { describe, expect, it } from 'vitest'
-import { pullThePlug, type PlugDeps, type Reply, type Step } from './plug'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { pullThePlug, stepLine, type PlugDeps, type Reply, type Step } from './plug'
+import { followPlug } from './plug-stream'
 
 function failure(code: string, message = code) {
   return { error: { code, message } }
@@ -97,5 +98,50 @@ describe('pulling the plug', () => {
     const { deps } = fakeApi({ pay: [new Error('ECONNREFUSED')], health: [] })
     const steps = await run(deps)
     expect(steps.at(-1)).toMatchObject({ kind: 'failed', message: 'the API did not come back in time' })
+  })
+})
+
+describe('following the plug in the browser', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  async function follow(steps: Step[]) {
+    vi.stubGlobal('document', new EventTarget())
+    const sent: unknown[] = []
+    document.addEventListener('najafov:action', (event) => {
+      sent.push(event instanceof CustomEvent ? event.detail : event)
+    })
+    const bytes = new TextEncoder().encode(steps.map(stepLine).join(''))
+    const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
+      start(controller) {
+        for (let at = 0; at < bytes.length; at += 5) controller.enqueue(bytes.slice(at, at + 5))
+        controller.close()
+      },
+    })
+    const shown: Step[] = []
+    await followPlug(body, (step) => shown.push(step))
+    return { shown: shown.map((step) => step.kind), sent }
+  }
+
+  it('hands the plug to the visit script once a new API process answers after the crash', async () => {
+    const { deps } = fakeApi({ pay: [new Error('socket hang up'), { status: 200, body: payment('pay_1', 'captured'), retryAfter: null }], health: ['second'] })
+    expect(await follow(await run(deps))).toEqual({ shown: ['armed', 'sent', 'lost', 'back', 'answered', 'checks'], sent: ['pulled-plug'] })
+  })
+
+  it('sends no step when the payment was lost but no new process ever answered', async () => {
+    const { deps } = fakeApi({ pay: [new Error('The operation was aborted due to timeout')], health: [] })
+    expect(await follow(await run(deps))).toEqual({ shown: ['armed', 'sent', 'lost', 'failed'], sent: [] })
+  })
+
+  it('sends no step when the API was armed but the payment came back without the process dying', async () => {
+    const { deps } = fakeApi({ pay: [{ status: 200, body: payment('pay_1', 'captured'), retryAfter: null }], health: [] })
+    expect(await follow(await run(deps))).toEqual({ shown: ['armed', 'sent', 'answered', 'checks'], sent: [] })
+  })
+
+  it('sends no step for a plug the API refused, though the refusal comes inside a 200', async () => {
+    const { deps } = fakeApi({ pay: [], health: [] })
+    deps.arm = async () => ({ status: 429, body: failure('rate_limited', 'this can run again in 40 s'), retryAfter: 40 })
+    expect(await follow(await run(deps))).toEqual({ shown: ['refused'], sent: [] })
   })
 })
