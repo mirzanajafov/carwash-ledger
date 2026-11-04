@@ -23,23 +23,40 @@ export async function createTestDatabase(options: { template?: string; through?:
     if (!names.includes(options.through)) throw new Error(`there is no migration ${options.through}`)
     for (const migration of names.slice(0, names.indexOf(options.through) + 1)) await applyMigration(databaseUrl('ledger_owner', name), migration)
   }
-  const pools: pg.Pool[] = []
+  const pools = trackedPools()
   return {
     name,
     url: (role) => databaseUrl(role, name),
-    pool: (role, max = 10) => {
-      const pool = createPool({ connectionString: databaseUrl(role, name), max })
+    pool: (role, max = 10) => pools.open(databaseUrl(role, name), max),
+    close: () => pools.end(),
+    drop: async () => {
+      await pools.end()
+      await dropDatabase(name)
+    },
+  }
+}
+
+function trackedPools() {
+  const pools: pg.Pool[] = []
+  return {
+    open(url: string, max: number): pg.Pool {
+      const pool = createPool({ connectionString: url, max })
       pools.push(pool)
       return pool
     },
-    close: async () => {
-      await Promise.all(pools.splice(0).map((pool) => pool.end()))
-    },
-    drop: async () => {
-      await Promise.all(pools.splice(0).map((pool) => pool.end()))
-      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
+    async end(): Promise<void> {
+      await Promise.all(
+        pools
+          .splice(0)
+          .filter((pool) => !pool.ending)
+          .map((pool) => pool.end()),
+      )
     },
   }
+}
+
+async function dropDatabase(name: string): Promise<void> {
+  await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
 }
 
 function triggersOff<T>(work: (client: Transaction) => Promise<T>): (client: Transaction) => Promise<T> {
@@ -68,18 +85,14 @@ export async function createScratchDatabase(prefix: string): Promise<ScratchData
   const name = `test_${prefix}_${process.pid}_${randomBytes(4).toString('hex')}`
   await withAdmin((admin) => admin.query(`CREATE DATABASE ${quoteIdent(name)}`))
   const url = databaseUrl('admin', name)
-  const pools: pg.Pool[] = []
+  const pools = trackedPools()
   return {
     name,
     url,
-    pool: (max = 10) => {
-      const pool = createPool({ connectionString: url, max })
-      pools.push(pool)
-      return pool
-    },
+    pool: (max = 10) => pools.open(url, max),
     drop: async () => {
-      await Promise.all(pools.splice(0).map((pool) => pool.end()))
-      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
+      await pools.end()
+      await dropDatabase(name)
     },
   }
 }

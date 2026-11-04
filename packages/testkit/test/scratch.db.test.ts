@@ -17,13 +17,15 @@ describe('a scratch database', () => {
     expect(firstRow(await pool.query<{ ok: number }>('SELECT 1 AS ok')).ok).toBe(1)
   })
 
-  it('ends the pools it handed out before it drops the database', async () => {
+  it('ends the pools it handed out when it drops the database, one already ended included', async () => {
     const db = await createScratchDatabase('kit')
     const pool = db.pool()
+    const ended = db.pool()
     await pool.query('SELECT 1')
+    await ended.end()
 
     await db.drop()
 
-    await expect(pool.query('SELECT 1')).rejects.toThrow('Cannot use a pool after calling end on the pool')
+    expect([pool.ended, ended.ended]).toEqual([true, true])
   })
 })
