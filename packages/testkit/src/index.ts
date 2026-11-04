@@ -35,7 +35,12 @@ export async function createTestDatabase(options: { template?: string; through?:
 
 function trackedPools(database: string) {
   const pools: pg.Pool[] = []
-  const end = async () => {
+  const open = (url: string, max: number): pg.Pool => {
+    const pool = createPool({ connectionString: url, max })
+    pools.push(pool)
+    return pool
+  }
+  const end = async (): Promise<void> => {
     await Promise.all(
       pools
         .splice(0)
@@ -43,21 +48,14 @@ function trackedPools(database: string) {
         .map((pool) => pool.end()),
     )
   }
-  return {
-    open(url: string, max: number): pg.Pool {
-      const pool = createPool({ connectionString: url, max })
-      pools.push(pool)
-      return pool
-    },
-    end,
-    async drop(): Promise<void> {
-      try {
-        await end()
-      } finally {
-        await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(database)} WITH (FORCE)`))
-      }
-    },
+  const drop = async (): Promise<void> => {
+    try {
+      await end()
+    } finally {
+      await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(database)} WITH (FORCE)`))
+    }
   }
+  return { open, end, drop }
 }
 
 function triggersOff<T>(work: (client: Transaction) => Promise<T>): (client: Transaction) => Promise<T> {
