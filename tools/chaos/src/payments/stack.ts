@@ -6,7 +6,6 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { createGzip } from 'node:zlib'
 import { failpointSpec, type FailpointName } from '@carwash/failpoints'
-import { createPool } from '@carwash/pg'
 import { createScratchDatabase, createTestDatabase, type ScratchDatabase, type TestDatabase } from '@carwash/testkit'
 import type pg from 'pg'
 import { withPort, type Lab } from '../lab.ts'
@@ -113,7 +112,7 @@ export class PaymentsStack {
     this.#log = log
     this.ledgerDb = ledgerDb
     this.pspDb = pspDb
-    this.psp = createPool({ connectionString: pspDb.url, max: 2 })
+    this.psp = pspDb.pool(2)
     this.owner = ledgerDb.pool('ledger_owner', 1)
     this.audit = ledgerDb.pool('ledger_audit', 3)
     const keys: Record<string, string> = { admin: ADMIN_KEY }
@@ -192,7 +191,6 @@ export class PaymentsStack {
     const log = this.#log
     await this.stopServices().catch(() => undefined)
     await this.#lab.kafka.stop().catch(() => undefined)
-    await this.psp.end().catch(() => undefined)
     await keepLogs(this.#logs, join(this.#lab.dir, 'logs'), this.#seed, [...this.#services.keys(), 'kafka']).catch((error: unknown) =>
       log(`could not keep the service logs: ${describeError(error)}`),
     )
