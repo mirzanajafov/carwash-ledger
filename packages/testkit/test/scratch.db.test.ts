@@ -2,6 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { firstRow } from '@carwash/pg'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createScratchDatabase } from '../src/index.ts'
+import { withAdmin } from '../src/template.ts'
 
 describe('a scratch database', () => {
   it("keeps a pool working when an idle client's backend is terminated, the way a forced drop does", async () => {
@@ -31,13 +32,11 @@ describe('a scratch database', () => {
 
   it('drops the database even when ending one of its pools fails', async () => {
     const db = await createScratchDatabase('kit')
-    const other = await createScratchDatabase('kit')
-    onTestFinished(() => other.drop())
     vi.spyOn(db.pool(), 'end').mockRejectedValue(new Error('the pool would not end'))
 
     await expect(db.drop()).rejects.toThrow('the pool would not end')
 
-    const { rows } = await other.pool(1).query('SELECT 1 FROM pg_database WHERE datname = $1', [db.name])
+    const { rows } = await withAdmin((admin) => admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [db.name]))
     expect(rows).toEqual([])
   })
 })

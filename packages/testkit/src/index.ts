@@ -23,40 +23,40 @@ export async function createTestDatabase(options: { template?: string; through?:
     if (!names.includes(options.through)) throw new Error(`there is no migration ${options.through}`)
     for (const migration of names.slice(0, names.indexOf(options.through) + 1)) await applyMigration(databaseUrl('ledger_owner', name), migration)
   }
-  const pools = trackedPools()
+  const pools = trackedPools(name)
   return {
     name,
     url: (role) => databaseUrl(role, name),
     pool: (role, max = 10) => pools.open(databaseUrl(role, name), max),
     close: () => pools.end(),
-    drop: () => dropAfter(pools, name),
+    drop: () => pools.drop(),
   }
 }
 
-function trackedPools() {
+function trackedPools(database: string) {
   const pools: pg.Pool[] = []
+  const end = async () => {
+    await Promise.all(
+      pools
+        .splice(0)
+        .filter((pool) => !pool.ending)
+        .map((pool) => pool.end()),
+    )
+  }
   return {
     open(url: string, max: number): pg.Pool {
       const pool = createPool({ connectionString: url, max })
       pools.push(pool)
       return pool
     },
-    async end(): Promise<void> {
-      await Promise.all(
-        pools
-          .splice(0)
-          .filter((pool) => !pool.ending)
-          .map((pool) => pool.end()),
-      )
+    end,
+    async drop(): Promise<void> {
+      try {
+        await end()
+      } finally {
+        await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(database)} WITH (FORCE)`))
+      }
     },
-  }
-}
-
-async function dropAfter(pools: ReturnType<typeof trackedPools>, name: string): Promise<void> {
-  try {
-    await pools.end()
-  } finally {
-    await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
   }
 }
 
@@ -86,11 +86,11 @@ export async function createScratchDatabase(prefix: string): Promise<ScratchData
   const name = `test_${prefix}_${process.pid}_${randomBytes(4).toString('hex')}`
   await withAdmin((admin) => admin.query(`CREATE DATABASE ${quoteIdent(name)}`))
   const url = databaseUrl('admin', name)
-  const pools = trackedPools()
+  const pools = trackedPools(name)
   return {
     name,
     url,
     pool: (max = 10) => pools.open(url, max),
-    drop: () => dropAfter(pools, name),
+    drop: () => pools.drop(),
   }
 }
