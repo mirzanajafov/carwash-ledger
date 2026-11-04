@@ -1,6 +1,7 @@
 import type { InvariantChecksView, PaymentView } from '@carwash/contracts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { followPlug, pullThePlug, type PlugDeps, type Reply, type Step } from './plug'
+import { pullThePlug, stepLine, type PlugDeps, type Reply, type Step } from './plug'
+import { followPlug } from './plug-stream'
 
 function failure(code: string, message = code) {
   return { error: { code, message } }
@@ -111,10 +112,10 @@ describe('following the plug in the browser', () => {
     document.addEventListener('najafov:action', (event) => {
       sent.push(event instanceof CustomEvent ? event.detail : event)
     })
-    const encoder = new TextEncoder()
+    const bytes = new TextEncoder().encode(steps.map(stepLine).join(''))
     const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
       start(controller) {
-        for (const step of steps) controller.enqueue(encoder.encode(`${JSON.stringify(step)}\n`))
+        for (let at = 0; at < bytes.length; at += 5) controller.enqueue(bytes.slice(at, at + 5))
         controller.close()
       },
     })
