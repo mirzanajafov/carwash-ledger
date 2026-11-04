@@ -60,16 +60,25 @@ export function inRollbackWithTriggersOff<T>(pool: pg.Pool, work: (client: Trans
 export interface ScratchDatabase {
   readonly name: string
   readonly url: string
+  pool(max?: number): pg.Pool
   drop(): Promise<void>
 }
 
 export async function createScratchDatabase(prefix: string): Promise<ScratchDatabase> {
   const name = `test_${prefix}_${process.pid}_${randomBytes(4).toString('hex')}`
   await withAdmin((admin) => admin.query(`CREATE DATABASE ${quoteIdent(name)}`))
+  const url = databaseUrl('admin', name)
+  const pools: pg.Pool[] = []
   return {
     name,
-    url: databaseUrl('admin', name),
+    url,
+    pool: (max = 10) => {
+      const pool = createPool({ connectionString: url, max })
+      pools.push(pool)
+      return pool
+    },
     drop: async () => {
+      await Promise.all(pools.splice(0).map((pool) => pool.end()))
       await withAdmin((admin) => admin.query(`DROP DATABASE ${quoteIdent(name)} WITH (FORCE)`))
     },
   }
