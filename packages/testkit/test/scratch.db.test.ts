@@ -1,4 +1,3 @@
-import { setTimeout as sleep } from 'node:timers/promises'
 import { firstRow } from '@carwash/pg'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createScratchDatabase } from '../src/index.ts'
@@ -11,10 +10,9 @@ describe('a scratch database', () => {
     const pool = db.pool(1)
     const { pid } = firstRow(await pool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid'))
 
-    await db.pool(1).query('SELECT pg_terminate_backend($1)', [pid])
-    for (let i = 0; i < 100 && pool.totalCount > 0; i++) await sleep(20)
+    await withAdmin((admin) => admin.query('SELECT pg_terminate_backend($1)', [pid]))
 
-    expect(pool.totalCount).toBe(0)
+    await expect.poll(() => pool.totalCount).toBe(0)
     expect(firstRow(await pool.query<{ ok: number }>('SELECT 1 AS ok')).ok).toBe(1)
   })
 
