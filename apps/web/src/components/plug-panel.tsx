@@ -4,7 +4,7 @@ import { InvariantChecksView, type InvariantResult } from '@carwash/contracts'
 import { useState } from 'react'
 import { merchantName } from '@/lib/accounts'
 import { money } from '@/lib/money'
-import { CRASH_POINTS, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
+import { CRASH_POINTS, followPlug, type CrashPoint, type PaymentScope, type Step } from '@/lib/plug'
 import { readAnswer, refusal, requestJson, useAction } from '@/lib/use-action'
 import { ChecksTable } from './checks-table'
 
@@ -82,16 +82,8 @@ export function PlugPanel({ admin = false }: { admin?: boolean }) {
     run('pull', async () => {
       const response = await fetch('/api/plug', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ failpoint: point }) })
       if (!response.ok || response.body === null) return refusal(await readAnswer(response))
-      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-      let buffer = ''
-      for (;;) {
-        const { value, done } = await reader.read()
-        if (done) return undefined
-        buffer += value
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-        for (const line of lines) if (line.trim()) setSteps((previous) => [...previous, JSON.parse(line) as Step])
-      }
+      await followPlug(response.body, (step) => setSteps((previous) => [...previous, step]))
+      return undefined
     })
   }
 

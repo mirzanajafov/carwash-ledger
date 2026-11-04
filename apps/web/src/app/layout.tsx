@@ -26,6 +26,7 @@ function Drop() {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <script async src="https://najafov.dev/visit.js" />
       <body className="min-h-dvh font-sans">
         <header className="border-b border-line bg-surface/80 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -39,9 +40,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
         <footer className="mx-auto flex max-w-6xl flex-wrap justify-between gap-2 px-4 pb-10 text-xs text-muted">
           <span>The bank and the payment provider are simulated. The ledger, its invariants and its audit log are not.</span>
-          <Link href="/admin" className="hover:text-ink">
-            Admin
-          </Link>
+          <span className="flex gap-4">
+            <a href="https://najafov.dev/privacy#demos" className="hover:text-ink">
+              What this demo records
+            </a>
+            <Link href="/admin" className="hover:text-ink">
+              Admin
+            </Link>
+          </span>
         </footer>
       </body>
     </html>

@@ -1,4 +1,5 @@
 import { errorOf, InvariantChecksView, PaymentView, PlugView, type InvariantResult } from '@carwash/contracts'
+import { reportStep } from './visit'
 
 export const CRASH_POINTS = [
   { failpoint: 'post.after_lock', title: 'Balances locked', detail: 'The balance rows are locked, but the journal is not written yet.' },
@@ -113,5 +114,23 @@ export async function* pullThePlug(deps: PlugDeps, failpoint: CrashPoint, mercha
       return
     }
     await deps.sleep((checked.retryAfter ?? 1) * 1000)
+  }
+}
+
+export async function followPlug(body: ReadableStream<Uint8Array<ArrayBuffer>>, show: (step: Step) => void): Promise<void> {
+  const reader = body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) return
+    buffer += value
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const step = JSON.parse(line) as Step
+      show(step)
+      if (step.kind === 'lost') reportStep('pulled-plug')
+    }
   }
 }
