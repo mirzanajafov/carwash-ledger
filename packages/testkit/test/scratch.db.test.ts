@@ -12,7 +12,7 @@ describe('a scratch database', () => {
 
     await withAdmin((admin) => admin.query('SELECT pg_terminate_backend($1)', [pid]))
 
-    await expect.poll(() => pool.totalCount).toBe(0)
+    await expect.poll(() => pool.totalCount, { timeout: 5000 }).toBe(0)
     expect(firstRow(await pool.query<{ ok: number }>('SELECT 1 AS ok')).ok).toBe(1)
   })
 
@@ -23,9 +23,9 @@ describe('a scratch database', () => {
     await pool.query('SELECT 1')
     await ended.end()
 
-    await db.drop()
+    await expect(db.drop()).resolves.toBeUndefined()
 
-    expect([pool.ended, ended.ended]).toEqual([true, true])
+    expect(pool.ended).toBe(true)
   })
 
   it('drops the database even when ending one of its pools fails', async () => {

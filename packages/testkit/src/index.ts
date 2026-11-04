@@ -28,8 +28,8 @@ export async function createTestDatabase(options: { template?: string; through?:
     name,
     url: (role) => databaseUrl(role, name),
     pool: (role, max = 10) => pools.open(databaseUrl(role, name), max),
-    close: () => pools.end(),
-    drop: () => pools.drop(),
+    close: pools.end,
+    drop: pools.drop,
   }
 }
 
@@ -89,6 +89,6 @@ export async function createScratchDatabase(prefix: string): Promise<ScratchData
     name,
     url,
     pool: (max = 10) => pools.open(url, max),
-    drop: () => pools.drop(),
+    drop: pools.drop,
   }
 }
