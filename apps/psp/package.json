@@ -23,7 +23,6 @@
     "@carwash/env": "workspace:*",
     "@carwash/http": "workspace:*",
     "@carwash/pg": "workspace:*",
-    "pg": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
